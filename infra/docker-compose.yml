@@ -1,0 +1,222 @@
+version: '3.8'
+
+services:
+  # Database for Order & Inventory services
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: cascadeshield
+    ports:
+      - "5432:5432"
+    networks:
+      - cascadeshield-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # NoSQL database for Payment service
+  dynamodb-local:
+    image: amazon/dynamodb-local:2.2.0
+    container_name: dynamodb-local
+    command: "-jar DynamoDBLocal.jar -sharedDb -dbPath ."
+    ports:
+      - "8000:8000"
+    networks:
+      - cascadeshield-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/shell/ || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Toxiproxy sidecar for injecting faults
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.9.0
+    container_name: toxiproxy
+    ports:
+      - "8474:8474" # Admin API
+      - "8661:8661" # Proxy for Gateway -> Order Service
+      - "8662:8662" # Proxy for Order Service -> Inventory Service
+      - "8663:8663" # Proxy for Inventory Service -> Payment Service
+      - "8664:8664" # Proxy for Payment Service -> Notification Service
+      - "8665:8665" # Proxy for Order/Inventory/Payment -> Shared DB Service
+    networks:
+      - cascadeshield-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8474/version || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Observability - Prometheus
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    container_name: prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - cascadeshield-net
+    depends_on:
+      - gateway-service
+      - order-service
+      - inventory-service
+      - payment-service
+      - notification-service
+      - shared-db-service
+
+  # Observability - Grafana
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    ports:
+      - "3000:3000"
+    networks:
+      - cascadeshield-net
+    depends_on:
+      - prometheus
+
+  # 6 Spring Boot Services (Skeletons)
+  gateway-service:
+    build:
+      context: ../services/gateway-service
+      dockerfile: Dockerfile
+    container_name: gateway-service
+    ports:
+      - "8080:8080"
+    environment:
+      - JAVA_OPTS=-Xmx512m -Xms256m -XX:+UseG1GC
+      - SPRING_PROFILES_ACTIVE=dev
+      - ORDER_SERVICE_URL=http://toxiproxy:8661
+      - SHARED_DB_SERVICE_URL=http://toxiproxy:8665
+      # Default Circuit Breaker configurations
+      - CB_SLIDING_WINDOW_SIZE=${CB_SLIDING_WINDOW_SIZE:-10}
+      - CB_SLIDING_WINDOW_TYPE=${CB_SLIDING_WINDOW_TYPE:-COUNT_BASED}
+      - CB_FAILURE_RATE_THRESHOLD=${CB_FAILURE_RATE_THRESHOLD:-50}
+      - CB_WAIT_DURATION_OPEN=${CB_WAIT_DURATION_OPEN:-15s}
+      - CB_PERMITTED_CALLS_HALF_OPEN=${CB_PERMITTED_CALLS_HALF_OPEN:-5}
+    networks:
+      - cascadeshield-net
+    depends_on:
+      toxiproxy:
+        condition: service_healthy
+
+  order-service:
+    build:
+      context: ../services/order-service
+      dockerfile: Dockerfile
+    container_name: order-service
+    ports:
+      - "8081:8081"
+    environment:
+      - JAVA_OPTS=-Xmx512m -Xms256m -XX:+UseG1GC
+      - SPRING_PROFILES_ACTIVE=dev
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/cascadeshield
+      - INVENTORY_SERVICE_URL=http://toxiproxy:8662
+      - SHARED_DB_SERVICE_URL=http://toxiproxy:8665
+      - CB_SLIDING_WINDOW_SIZE=${CB_SLIDING_WINDOW_SIZE:-10}
+      - CB_SLIDING_WINDOW_TYPE=${CB_SLIDING_WINDOW_TYPE:-COUNT_BASED}
+      - CB_FAILURE_RATE_THRESHOLD=${CB_FAILURE_RATE_THRESHOLD:-50}
+      - CB_WAIT_DURATION_OPEN=${CB_WAIT_DURATION_OPEN:-15s}
+      - CB_PERMITTED_CALLS_HALF_OPEN=${CB_PERMITTED_CALLS_HALF_OPEN:-5}
+    networks:
+      - cascadeshield-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      toxiproxy:
+        condition: service_healthy
+
+  inventory-service:
+    build:
+      context: ../services/inventory-service
+      dockerfile: Dockerfile
+    container_name: inventory-service
+    ports:
+      - "8082:8082"
+    environment:
+      - JAVA_OPTS=-Xmx512m -Xms256m -XX:+UseG1GC
+      - SPRING_PROFILES_ACTIVE=dev
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/cascadeshield
+      - PAYMENT_SERVICE_URL=http://toxiproxy:8663
+      - SHARED_DB_SERVICE_URL=http://toxiproxy:8665
+      - CB_SLIDING_WINDOW_SIZE=${CB_SLIDING_WINDOW_SIZE:-10}
+      - CB_SLIDING_WINDOW_TYPE=${CB_SLIDING_WINDOW_TYPE:-COUNT_BASED}
+      - CB_FAILURE_RATE_THRESHOLD=${CB_FAILURE_RATE_THRESHOLD:-50}
+      - CB_WAIT_DURATION_OPEN=${CB_WAIT_DURATION_OPEN:-15s}
+      - CB_PERMITTED_CALLS_HALF_OPEN=${CB_PERMITTED_CALLS_HALF_OPEN:-5}
+    networks:
+      - cascadeshield-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      toxiproxy:
+        condition: service_healthy
+
+  payment-service:
+    build:
+      context: ../services/payment-service
+      dockerfile: Dockerfile
+    container_name: payment-service
+    ports:
+      - "8083:8083"
+    environment:
+      - JAVA_OPTS=-Xmx512m -Xms256m -XX:+UseG1GC
+      - SPRING_PROFILES_ACTIVE=dev
+      - AWS_DYNAMODB_ENDPOINT=http://dynamodb-local:8000
+      - NOTIFICATION_SERVICE_URL=http://toxiproxy:8664
+      - SHARED_DB_SERVICE_URL=http://toxiproxy:8665
+      - CB_SLIDING_WINDOW_SIZE=${CB_SLIDING_WINDOW_SIZE:-10}
+      - CB_SLIDING_WINDOW_TYPE=${CB_SLIDING_WINDOW_TYPE:-COUNT_BASED}
+      - CB_FAILURE_RATE_THRESHOLD=${CB_FAILURE_RATE_THRESHOLD:-50}
+      - CB_WAIT_DURATION_OPEN=${CB_WAIT_DURATION_OPEN:-15s}
+      - CB_PERMITTED_CALLS_HALF_OPEN=${CB_PERMITTED_CALLS_HALF_OPEN:-5}
+    networks:
+      - cascadeshield-net
+    depends_on:
+      dynamodb-local:
+        condition: service_healthy
+      toxiproxy:
+        condition: service_healthy
+
+  notification-service:
+    build:
+      context: ../services/notification-service
+      dockerfile: Dockerfile
+    container_name: notification-service
+    ports:
+      - "8084:8084"
+    environment:
+      - JAVA_OPTS=-Xmx512m -Xms256m -XX:+UseG1GC
+      - SPRING_PROFILES_ACTIVE=dev
+    networks:
+      - cascadeshield-net
+
+  shared-db-service:
+    build:
+      context: ../services/shared-db-service
+      dockerfile: Dockerfile
+    container_name: shared-db-service
+    ports:
+      - "8085:8085"
+    environment:
+      - JAVA_OPTS=-Xmx512m -Xms256m -XX:+UseG1GC
+      - SPRING_PROFILES_ACTIVE=dev
+    networks:
+      - cascadeshield-net
+
+networks:
+  cascadeshield-net:
+    name: cascadeshield-net
+    driver: bridge

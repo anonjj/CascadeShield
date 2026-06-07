@@ -96,12 +96,10 @@ class ToxiproxyClient:
         try:
             # Fetch toxics from the separate toxics endpoint
             toxics_resp = self._request(f"/proxies/{name}/toxics")
-            if isinstance(toxics_resp, dict):
-                toxic_names = list(toxics_resp.keys())
-            elif isinstance(toxics_resp, list):
-                toxic_names = [t.get("name") for t in toxics_resp if isinstance(t, dict)]
-            else:
+            if not isinstance(toxics_resp, list):
                 toxic_names = []
+            else:
+                toxic_names = [t.get("name") for t in toxics_resp if isinstance(t, dict)]
 
             for t_name in toxic_names:
                 self._request(f"/proxies/{name}/toxics/{t_name}", method="DELETE")

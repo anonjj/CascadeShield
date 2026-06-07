@@ -18,6 +18,7 @@ class ToxiproxyClient:
                 if response.status in [200, 201, 204]:
                     res_body = response.read().decode("utf-8")
                     return json.loads(res_body) if res_body else {}
+                return {}
         except urllib.error.HTTPError as e:
             # If creating a proxy that already exists, it might return 409 or similar.
             # Handle gracefully if possible.
@@ -53,7 +54,7 @@ class ToxiproxyClient:
         """Enables or disables a proxy (used to simulate complete service crashes)."""
         payload = {"enabled": enabled}
         print(f"Setting proxy '{name}' enabled={enabled}")
-        self._request(f"/proxies/{name}", method="POST", data=payload)
+        self._request(f"/proxies/{name}", method="PATCH", data=payload)
 
     def inject_latency(self, name, delay_ms, jitter_ms=0, toxicity=1.0):
         """Injects latency into a proxy's downstream path."""
@@ -93,12 +94,17 @@ class ToxiproxyClient:
     def clear_toxics(self, name):
         """Removes all toxics from a specific proxy."""
         try:
-            # We fetch all toxics and delete them by name
-            proxy_info = self._request(f"/proxies/{name}")
-            toxics = proxy_info.get("toxics", [])
-            for toxic in toxics:
-                toxic_name = toxic.get("name")
-                self._request(f"/proxies/{name}/toxics/{toxic_name}", method="DELETE")
+            # Fetch toxics from the separate toxics endpoint
+            toxics_resp = self._request(f"/proxies/{name}/toxics")
+            if isinstance(toxics_resp, dict):
+                toxic_names = list(toxics_resp.keys())
+            elif isinstance(toxics_resp, list):
+                toxic_names = [t.get("name") for t in toxics_resp if isinstance(t, dict)]
+            else:
+                toxic_names = []
+
+            for t_name in toxic_names:
+                self._request(f"/proxies/{name}/toxics/{t_name}", method="DELETE")
             print(f"Cleared all toxics on '{name}'")
         except Exception as e:
             print(f"Failed to clear toxics on '{name}': {e}", file=sys.stderr)

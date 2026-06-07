@@ -1,0 +1,34 @@
+global:
+  scrape_interval: 2s # Aggressive scrape interval for short experiment runs
+  evaluation_interval: 2s
+
+scrape_configs:
+  - job_name: 'gateway-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['gateway-service:8080']
+
+  - job_name: 'order-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['order-service:8081']
+
+  - job_name: 'inventory-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['inventory-service:8082']
+
+  - job_name: 'payment-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['payment-service:8083']
+
+  - job_name: 'notification-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['notification-service:8084']
+
+  - job_name: 'shared-db-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['shared-db-service:8085']

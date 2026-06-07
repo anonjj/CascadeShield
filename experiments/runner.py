@@ -6,28 +6,37 @@ import subprocess
 import csv
 import urllib.request
 import json
+import threading
+from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from fault_injector import ToxiproxyClient
 
 # Toxiproxy Client
 toxiproxy = ToxiproxyClient()
 
-# Configuration Parameter Values for Sweeps
-PARAM_VALUES = {
-    "failureRateThreshold": [30, 50, 70],
-    "slidingWindowSize": [5, 10, 20],
-    "waitDurationInOpenState": [5, 15, 30], # Seconds
-    "slidingWindowType": ["COUNT_BASED", "TIME_BASED"]
-}
+# Get project root directory dynamically
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 # CSV Dataset Schema
-DATASET_PATH = "/Users/jayjoshi/Documents/Capstone project/data/master_dataset.csv"
+DATASET_PATH = BASE_DIR / "data" / "master_dataset.csv"
+ENV_PATH = BASE_DIR / "infra" / ".env"
+COMPOSE_FILE_PATH = BASE_DIR / "infra" / "docker-compose.yml"
+
 DATASET_HEADERS = [
     "timestamp", "mode", "topology", "fault_type", 
     "failure_rate_threshold", "sliding_window_size", "sliding_window_type", 
     "wait_duration_s", "permitted_calls_half_open", 
     "blast_radius", "throughput", "error_rate", "avg_latency_ms"
 ]
+
+# Configuration Parameter Values for Sweeps (Total: 3 * 3 * 3 * 2 * 3 = 162 configs per fault)
+PARAM_VALUES = {
+    "failureRateThreshold": [30, 50, 70],
+    "slidingWindowSize": [5, 10, 20],
+    "waitDurationInOpenState": [5, 15, 30], # Seconds
+    "slidingWindowType": ["COUNT_BASED", "TIME_BASED"],
+    "permittedCallsInHalfOpenState": [3, 5, 10]
+}
 
 def run_command(args, cwd=None):
     """Helper to run system commands."""
@@ -45,18 +54,17 @@ CB_FAILURE_RATE_THRESHOLD={config['failureRateThreshold']}
 CB_WAIT_DURATION_OPEN={config['waitDurationInOpenState']}s
 CB_PERMITTED_CALLS_HALF_OPEN={config.get('permittedCallsInHalfOpenState', 5)}
 """
-    env_path = "/Users/jayjoshi/Documents/Capstone project/infra/.env"
-    os.makedirs(os.path.dirname(env_path), exist_ok=True)
-    with open(env_path, "w") as f:
+    os.makedirs(os.path.dirname(ENV_PATH), exist_ok=True)
+    with open(ENV_PATH, "w") as f:
         f.write(env_content)
-    print(f"Updated infra/.env with: {config}")
+    print(f"Updated {ENV_PATH.name} with: {config}")
 
 def update_containers():
     """Forces docker compose to recreate services with the new environment variables."""
     print("Recreating Spring Boot containers to apply new configuration...")
     # Recreate only the services using Resilience4j to save time
     services = ["gateway-service", "order-service", "inventory-service", "payment-service"]
-    cmd = ["docker", "compose", "-f", "/Users/jayjoshi/Documents/Capstone project/infra/docker-compose.yml", "up", "-d", "--no-deps", "--force-recreate"] + services
+    cmd = ["docker", "compose", "-f", str(COMPOSE_FILE_PATH), "up", "-d", "--no-deps", "--force-recreate"] + services
     run_command(cmd)
 
 def wait_for_healthy(timeout=60):
@@ -105,32 +113,43 @@ def generate_load(endpoint_url, requests_count=50, concurrency=5):
     success_count = 0
     failure_count = 0
     latencies = []
+    lock = threading.Lock()
     
     def send_request():
         nonlocal success_count, failure_count
         start = time.time()
+        success = False
         try:
             req = urllib.request.Request(endpoint_url)
             with urllib.request.urlopen(req, timeout=5) as res:
                 res.read()
                 if res.status == 200:
-                    success_count += 1
-                else:
-                    failure_count += 1
+                    success = True
         except Exception:
-            failure_count += 1
-        latencies.append((time.time() - start) * 1000)
+            pass
+            
+        latency = (time.time() - start) * 1000
+        with lock:
+            if success:
+                success_count += 1
+            else:
+                failure_count += 1
+            latencies.append(latency)
 
+    start_time = time.time()
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
         for _ in range(requests_count):
             executor.submit(send_request)
             time.sleep(0.05) # Ramped pacing
-
+            
+    # Wait for completion and measure wall-clock duration
+    total_time = time.time() - start_time
+    
     avg_latency = sum(latencies) / len(latencies) if latencies else 0
-    throughput = requests_count / (sum(latencies) / 1000 / concurrency) if latencies else 0
+    throughput = requests_count / total_time if total_time > 0 else 0
     error_rate = (failure_count / requests_count) * 100 if requests_count else 0
     
-    print(f"Load Results - Successes: {success_count}, Failures: {failure_count}, Avg Latency: {avg_latency:.2f}ms, Error Rate: {error_rate:.2f}%")
+    print(f"Load Results - Successes: {success_count}, Failures: {failure_count}, Avg Latency: {avg_latency:.2f}ms, Throughput: {throughput:.2f} TPS, Error Rate: {error_rate:.2f}%")
     return throughput, error_rate, avg_latency
 
 def get_blast_radius():
@@ -216,29 +235,31 @@ def generate_combinations(mode):
     configs = []
     
     if mode == "canary":
-        # Small sample of extreme and mid configs
+        # Small sample of extreme and mid configs with permittedCallsInHalfOpenState mapped
         configs = [
             # Extreme Aggressive
-            {"failureRateThreshold": 30, "slidingWindowSize": 5, "waitDurationInOpenState": 5, "slidingWindowType": "COUNT_BASED"},
-            {"failureRateThreshold": 30, "slidingWindowSize": 5, "waitDurationInOpenState": 5, "slidingWindowType": "TIME_BASED"},
+            {"failureRateThreshold": 30, "slidingWindowSize": 5, "waitDurationInOpenState": 5, "slidingWindowType": "COUNT_BASED", "permittedCallsInHalfOpenState": 3},
+            {"failureRateThreshold": 30, "slidingWindowSize": 5, "waitDurationInOpenState": 5, "slidingWindowType": "TIME_BASED", "permittedCallsInHalfOpenState": 3},
             # Extreme Conservative
-            {"failureRateThreshold": 70, "slidingWindowSize": 20, "waitDurationInOpenState": 30, "slidingWindowType": "COUNT_BASED"},
-            {"failureRateThreshold": 70, "slidingWindowSize": 20, "waitDurationInOpenState": 30, "slidingWindowType": "TIME_BASED"},
+            {"failureRateThreshold": 70, "slidingWindowSize": 20, "waitDurationInOpenState": 30, "slidingWindowType": "COUNT_BASED", "permittedCallsInHalfOpenState": 10},
+            {"failureRateThreshold": 70, "slidingWindowSize": 20, "waitDurationInOpenState": 30, "slidingWindowType": "TIME_BASED", "permittedCallsInHalfOpenState": 10},
             # Midpoint config
-            {"failureRateThreshold": 50, "slidingWindowSize": 10, "waitDurationInOpenState": 15, "slidingWindowType": "COUNT_BASED"}
+            {"failureRateThreshold": 50, "slidingWindowSize": 10, "waitDurationInOpenState": 15, "slidingWindowType": "COUNT_BASED", "permittedCallsInHalfOpenState": 5}
         ]
     else:
-        # Full Sweep (54 configs)
+        # Full Sweep (3 * 3 * 3 * 2 * 3 = 162 configs per fault, 486 runs total across 3 faults)
         for threshold in PARAM_VALUES["failureRateThreshold"]:
             for window in PARAM_VALUES["slidingWindowSize"]:
                 for wait in PARAM_VALUES["waitDurationInOpenState"]:
                     for wtype in PARAM_VALUES["slidingWindowType"]:
-                        configs.append({
-                            "failureRateThreshold": threshold,
-                            "slidingWindowSize": window,
-                            "waitDurationInOpenState": wait,
-                            "slidingWindowType": wtype
-                        })
+                        for permitted in PARAM_VALUES["permittedCallsInHalfOpenState"]:
+                            configs.append({
+                                "failureRateThreshold": threshold,
+                                "slidingWindowSize": window,
+                                "waitDurationInOpenState": wait,
+                                "slidingWindowType": wtype,
+                                "permittedCallsInHalfOpenState": permitted
+                            })
     return configs
 
 def main():

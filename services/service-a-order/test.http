@@ -1,0 +1,20 @@
+### Check B is alive
+GET http://localhost:8082/actuator/health
+
+### Read stock
+GET http://localhost:8082/inventory/SKU-1001
+
+### Place an order (A calls B internally)
+POST http://localhost:8081/orders
+Content-Type: application/json
+
+{"sku": "SKU-1001", "quantity": 3}
+
+### Try insufficient stock — should be 409, not 503
+POST http://localhost:8081/orders
+Content-Type: application/json
+
+{"sku": "SKU-1003", "quantity": 1}
+
+### Service A health
+GET http://localhost:8081/actuator/health

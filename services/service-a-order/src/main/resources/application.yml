@@ -1,0 +1,34 @@
+server:
+  port: ${SERVER_PORT:8081}        # Service A = 8081
+
+spring:
+  application:
+    name: order-service
+
+# Where Service B lives. Defaults to localhost for local dev; in Docker Compose
+# this becomes http://inventory-service:8082, and during fault injection it
+# points at the Toxiproxy sidecar instead. Override with SERVICES_INVENTORY_BASE_URL.
+services:
+  inventory:
+    base-url: ${SERVICES_INVENTORY_BASE_URL:http://localhost:8082}
+    connect-timeout-ms: ${INVENTORY_CONNECT_TIMEOUT_MS:1000}
+    read-timeout-ms: ${INVENTORY_READ_TIMEOUT_MS:2000}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: CascadeShield Order Service
+    role: Service A (upstream caller, Linear Chain)
+    topology-position: A
+    downstream: inventory-service

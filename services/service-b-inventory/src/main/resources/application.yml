@@ -1,0 +1,26 @@
+server:
+  port: ${SERVER_PORT:8082}        # Service B = 8082 (A will be 8081, Gateway 8080)
+
+spring:
+  application:
+    name: inventory-service
+
+# Actuator: health + info now; prometheus endpoint is wired but the registry
+# dependency lands in Week 2 alongside Resilience4j metrics.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: CascadeShield Inventory Service
+    role: Service B (downstream leaf, Linear Chain)
+    topology-position: B

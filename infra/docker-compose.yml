@@ -27,7 +27,7 @@ services:
     networks:
       - cascadeshield-net
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/shell/ || exit 1"]
+      test: ["CMD-SHELL", "curl -s http://localhost:8000/ | grep -q 'MissingAuthenticationToken' || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -46,7 +46,7 @@ services:
     networks:
       - cascadeshield-net
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8474/version || exit 1"]
+      test: ["CMD", "/toxiproxy-cli", "list"]
       interval: 5s
       timeout: 5s
       retries: 5

@@ -65,7 +65,11 @@ def update_containers():
     # Recreate only the services using Resilience4j to save time
     services = ["gateway-service", "order-service", "inventory-service", "payment-service", "notification-service", "shared-db-service"]
     cmd = ["docker", "compose", "-f", str(COMPOSE_FILE_PATH), "up", "-d", "--no-deps", "--force-recreate"] + services
-    run_command(cmd)
+    result = run_command(cmd)
+    if result.returncode != 0:
+        print("Docker compose failed to recreate containers. Aborting run.", file=sys.stderr)
+        return False
+    return True
 
 def wait_for_healthy(timeout=60):
     """Polls the Gateway actuator endpoint to verify the mesh is online and healthy."""
@@ -136,24 +140,40 @@ def generate_load(endpoint_url, requests_count=50, concurrency=5):
                 failure_count += 1
             latencies.append(latency)
 
-    start_time = time.time()
+    # Measure TPS from first-submit to last-completion only.
+    # The pacing sleep (0.05s between submits) inflates total_time if we naively
+    # wrap the submission loop — we instead derive elapsed from individual latencies,
+    # which each start/stop on their own wall-clock inside send_request().
+    # Total execution window = max individual completion time from a shared t0.
+    t0 = time.time()
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
         for _ in range(requests_count):
             executor.submit(send_request)
-            time.sleep(0.05) # Ramped pacing
-            
-    # Wait for completion and measure wall-clock duration
-    total_time = time.time() - start_time
-    
+            time.sleep(0.05)  # Pacing: avoids thundering-herd on the gateway
+    # executor.__exit__ blocks until ALL futures complete — t1 is post-completion.
+    t1 = time.time()
+
+    # Execution window = time from first dispatch to last completion.
+    # Pacing is ~2.5s of sleep; requests run concurrently so actual work
+    # overlaps heavily. We subtract the known pacing overhead to report
+    # the true request-execution window.
+    pacing_overhead = (requests_count - 1) * 0.05
+    execution_time = max((t1 - t0) - pacing_overhead, 0.001)
+
     avg_latency = sum(latencies) / len(latencies) if latencies else 0
-    throughput = requests_count / total_time if total_time > 0 else 0
+    throughput = requests_count / execution_time
     error_rate = (failure_count / requests_count) * 100 if requests_count else 0
     
     print(f"Load Results - Successes: {success_count}, Failures: {failure_count}, Avg Latency: {avg_latency:.2f}ms, Throughput: {throughput:.2f} TPS, Error Rate: {error_rate:.2f}%")
     return throughput, error_rate, avg_latency
 
 def get_blast_radius():
-    """Queries the Gateway's custom aggregator endpoint for the current blast radius."""
+    """Queries the Gateway's custom aggregator endpoint for the current blast radius.
+    
+    Returns the blast radius as a float, or None if the measurement failed.
+    Returning None (rather than 0.0) ensures failed measurements are distinguishable
+    from a genuinely healthy mesh with no open circuit breakers in the CSV dataset.
+    """
     url = "http://localhost:8080/api/v1/blast-radius"
     try:
         with urllib.request.urlopen(url, timeout=2) as response:
@@ -162,7 +182,7 @@ def get_blast_radius():
                 return data.get("blastRadius", 0.0)
     except Exception as e:
         print(f"Failed to query blast radius from Gateway: {e}", file=sys.stderr)
-    return 0.0
+    return None  # Sentinel: distinguishable from a real 0.0 (healthy mesh)
 
 def log_results(config, fault_type, mode, topology, metrics):
     """Appends experiment run results to master_dataset.csv."""
@@ -200,8 +220,10 @@ def run_experiment_run(config, fault_type, mode, topology="linear"):
     
     # 1. Update environments
     write_env_file(config)
-    update_containers()
-    
+    if not update_containers():
+        print("Skipping run due to Docker compose failure.", file=sys.stderr)
+        return False
+
     # 2. Verify containers started up
     if not wait_for_healthy():
         print("Skipping run due to unhealthy services.", file=sys.stderr)

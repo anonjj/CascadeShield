@@ -20,13 +20,8 @@ class ToxiproxyClient:
                     return json.loads(res_body) if res_body else {}
                 return {}
         except urllib.error.HTTPError as e:
-            # If creating a proxy that already exists, it might return 409 or similar.
-            # Handle gracefully if possible.
             res_err = e.read().decode("utf-8")
-            try:
-                return json.loads(res_err)
-            except:
-                raise Exception(f"HTTP Error {e.code}: {res_err}")
+            raise Exception(f"HTTP Error {e.code}: {res_err}")
         except urllib.error.URLError as e:
             print(f"Connection error to Toxiproxy at {self.base_url}: {e.reason}", file=sys.stderr)
             raise e

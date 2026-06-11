@@ -63,7 +63,7 @@ def update_containers():
     """Forces docker compose to recreate services with the new environment variables."""
     print("Recreating Spring Boot containers to apply new configuration...")
     # Recreate only the services using Resilience4j to save time
-    services = ["gateway-service", "order-service", "inventory-service", "payment-service"]
+    services = ["gateway-service", "order-service", "inventory-service", "payment-service", "notification-service", "shared-db-service"]
     cmd = ["docker", "compose", "-f", str(COMPOSE_FILE_PATH), "up", "-d", "--no-deps", "--force-recreate"] + services
     run_command(cmd)
 
@@ -264,7 +264,7 @@ def generate_combinations(mode):
 
 def main():
     parser = argparse.ArgumentParser(description="CascadeShield Parameter Sweep Automation Runner")
-    parser.add_argument("--mode", choices=["canary", "full"], default="canary", help="canary (5 runs) or full (54 runs)")
+    parser.add_argument("--mode", choices=["canary", "full"], default="canary", help="canary (5 runs) or full (162 runs)")
     parser.add_argument("--fault", choices=["latency", "crash", "throttle"], default="latency", help="Fault type to inject")
     parser.add_argument("--topology", choices=["linear", "fanout", "mesh"], default="linear", help="Service mesh topology pattern")
     

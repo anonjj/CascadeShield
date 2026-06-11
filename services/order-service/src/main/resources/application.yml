@@ -1,0 +1,42 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: order-service
+
+downstream:
+  inventory-service-url: ${INVENTORY_SERVICE_URL:http://localhost:8082}
+  shared-db-service-url: ${SHARED_DB_SERVICE_URL:http://localhost:8085}
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        register-health-indicator: true
+        allow-health-indicator-to-fail: false
+        sliding-window-type: ${CB_SLIDING_WINDOW_TYPE:COUNT_BASED}
+        sliding-window-size: ${CB_SLIDING_WINDOW_SIZE:10}
+        failure-rate-threshold: ${CB_FAILURE_RATE_THRESHOLD:50}
+        wait-duration-in-open-state: ${CB_WAIT_DURATION_OPEN:15s}
+        permitted-number-of-calls-in-half-open-state: ${CB_PERMITTED_CALLS_HALF_OPEN:5}
+        automatic-transition-from-open-to-half-open-enabled: true
+        slow-call-duration-threshold: 2s
+        slow-call-rate-threshold: ${CB_FAILURE_RATE_THRESHOLD:50}
+    instances:
+      inventoryServiceCB:
+        base-config: default
+      sharedDbCB:
+        base-config: default
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus,circuitbreakers,circuitbreakerevents,info,metrics
+  endpoint:
+    health:
+      show-details: always
+  health:
+    circuitbreakers:
+      enabled: true

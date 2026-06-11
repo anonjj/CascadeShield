@@ -1,0 +1,23 @@
+# Maven build artifacts
+**/target/
+**/*.jar
+**/*.war
+**/*.class
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Experiment data (large files, generated)
+data/
+*.csv
+
+# Environment overrides
+.env

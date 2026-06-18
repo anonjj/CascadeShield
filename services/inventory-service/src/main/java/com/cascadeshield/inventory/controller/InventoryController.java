@@ -26,7 +26,7 @@ public class InventoryController {
         boolean failed = false;
 
         try {
-            String paymentResult = downstreamService.callPayment();
+            Object paymentResult = downstreamService.callPayment();
             body.put("payment", paymentResult != null ? paymentResult : "ok");
         } catch (Exception e) {
             body.put("payment", Map.of("error", "unavailable", "cause", e.getClass().getSimpleName()));
@@ -34,7 +34,7 @@ public class InventoryController {
         }
 
         try {
-            String dbResult = downstreamService.callSharedDb();
+            Object dbResult = downstreamService.callSharedDb();
             body.put("sharedDb", dbResult != null ? dbResult : "ok");
         } catch (Exception e) {
             body.put("sharedDb", Map.of("error", "unavailable", "cause", e.getClass().getSimpleName()));

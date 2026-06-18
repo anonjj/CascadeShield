@@ -21,12 +21,12 @@ public class InventoryDownstreamService {
     }
 
     @CircuitBreaker(name = "paymentServiceCB")
-    public String callPayment() {
-        return restTemplate.getForObject(paymentServiceUrl + "/api/v1/payment", String.class);
+    public Object callPayment() {
+        return restTemplate.getForObject(paymentServiceUrl + "/api/v1/payment", Object.class);
     }
 
     @CircuitBreaker(name = "sharedDbCB")
-    public String callSharedDb() {
-        return restTemplate.getForObject(sharedDbServiceUrl + "/api/v1/shared-db", String.class);
+    public Object callSharedDb() {
+        return restTemplate.getForObject(sharedDbServiceUrl + "/api/v1/shared-db", Object.class);
     }
 }

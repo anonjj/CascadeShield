@@ -22,7 +22,7 @@ public class GatewayDownstreamService {
      * which returns HTTP 503 so the load generator counts it as a failure.
      */
     @CircuitBreaker(name = "orderServiceCB")
-    public String callOrder() {
-        return restTemplate.getForObject(orderServiceUrl + "/api/v1/order", String.class);
+    public Object callOrder() {
+        return restTemplate.getForObject(orderServiceUrl + "/api/v1/order", Object.class);
     }
 }

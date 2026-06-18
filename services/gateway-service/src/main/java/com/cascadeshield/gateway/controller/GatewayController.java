@@ -44,7 +44,7 @@ public class GatewayController {
     @GetMapping("/linear")
     public ResponseEntity<Map<String, Object>> linear() {
         try {
-            String result = downstreamService.callOrder();
+            Object result = downstreamService.callOrder();
             return ResponseEntity.ok(Map.of("topology", "linear", "result", result != null ? result : "ok"));
         } catch (Exception e) {
             return ResponseEntity.status(503).body(Map.of(
@@ -63,11 +63,11 @@ public class GatewayController {
     public ResponseEntity<Map<String, Object>> fanout() {
         ExecutorService exec = Executors.newFixedThreadPool(3);
         try {
-            CompletableFuture<String> orderFuture = CompletableFuture.supplyAsync(
+            CompletableFuture<Object> orderFuture = CompletableFuture.supplyAsync(
                 () -> safeCall(downstreamService::callOrder, "order-service"), exec);
-            CompletableFuture<String> inventoryFuture = CompletableFuture.supplyAsync(
+            CompletableFuture<Object> inventoryFuture = CompletableFuture.supplyAsync(
                 () -> safeGet(inventoryServiceUrl + "/api/v1/inventory", "inventory-service"), exec);
-            CompletableFuture<String> paymentFuture = CompletableFuture.supplyAsync(
+            CompletableFuture<Object> paymentFuture = CompletableFuture.supplyAsync(
                 () -> safeGet(paymentServiceUrl + "/api/v1/payment", "payment-service"), exec);
 
             CompletableFuture.allOf(orderFuture, inventoryFuture, paymentFuture).join();
@@ -79,7 +79,7 @@ public class GatewayController {
             body.put("payment", paymentFuture.join());
 
             boolean anyFailed = body.values().stream()
-                .anyMatch(v -> v instanceof String s && s.contains("error"));
+                .anyMatch(v -> v instanceof Map<?, ?> m && m.containsKey("error"));
             return anyFailed
                 ? ResponseEntity.status(503).body(body)
                 : ResponseEntity.ok(body);
@@ -107,19 +107,19 @@ public class GatewayController {
         return ResponseEntity.ok(Map.of("blastRadius", br));
     }
 
-    private String safeCall(java.util.function.Supplier<String> supplier, String serviceName) {
+    private Object safeCall(java.util.function.Supplier<Object> supplier, String serviceName) {
         try {
             return supplier.get();
         } catch (Exception e) {
-            return "{\"error\": \"" + serviceName + " unavailable\", \"cause\": \"" + e.getClass().getSimpleName() + "\"}";
+            return Map.of("error", serviceName + " unavailable", "cause", e.getClass().getSimpleName());
         }
     }
 
-    private String safeGet(String url, String serviceName) {
+    private Object safeGet(String url, String serviceName) {
         try {
-            return restTemplate.getForObject(url, String.class);
+            return restTemplate.getForObject(url, Object.class);
         } catch (Exception e) {
-            return "{\"error\": \"" + serviceName + " unavailable\", \"cause\": \"" + e.getClass().getSimpleName() + "\"}";
+            return Map.of("error", serviceName + " unavailable", "cause", e.getClass().getSimpleName());
         }
     }
 }

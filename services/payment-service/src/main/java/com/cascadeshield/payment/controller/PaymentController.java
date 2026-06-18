@@ -26,7 +26,7 @@ public class PaymentController {
         boolean failed = false;
 
         try {
-            String notifResult = downstreamService.callNotification();
+            Object notifResult = downstreamService.callNotification();
             body.put("notification", notifResult != null ? notifResult : "ok");
         } catch (Exception e) {
             body.put("notification", Map.of("error", "unavailable", "cause", e.getClass().getSimpleName()));
@@ -34,7 +34,7 @@ public class PaymentController {
         }
 
         try {
-            String dbResult = downstreamService.callSharedDb();
+            Object dbResult = downstreamService.callSharedDb();
             body.put("sharedDb", dbResult != null ? dbResult : "ok");
         } catch (Exception e) {
             body.put("sharedDb", Map.of("error", "unavailable", "cause", e.getClass().getSimpleName()));

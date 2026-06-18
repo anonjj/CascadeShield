@@ -113,14 +113,17 @@ def inject_fault(fault_type):
 def generate_load(endpoint_url, requests_count=50, concurrency=5):
     """Lightweight built-in HTTP load generator to test the mesh."""
     print(f"Generating load: sending {requests_count} concurrent requests to {endpoint_url}...")
-    
+
     success_count = 0
     failure_count = 0
     latencies = []
     lock = threading.Lock()
-    
+
+    t0 = time.time()
+    last_completion = t0  # updated by each request as it finishes
+
     def send_request():
-        nonlocal success_count, failure_count
+        nonlocal success_count, failure_count, last_completion
         start = time.time()
         success = False
         try:
@@ -131,7 +134,7 @@ def generate_load(endpoint_url, requests_count=50, concurrency=5):
                     success = True
         except Exception:
             pass
-            
+
         latency = (time.time() - start) * 1000
         with lock:
             if success:
@@ -139,26 +142,17 @@ def generate_load(endpoint_url, requests_count=50, concurrency=5):
             else:
                 failure_count += 1
             latencies.append(latency)
+            last_completion = time.time()  # true last-completion timestamp
 
-    # Measure TPS from first-submit to last-completion only.
-    # The pacing sleep (0.05s between submits) inflates total_time if we naively
-    # wrap the submission loop — we instead derive elapsed from individual latencies,
-    # which each start/stop on their own wall-clock inside send_request().
-    # Total execution window = max individual completion time from a shared t0.
-    t0 = time.time()
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
         for _ in range(requests_count):
             executor.submit(send_request)
             time.sleep(0.05)  # Pacing: avoids thundering-herd on the gateway
-    # executor.__exit__ blocks until ALL futures complete — t1 is post-completion.
-    t1 = time.time()
+    # executor.__exit__ blocks until ALL futures complete.
 
-    # Execution window = time from first dispatch to last completion.
-    # Pacing is ~2.5s of sleep; requests run concurrently so actual work
-    # overlaps heavily. We subtract the known pacing overhead to report
-    # the true request-execution window.
-    pacing_overhead = (requests_count - 1) * 0.05
-    execution_time = max((t1 - t0) - pacing_overhead, 0.001)
+    # Execution window = first dispatch to last completion.
+    # Avoids the pacing-overhead subtraction which over-corrects under fast-fail.
+    execution_time = max(last_completion - t0, 0.001)
 
     avg_latency = sum(latencies) / len(latencies) if latencies else 0
     throughput = requests_count / execution_time
@@ -204,7 +198,7 @@ def log_results(config, fault_type, mode, topology, metrics):
             config["slidingWindowType"],
             config["waitDurationInOpenState"],
             config.get("permittedCallsInHalfOpenState", 5),
-            metrics["blast_radius"],
+            metrics.get("blast_radius", "NA"),
             f"{metrics['throughput']:.2f}",
             f"{metrics['error_rate']:.2f}",
             f"{metrics['avg_latency_ms']:.2f}"
@@ -230,14 +224,23 @@ def run_experiment_run(config, fault_type, mode, topology="linear"):
         return False
         
     # 3. Inject fault into Toxiproxy
-    inject_fault(fault_type)
-    
+    try:
+        inject_fault(fault_type)
+    except Exception as e:
+        print(f"Fault injection failed: {e} — skipping run.", file=sys.stderr)
+        toxiproxy.reset_all()
+        return False
+
     # 4. Generate load
     endpoint = f"http://localhost:8080/api/v1/{topology}"
     throughput, error_rate, avg_latency = generate_load(endpoint)
-    
+
     # 5. Measure blast radius
     blast_radius = get_blast_radius()
+    if blast_radius is None:
+        print("Blast radius measurement failed — skipping run.", file=sys.stderr)
+        toxiproxy.reset_all()
+        return False
     
     # 6. Reset Toxiproxy
     toxiproxy.reset_all()

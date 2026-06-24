@@ -34,13 +34,13 @@ DATASET_HEADERS = [
 N_REPLICATES = 3
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "LOCAL")  # override to AWS on cloud runs
 
-# Configuration Parameter Values for Sweeps (Total: 3 * 3 * 3 * 2 * 3 = 162 configs per fault)
+# Configuration Parameter Values for Sweeps (3*3*3*2*3 = 162 configs per fault × 3 faults × 3 replicates = 1,458 total runs)
 PARAM_VALUES = {
     "failureRateThreshold": [30, 50, 70],
     "slidingWindowSize": [5, 10, 20],
-    "waitDurationInOpenState": [5, 15, 30], # Seconds
+    "waitDurationInOpenState": [5, 15, 30],  # Seconds
     "slidingWindowType": ["COUNT_BASED", "TIME_BASED"],
-    "permittedCallsInHalfOpenState": [3, 5, 10]
+    "permittedCallsInHalfOpenState": [3, 5, 10],
 }
 
 def run_command(args, cwd=None):
@@ -258,9 +258,20 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1)
         toxiproxy.reset_all()
         return False
 
-    # 5. Generate load UNDER FAULT and sample blast radius at peak
+    # 5. Generate load UNDER FAULT; sample blast radius mid-load via a thread so
+    #    the CB is still OPEN (not recovering) when we read it.
+    blast_radius_container = [None]
+
+    def _sample_blast_radius():
+        time.sleep(2)  # allow enough requests to trip the CB before sampling
+        blast_radius_container[0] = get_blast_radius()
+
+    sampler = threading.Thread(target=_sample_blast_radius, daemon=True)
+    sampler.start()
     throughput, error_rate, avg_latency = generate_load(endpoint)
-    blast_radius = get_blast_radius()   # sampled during fault, not after reset
+    sampler.join(timeout=10)
+
+    blast_radius = blast_radius_container[0]
     if blast_radius is None:
         print("Blast radius measurement failed — skipping run.", file=sys.stderr)
         toxiproxy.reset_all()
@@ -287,7 +298,7 @@ def generate_combinations(mode):
     configs = []
     
     if mode == "canary":
-        # Small sample of extreme and mid configs with permittedCallsInHalfOpenState mapped
+        # 5 representative configs spanning the parameter space (aggressive, conservative, midpoint)
         configs = [
             # Extreme Aggressive
             {"failureRateThreshold": 30, "slidingWindowSize": 5, "waitDurationInOpenState": 5, "slidingWindowType": "COUNT_BASED", "permittedCallsInHalfOpenState": 3},
@@ -296,10 +307,10 @@ def generate_combinations(mode):
             {"failureRateThreshold": 70, "slidingWindowSize": 20, "waitDurationInOpenState": 30, "slidingWindowType": "COUNT_BASED", "permittedCallsInHalfOpenState": 10},
             {"failureRateThreshold": 70, "slidingWindowSize": 20, "waitDurationInOpenState": 30, "slidingWindowType": "TIME_BASED", "permittedCallsInHalfOpenState": 10},
             # Midpoint config
-            {"failureRateThreshold": 50, "slidingWindowSize": 10, "waitDurationInOpenState": 15, "slidingWindowType": "COUNT_BASED", "permittedCallsInHalfOpenState": 5}
+            {"failureRateThreshold": 50, "slidingWindowSize": 10, "waitDurationInOpenState": 15, "slidingWindowType": "COUNT_BASED", "permittedCallsInHalfOpenState": 5},
         ]
     else:
-        # Full Sweep (3 * 3 * 3 * 2 * 3 = 162 configs per fault, 486 runs total across 3 faults)
+        # Full Sweep: 3*3*3*2*3 = 162 configs per fault × 3 faults × 3 replicates = 1,458 total runs
         for threshold in PARAM_VALUES["failureRateThreshold"]:
             for window in PARAM_VALUES["slidingWindowSize"]:
                 for wait in PARAM_VALUES["waitDurationInOpenState"]:
@@ -310,7 +321,7 @@ def generate_combinations(mode):
                                 "slidingWindowSize": window,
                                 "waitDurationInOpenState": wait,
                                 "slidingWindowType": wtype,
-                                "permittedCallsInHalfOpenState": permitted
+                                "permittedCallsInHalfOpenState": permitted,
                             })
     return configs
 

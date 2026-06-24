@@ -215,10 +215,18 @@ services:
     environment:
       - JAVA_OPTS=-Xmx512m -Xms256m -XX:+UseG1GC
       - SPRING_PROFILES_ACTIVE=dev
+      - SHARED_DB_SERVICE_URL=http://toxiproxy:8665
+      - CB_SLIDING_WINDOW_SIZE=${CB_SLIDING_WINDOW_SIZE:-10}
+      - CB_SLIDING_WINDOW_TYPE=${CB_SLIDING_WINDOW_TYPE:-COUNT_BASED}
+      - CB_FAILURE_RATE_THRESHOLD=${CB_FAILURE_RATE_THRESHOLD:-50}
+      - CB_WAIT_DURATION_OPEN=${CB_WAIT_DURATION_OPEN:-15s}
+      - CB_PERMITTED_CALLS_HALF_OPEN=${CB_PERMITTED_CALLS_HALF_OPEN:-5}
     networks:
       - cascadeshield-net
     depends_on:
       toxiproxy:
+        condition: service_healthy
+      shared-db-service:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8084/actuator/health 2>/dev/null | grep -q '\"UP\"' || exit 1"]

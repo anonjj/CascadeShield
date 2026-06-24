@@ -23,11 +23,16 @@ ENV_PATH = BASE_DIR / "infra" / ".env"
 COMPOSE_FILE_PATH = BASE_DIR / "infra" / "docker-compose.yml"
 
 DATASET_HEADERS = [
-    "timestamp", "mode", "topology", "fault_type", 
-    "failure_rate_threshold", "sliding_window_size", "sliding_window_type", 
-    "wait_duration_s", "permitted_calls_half_open", 
-    "blast_radius", "throughput", "error_rate", "avg_latency_ms"
+    "experiment_id", "topology", "fault_type", "window_type",
+    "threshold", "window_size", "wait_duration",
+    "environment", "replicate", "run_timestamp",
+    "blast_radius", "time_to_open", "time_to_recover",
+    "error_rate", "throughput_loss"
 ]
+
+# How many replicates per config (min 3 for variance estimation)
+N_REPLICATES = 3
+ENVIRONMENT = os.environ.get("ENVIRONMENT", "LOCAL")  # override to AWS on cloud runs
 
 # Configuration Parameter Values for Sweeps (Total: 3 * 3 * 3 * 2 * 3 = 162 configs per fault)
 PARAM_VALUES = {
@@ -178,37 +183,54 @@ def get_blast_radius():
         print(f"Failed to query blast radius from Gateway: {e}", file=sys.stderr)
     return None  # Sentinel: distinguishable from a real 0.0 (healthy mesh)
 
-def log_results(config, fault_type, mode, topology, metrics):
-    """Appends experiment run results to master_dataset.csv."""
+def make_experiment_id(topology, fault_type, config):
+    """Builds a deterministic ID matching experiment_matrix.csv e.g. LIN-LAT-CNT-T50-W10-D15."""
+    topo_map  = {"linear": "LIN", "fanout": "FAN", "mesh": "MSH"}
+    fault_map = {"latency": "LAT", "crash": "CRS", "throttle": "THR"}
+    wtype_map = {"COUNT_BASED": "CNT", "TIME_BASED": "TIM"}
+    topo  = topo_map.get(topology, topology[:3].upper())
+    fault = fault_map.get(fault_type, fault_type[:3].upper())
+    wtype = wtype_map.get(config["slidingWindowType"], config["slidingWindowType"][:3])
+    return (f"{topo}-{fault}-{wtype}"
+            f"-T{config['failureRateThreshold']}"
+            f"-W{config['slidingWindowSize']}"
+            f"-D{config['waitDurationInOpenState']}")
+
+def log_results(config, fault_type, mode, topology, metrics, replicate):
+    """Appends experiment run results to master_dataset.csv (15-col schema)."""
     os.makedirs(os.path.dirname(DATASET_PATH), exist_ok=True)
     file_exists = os.path.exists(DATASET_PATH)
-    
+
+    experiment_id = make_experiment_id(topology, fault_type, config)
+
     with open(DATASET_PATH, mode="a", newline="") as f:
         writer = csv.writer(f)
         if not file_exists:
             writer.writerow(DATASET_HEADERS)
-            
+
         writer.writerow([
-            time.strftime("%Y-%m-%d %H:%M:%S"),
-            mode,
-            topology,
-            fault_type,
+            experiment_id,
+            topology.upper(),
+            fault_type.upper(),
+            config["slidingWindowType"],
             config["failureRateThreshold"],
             config["slidingWindowSize"],
-            config["slidingWindowType"],
             config["waitDurationInOpenState"],
-            config.get("permittedCallsInHalfOpenState", 5),
-            metrics.get("blast_radius", "NA"),
-            f"{metrics['throughput']:.2f}",
-            f"{metrics['error_rate']:.2f}",
-            f"{metrics['avg_latency_ms']:.2f}"
+            ENVIRONMENT,
+            replicate,
+            time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            f"{metrics.get('blast_radius', ''):.4f}" if metrics.get('blast_radius') is not None else "",
+            metrics.get("time_to_open", ""),   # "" = CB never opened (meaningful null)
+            metrics.get("time_to_recover", ""),  # "" = system did not recover (meaningful null)
+            f"{metrics['error_rate']:.4f}",
+            f"{metrics['throughput_loss']:.4f}",
         ])
     print(f"Saved run metrics to {DATASET_PATH}")
 
-def run_experiment_run(config, fault_type, mode, topology="linear"):
+def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1):
     """Orchestrates a single configuration and fault run."""
     print("\n" + "="*60)
-    print(f"STARTING EXPERIMENT: Mode={mode}, Topology={topology}, Fault={fault_type}")
+    print(f"STARTING EXPERIMENT: Mode={mode}, Topology={topology}, Fault={fault_type}, Replicate={replicate}")
     print(f"Config: {config}")
     print("="*60)
     
@@ -222,8 +244,13 @@ def run_experiment_run(config, fault_type, mode, topology="linear"):
     if not wait_for_healthy():
         print("Skipping run due to unhealthy services.", file=sys.stderr)
         return False
-        
-    # 3. Inject fault into Toxiproxy
+
+    # 3. Measure pre-fault baseline throughput (healthy warm-up)
+    endpoint = f"http://localhost:8080/api/v1/{topology}"
+    print("Measuring pre-fault baseline...")
+    baseline_throughput, _, _ = generate_load(endpoint, requests_count=20, concurrency=3)
+
+    # 4. Inject fault into Toxiproxy
     try:
         inject_fault(fault_type)
     except Exception as e:
@@ -231,28 +258,28 @@ def run_experiment_run(config, fault_type, mode, topology="linear"):
         toxiproxy.reset_all()
         return False
 
-    # 4. Generate load
-    endpoint = f"http://localhost:8080/api/v1/{topology}"
+    # 5. Generate load UNDER FAULT and sample blast radius at peak
     throughput, error_rate, avg_latency = generate_load(endpoint)
-
-    # 5. Measure blast radius
-    blast_radius = get_blast_radius()
+    blast_radius = get_blast_radius()   # sampled during fault, not after reset
     if blast_radius is None:
         print("Blast radius measurement failed — skipping run.", file=sys.stderr)
         toxiproxy.reset_all()
         return False
-    
+
     # 6. Reset Toxiproxy
     toxiproxy.reset_all()
-    
+
     # 7. Save results
+    throughput_loss = max(0.0, 1.0 - (throughput / baseline_throughput)) if baseline_throughput > 0 else 0.0
     metrics = {
         "blast_radius": blast_radius,
-        "throughput": throughput,
-        "error_rate": error_rate,
-        "avg_latency_ms": avg_latency
+        "throughput_loss": throughput_loss,
+        "error_rate": error_rate / 100.0,   # convert % → fraction
+        "avg_latency_ms": avg_latency,
+        "time_to_open": None,    # TODO: wire from CB event listener in a future PR
+        "time_to_recover": None,
     }
-    log_results(config, fault_type, mode, topology, metrics)
+    log_results(config, fault_type, mode, topology, metrics, replicate)
     return True
 
 def generate_combinations(mode):
@@ -292,6 +319,7 @@ def main():
     parser.add_argument("--mode", choices=["canary", "full"], default="canary", help="canary (5 runs) or full (162 runs)")
     parser.add_argument("--fault", choices=["latency", "crash", "throttle"], default="latency", help="Fault type to inject")
     parser.add_argument("--topology", choices=["linear", "fanout", "mesh"], default="linear", help="Service mesh topology pattern")
+    parser.add_argument("--replicates", type=int, default=N_REPLICATES, help=f"Number of replicates per config (default: {N_REPLICATES})")
     
     args = parser.parse_args()
     
@@ -306,17 +334,21 @@ def main():
         sys.exit(1)
         
     configs = generate_combinations(args.mode)
-    print(f"Generated {len(configs)} configuration sweep profiles.")
+    total_runs = len(configs) * args.replicates
+    print(f"Generated {len(configs)} configs × {args.replicates} replicates = {total_runs} total runs.")
     
     success_runs = 0
+    run_number = 0
     for i, config in enumerate(configs):
-        print(f"\nProgress: Run {i+1} of {len(configs)}")
-        success = run_experiment_run(config, args.fault, args.mode, args.topology)
-        if success:
-            success_runs += 1
+        for rep in range(1, args.replicates + 1):
+            run_number += 1
+            print(f"\nProgress: Run {run_number} of {total_runs} (config {i+1}/{len(configs)}, replicate {rep}/{args.replicates})")
+            success = run_experiment_run(config, args.fault, args.mode, args.topology, replicate=rep)
+            if success:
+                success_runs += 1
             
     print("\n" + "="*60)
-    print(f"SWEEP COMPLETED: {success_runs}/{len(configs)} runs executed successfully.")
+    print(f"SWEEP COMPLETED: {success_runs}/{total_runs} runs executed successfully.")
     print(f"Master dataset: {DATASET_PATH}")
     print("="*60)
 

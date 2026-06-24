@@ -1,1 +1,1 @@
-experiment_id,topology,fault_type,window_type,threshold,window_size,wait_duration,environment,replicate,run_timestamp,blast_radius,time_to_open,time_to_recover,error_rate,throughput_loss
+experiment_id,topology,fault_type,window_type,threshold,window_size,wait_duration,permitted_calls_half_open,environment,replicate,run_timestamp,blast_radius,time_to_open,time_to_recover,error_rate,throughput_loss

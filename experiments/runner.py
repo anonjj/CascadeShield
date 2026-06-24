@@ -24,7 +24,7 @@ COMPOSE_FILE_PATH = BASE_DIR / "infra" / "docker-compose.yml"
 
 DATASET_HEADERS = [
     "experiment_id", "topology", "fault_type", "window_type",
-    "threshold", "window_size", "wait_duration",
+    "threshold", "window_size", "wait_duration", "permitted_calls_half_open",
     "environment", "replicate", "run_timestamp",
     "blast_radius", "time_to_open", "time_to_recover",
     "error_rate", "throughput_loss"
@@ -230,6 +230,7 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
             config["failureRateThreshold"],
             config["slidingWindowSize"],
             config["waitDurationInOpenState"],
+            PERMITTED_CALLS_HALF_OPEN,
             ENVIRONMENT,
             replicate,
             time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),

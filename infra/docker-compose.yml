@@ -102,6 +102,8 @@ services:
     depends_on:
       toxiproxy:
         condition: service_healthy
+      shared-db-service:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health 2>/dev/null | grep -q '\"UP\"' || exit 1"]
       interval: 10s
@@ -133,6 +135,8 @@ services:
       postgres:
         condition: service_healthy
       toxiproxy:
+        condition: service_healthy
+      shared-db-service:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8081/actuator/health 2>/dev/null | grep -q '\"UP\"' || exit 1"]
@@ -166,6 +170,8 @@ services:
         condition: service_healthy
       toxiproxy:
         condition: service_healthy
+      shared-db-service:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8082/actuator/health 2>/dev/null | grep -q '\"UP\"' || exit 1"]
       interval: 10s
@@ -197,6 +203,8 @@ services:
       dynamodb-local:
         condition: service_healthy
       toxiproxy:
+        condition: service_healthy
+      shared-db-service:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8083/actuator/health 2>/dev/null | grep -q '\"UP\"' || exit 1"]

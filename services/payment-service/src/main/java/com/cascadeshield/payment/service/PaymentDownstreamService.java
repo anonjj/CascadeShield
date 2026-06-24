@@ -1,8 +1,12 @@
 package com.cascadeshield.payment.service;
 
+import com.cascadeshield.payment.exception.DownstreamRejectedException;
+import com.cascadeshield.payment.exception.DownstreamUnavailableException;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 @Service
@@ -22,11 +26,23 @@ public class PaymentDownstreamService {
 
     @CircuitBreaker(name = "notificationServiceCB")
     public Object callNotification() {
-        return restTemplate.getForObject(notificationServiceUrl + "/api/v1/notification", Object.class);
+        try {
+            return restTemplate.getForObject(notificationServiceUrl + "/api/v1/notification", Object.class);
+        } catch (HttpClientErrorException ex) {
+            throw new DownstreamRejectedException(ex.getStatusCode(), ex.getResponseBodyAsString());
+        } catch (RestClientException ex) {
+            throw new DownstreamUnavailableException("notification-service unreachable", ex);
+        }
     }
 
     @CircuitBreaker(name = "sharedDbCB")
     public Object callSharedDb() {
-        return restTemplate.getForObject(sharedDbServiceUrl + "/api/v1/shared-db", Object.class);
+        try {
+            return restTemplate.getForObject(sharedDbServiceUrl + "/api/v1/shared-db", Object.class);
+        } catch (HttpClientErrorException ex) {
+            throw new DownstreamRejectedException(ex.getStatusCode(), ex.getResponseBodyAsString());
+        } catch (RestClientException ex) {
+            throw new DownstreamUnavailableException("shared-db-service unreachable", ex);
+        }
     }
 }

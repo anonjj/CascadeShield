@@ -23,6 +23,12 @@ resilience4j:
         automatic-transition-from-open-to-half-open-enabled: true
         slow-call-duration-threshold: 2s
         slow-call-rate-threshold: ${CB_FAILURE_RATE_THRESHOLD:50}
+        # CRITICAL: only genuine infrastructure faults count toward the failure rate.
+        # Business rejections (4xx) must never trip the breaker or they inflate blast radius.
+        record-exceptions:
+          - com.cascadeshield.order.exception.DownstreamUnavailableException
+        ignore-exceptions:
+          - com.cascadeshield.order.exception.DownstreamRejectedException
     instances:
       inventoryServiceCB:
         base-config: default

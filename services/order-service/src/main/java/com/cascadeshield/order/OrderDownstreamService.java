@@ -1,7 +1,7 @@
-package com.cascadeshield.payment.service;
+package com.cascadeshield.order.service;
 
-import com.cascadeshield.payment.exception.DownstreamRejectedException;
-import com.cascadeshield.payment.exception.DownstreamUnavailableException;
+import com.cascadeshield.order.exception.DownstreamRejectedException;
+import com.cascadeshield.order.exception.DownstreamUnavailableException;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -10,28 +10,34 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 @Service
-public class PaymentDownstreamService {
+public class OrderDownstreamService {
 
     private final RestTemplate restTemplate;
 
-    @Value("${downstream.notification-service-url}")
-    private String notificationServiceUrl;
+    @Value("${downstream.inventory-service-url}")
+    private String inventoryServiceUrl;
 
     @Value("${downstream.shared-db-service-url}")
     private String sharedDbServiceUrl;
 
-    public PaymentDownstreamService(RestTemplate restTemplate) {
+    public OrderDownstreamService(RestTemplate restTemplate) {
         this.restTemplate = restTemplate;
     }
 
-    @CircuitBreaker(name = "notificationServiceCB")
-    public Object callNotification() {
+    /**
+     * CB-wrapped call to inventory. The exception split is load-bearing for
+     * blast-radius correctness:
+     *   - 4xx (business rejection) → DownstreamRejectedException → ignored by inventoryServiceCB
+     *   - 5xx / timeout           → DownstreamUnavailableException → recorded by inventoryServiceCB
+     */
+    @CircuitBreaker(name = "inventoryServiceCB")
+    public Object callInventory() {
         try {
-            return restTemplate.getForObject(notificationServiceUrl + "/api/v1/notification", Object.class);
+            return restTemplate.getForObject(inventoryServiceUrl + "/api/v1/inventory", Object.class);
         } catch (HttpClientErrorException ex) {
             throw new DownstreamRejectedException(ex.getStatusCode(), ex.getResponseBodyAsString());
         } catch (RestClientException ex) {
-            throw new DownstreamUnavailableException("notification-service unreachable", ex);
+            throw new DownstreamUnavailableException("inventory-service unreachable", ex);
         }
     }
 

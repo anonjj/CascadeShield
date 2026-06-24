@@ -1,8 +1,12 @@
 package com.cascadeshield.inventory.service;
 
+import com.cascadeshield.inventory.exception.DownstreamRejectedException;
+import com.cascadeshield.inventory.exception.DownstreamUnavailableException;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 @Service
@@ -22,11 +26,23 @@ public class InventoryDownstreamService {
 
     @CircuitBreaker(name = "paymentServiceCB")
     public Object callPayment() {
-        return restTemplate.getForObject(paymentServiceUrl + "/api/v1/payment", Object.class);
+        try {
+            return restTemplate.getForObject(paymentServiceUrl + "/api/v1/payment", Object.class);
+        } catch (HttpClientErrorException ex) {
+            throw new DownstreamRejectedException(ex.getStatusCode(), ex.getResponseBodyAsString());
+        } catch (RestClientException ex) {
+            throw new DownstreamUnavailableException("payment-service unreachable", ex);
+        }
     }
 
     @CircuitBreaker(name = "sharedDbCB")
     public Object callSharedDb() {
-        return restTemplate.getForObject(sharedDbServiceUrl + "/api/v1/shared-db", Object.class);
+        try {
+            return restTemplate.getForObject(sharedDbServiceUrl + "/api/v1/shared-db", Object.class);
+        } catch (HttpClientErrorException ex) {
+            throw new DownstreamRejectedException(ex.getStatusCode(), ex.getResponseBodyAsString());
+        } catch (RestClientException ex) {
+            throw new DownstreamUnavailableException("shared-db-service unreachable", ex);
+        }
     }
 }

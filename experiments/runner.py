@@ -77,22 +77,36 @@ def update_containers():
     return True
 
 def wait_for_healthy(timeout=60):
-    """Polls the Gateway actuator endpoint to verify the mesh is online and healthy."""
-    url = "http://localhost:8080/actuator/health"
-    print(f"Waiting for Gateway Service to become healthy at {url}...")
+    """Polls gateway and notification-service until both report UP.
+
+    notification-service is checked explicitly because --no-deps in
+    update_containers() bypasses depends_on conditions, so Docker will not
+    wait for shared-db-service before starting notification-service. If
+    notification-service is UP, shared-db-service is also ready.
+    """
+    endpoints = [
+        ("http://localhost:8080/actuator/health", "gateway-service"),
+        ("http://localhost:8084/actuator/health", "notification-service"),
+    ]
+    healthy = {url: False for url, _ in endpoints}
     start_time = time.time()
     while time.time() - start_time < timeout:
-        try:
-            with urllib.request.urlopen(url, timeout=2) as response:
-                if response.status == 200:
-                    data = json.loads(response.read().decode("utf-8"))
-                    if data.get("status") == "UP":
-                        print("Gateway is healthy!")
-                        return True
-        except Exception:
-            pass
+        for url, name in endpoints:
+            if healthy[url]:
+                continue
+            try:
+                with urllib.request.urlopen(url, timeout=2) as response:
+                    if response.status == 200:
+                        data = json.loads(response.read().decode("utf-8"))
+                        if data.get("status") == "UP":
+                            print(f"{name} is healthy!")
+                            healthy[url] = True
+            except Exception:
+                pass
+        if all(healthy.values()):
+            return True
         time.sleep(2)
-    print("Timeout waiting for Gateway health check.", file=sys.stderr)
+    print("Timeout waiting for services to become healthy.", file=sys.stderr)
     return False
 
 def inject_fault(fault_type):
@@ -263,8 +277,17 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1)
     blast_radius_container = [None]
 
     def _sample_blast_radius():
-        time.sleep(2)  # allow enough requests to trip the CB before sampling
-        blast_radius_container[0] = get_blast_radius()
+        # Poll until blast_radius > 0 (CB has opened) or 12s have elapsed.
+        # A fixed 2s sleep is too short for latency/throttle faults where
+        # requests take 3-5s to complete before the CB can evaluate them.
+        deadline = time.time() + 12
+        while time.time() < deadline:
+            time.sleep(0.5)
+            result = get_blast_radius()
+            if result is not None and result > 0.0:
+                blast_radius_container[0] = result
+                return
+        blast_radius_container[0] = get_blast_radius()  # final read at load end
 
     sampler = threading.Thread(target=_sample_blast_radius, daemon=True)
     sampler.start()

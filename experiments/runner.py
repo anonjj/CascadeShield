@@ -34,14 +34,14 @@ DATASET_HEADERS = [
 N_REPLICATES = 3
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "LOCAL")  # override to AWS on cloud runs
 
-# Configuration Parameter Values for Sweeps (3*3*3*2*3 = 162 configs per fault × 3 faults × 3 replicates = 1,458 total runs)
+# Configuration Parameter Values for Sweeps (3*3*3*2 = 54 configs per fault × 3 faults × 3 replicates = 486 total runs)
 PARAM_VALUES = {
     "failureRateThreshold": [30, 50, 70],
     "slidingWindowSize": [5, 10, 20],
     "waitDurationInOpenState": [5, 15, 30],  # Seconds
     "slidingWindowType": ["COUNT_BASED", "TIME_BASED"],
-    "permittedCallsInHalfOpenState": [3, 5, 10],
 }
+PERMITTED_CALLS_HALF_OPEN = 5  # fixed baseline, not swept
 
 def run_command(args, cwd=None):
     """Helper to run system commands."""
@@ -57,7 +57,7 @@ CB_SLIDING_WINDOW_SIZE={config['slidingWindowSize']}
 CB_SLIDING_WINDOW_TYPE={config['slidingWindowType']}
 CB_FAILURE_RATE_THRESHOLD={config['failureRateThreshold']}
 CB_WAIT_DURATION_OPEN={config['waitDurationInOpenState']}s
-CB_PERMITTED_CALLS_HALF_OPEN={config.get('permittedCallsInHalfOpenState', 5)}
+CB_PERMITTED_CALLS_HALF_OPEN={PERMITTED_CALLS_HALF_OPEN}
 """
     os.makedirs(os.path.dirname(ENV_PATH), exist_ok=True)
     with open(ENV_PATH, "w") as f:
@@ -301,28 +301,26 @@ def generate_combinations(mode):
         # 5 representative configs spanning the parameter space (aggressive, conservative, midpoint)
         configs = [
             # Extreme Aggressive
-            {"failureRateThreshold": 30, "slidingWindowSize": 5, "waitDurationInOpenState": 5, "slidingWindowType": "COUNT_BASED", "permittedCallsInHalfOpenState": 3},
-            {"failureRateThreshold": 30, "slidingWindowSize": 5, "waitDurationInOpenState": 5, "slidingWindowType": "TIME_BASED", "permittedCallsInHalfOpenState": 3},
+            {"failureRateThreshold": 30, "slidingWindowSize": 5, "waitDurationInOpenState": 5, "slidingWindowType": "COUNT_BASED"},
+            {"failureRateThreshold": 30, "slidingWindowSize": 5, "waitDurationInOpenState": 5, "slidingWindowType": "TIME_BASED"},
             # Extreme Conservative
-            {"failureRateThreshold": 70, "slidingWindowSize": 20, "waitDurationInOpenState": 30, "slidingWindowType": "COUNT_BASED", "permittedCallsInHalfOpenState": 10},
-            {"failureRateThreshold": 70, "slidingWindowSize": 20, "waitDurationInOpenState": 30, "slidingWindowType": "TIME_BASED", "permittedCallsInHalfOpenState": 10},
+            {"failureRateThreshold": 70, "slidingWindowSize": 20, "waitDurationInOpenState": 30, "slidingWindowType": "COUNT_BASED"},
+            {"failureRateThreshold": 70, "slidingWindowSize": 20, "waitDurationInOpenState": 30, "slidingWindowType": "TIME_BASED"},
             # Midpoint config
-            {"failureRateThreshold": 50, "slidingWindowSize": 10, "waitDurationInOpenState": 15, "slidingWindowType": "COUNT_BASED", "permittedCallsInHalfOpenState": 5},
+            {"failureRateThreshold": 50, "slidingWindowSize": 10, "waitDurationInOpenState": 15, "slidingWindowType": "COUNT_BASED"},
         ]
     else:
-        # Full Sweep: 3*3*3*2*3 = 162 configs per fault × 3 faults × 3 replicates = 1,458 total runs
+        # Full Sweep: 3*3*3*2 = 54 configs per fault × 3 faults × 3 replicates = 486 total runs
         for threshold in PARAM_VALUES["failureRateThreshold"]:
             for window in PARAM_VALUES["slidingWindowSize"]:
                 for wait in PARAM_VALUES["waitDurationInOpenState"]:
                     for wtype in PARAM_VALUES["slidingWindowType"]:
-                        for permitted in PARAM_VALUES["permittedCallsInHalfOpenState"]:
-                            configs.append({
-                                "failureRateThreshold": threshold,
-                                "slidingWindowSize": window,
-                                "waitDurationInOpenState": wait,
-                                "slidingWindowType": wtype,
-                                "permittedCallsInHalfOpenState": permitted,
-                            })
+                        configs.append({
+                            "failureRateThreshold": threshold,
+                            "slidingWindowSize": window,
+                            "waitDurationInOpenState": wait,
+                            "slidingWindowType": wtype,
+                        })
     return configs
 
 def main():

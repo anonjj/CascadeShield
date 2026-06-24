@@ -160,7 +160,7 @@ def generate_load(endpoint_url, requests_count=50, concurrency=5):
     execution_time = max(last_completion - t0, 0.001)
 
     avg_latency = sum(latencies) / len(latencies) if latencies else 0
-    throughput = requests_count / execution_time
+    throughput = success_count / execution_time
     error_rate = (failure_count / requests_count) * 100 if requests_count else 0
     
     print(f"Load Results - Successes: {success_count}, Failures: {failure_count}, Avg Latency: {avg_latency:.2f}ms, Throughput: {throughput:.2f} TPS, Error Rate: {error_rate:.2f}%")

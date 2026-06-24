@@ -21,3 +21,6 @@ data/
 
 # Environment overrides
 .env
+
+# Claude CLI
+.claude/

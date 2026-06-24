@@ -66,9 +66,9 @@ public class GatewayController {
             CompletableFuture<Object> orderFuture = CompletableFuture.supplyAsync(
                 () -> safeCall(downstreamService::callOrder, "order-service"), exec);
             CompletableFuture<Object> inventoryFuture = CompletableFuture.supplyAsync(
-                () -> safeGet(inventoryServiceUrl + "/api/v1/inventory", "inventory-service"), exec);
+                () -> safeCall(() -> restTemplate.getForObject(inventoryServiceUrl + "/api/v1/inventory", Object.class), "inventory-service"), exec);
             CompletableFuture<Object> paymentFuture = CompletableFuture.supplyAsync(
-                () -> safeGet(paymentServiceUrl + "/api/v1/payment", "payment-service"), exec);
+                () -> safeCall(() -> restTemplate.getForObject(paymentServiceUrl + "/api/v1/payment", Object.class), "payment-service"), exec);
 
             CompletableFuture.allOf(orderFuture, inventoryFuture, paymentFuture).join();
 
@@ -79,7 +79,7 @@ public class GatewayController {
             body.put("payment", paymentFuture.join());
 
             boolean anyFailed = body.values().stream()
-                .anyMatch(v -> v instanceof Map<?, ?> m && m.containsKey("error"));
+                .anyMatch(v -> v instanceof Map<?, ?> m && m.containsKey("error") && m.containsKey("cause"));
             return anyFailed
                 ? ResponseEntity.status(503).body(body)
                 : ResponseEntity.ok(body);
@@ -109,15 +109,11 @@ public class GatewayController {
 
     private Object safeCall(java.util.function.Supplier<Object> supplier, String serviceName) {
         try {
-            return supplier.get();
-        } catch (Exception e) {
-            return Map.of("error", serviceName + " unavailable", "cause", e.getClass().getSimpleName());
-        }
-    }
-
-    private Object safeGet(String url, String serviceName) {
-        try {
-            return restTemplate.getForObject(url, Object.class);
+            Object result = supplier.get();
+            if (result == null) {
+                return Map.of("error", serviceName + " unavailable", "cause", "empty response");
+            }
+            return result;
         } catch (Exception e) {
             return Map.of("error", serviceName + " unavailable", "cause", e.getClass().getSimpleName());
         }

@@ -23,6 +23,10 @@ resilience4j:
         automatic-transition-from-open-to-half-open-enabled: true
         slow-call-duration-threshold: 2s
         slow-call-rate-threshold: ${CB_FAILURE_RATE_THRESHOLD:50}
+        record-exceptions:
+          - com.cascadeshield.payment.exception.DownstreamUnavailableException
+        ignore-exceptions:
+          - com.cascadeshield.payment.exception.DownstreamRejectedException
     instances:
       notificationServiceCB:
         base-config: default

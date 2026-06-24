@@ -349,7 +349,7 @@ def generate_combinations(mode):
 
 def main():
     parser = argparse.ArgumentParser(description="CascadeShield Parameter Sweep Automation Runner")
-    parser.add_argument("--mode", choices=["canary", "full"], default="canary", help="canary (5 runs) or full (162 runs)")
+    parser.add_argument("--mode", choices=["canary", "full"], default="canary", help="canary (5 configs × 3 replicates = 15 runs) or full (54 configs × 3 replicates = 162 runs per fault type)")
     parser.add_argument("--fault", choices=["latency", "crash", "throttle"], default="latency", help="Fault type to inject")
     parser.add_argument("--topology", choices=["linear", "fanout", "mesh"], default="linear", help="Service mesh topology pattern")
     parser.add_argument("--replicates", type=int, default=N_REPLICATES, help=f"Number of replicates per config (default: {N_REPLICATES})")

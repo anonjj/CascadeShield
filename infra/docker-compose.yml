@@ -1,3 +1,10 @@
+x-cb-env: &cb-env
+  CB_SLIDING_WINDOW_SIZE: ${CB_SLIDING_WINDOW_SIZE:-10}
+  CB_SLIDING_WINDOW_TYPE: ${CB_SLIDING_WINDOW_TYPE:-COUNT_BASED}
+  CB_FAILURE_RATE_THRESHOLD: ${CB_FAILURE_RATE_THRESHOLD:-50}
+  CB_WAIT_DURATION_OPEN: ${CB_WAIT_DURATION_OPEN:-15s}
+  CB_PERMITTED_CALLS_HALF_OPEN: ${CB_PERMITTED_CALLS_HALF_OPEN:-5}
+
 services:
   # Database for Order & Inventory services
   postgres:
@@ -87,16 +94,11 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - JAVA_OPTS=-Xmx512m -Xms256m -XX:+UseG1GC
-      - SPRING_PROFILES_ACTIVE=dev
-      - ORDER_SERVICE_URL=http://toxiproxy:8661
-      - SHARED_DB_SERVICE_URL=http://toxiproxy:8665
-      # Default Circuit Breaker configurations
-      - CB_SLIDING_WINDOW_SIZE=${CB_SLIDING_WINDOW_SIZE:-10}
-      - CB_SLIDING_WINDOW_TYPE=${CB_SLIDING_WINDOW_TYPE:-COUNT_BASED}
-      - CB_FAILURE_RATE_THRESHOLD=${CB_FAILURE_RATE_THRESHOLD:-50}
-      - CB_WAIT_DURATION_OPEN=${CB_WAIT_DURATION_OPEN:-15s}
-      - CB_PERMITTED_CALLS_HALF_OPEN=${CB_PERMITTED_CALLS_HALF_OPEN:-5}
+      <<: *cb-env
+      JAVA_OPTS: -Xmx512m -Xms256m -XX:+UseG1GC
+      SPRING_PROFILES_ACTIVE: dev
+      ORDER_SERVICE_URL: http://toxiproxy:8661
+      SHARED_DB_SERVICE_URL: http://toxiproxy:8665
     networks:
       - cascadeshield-net
     depends_on:
@@ -119,16 +121,12 @@ services:
     ports:
       - "8081:8081"
     environment:
-      - JAVA_OPTS=-Xmx512m -Xms256m -XX:+UseG1GC
-      - SPRING_PROFILES_ACTIVE=dev
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/cascadeshield
-      - INVENTORY_SERVICE_URL=http://toxiproxy:8662
-      - SHARED_DB_SERVICE_URL=http://toxiproxy:8665
-      - CB_SLIDING_WINDOW_SIZE=${CB_SLIDING_WINDOW_SIZE:-10}
-      - CB_SLIDING_WINDOW_TYPE=${CB_SLIDING_WINDOW_TYPE:-COUNT_BASED}
-      - CB_FAILURE_RATE_THRESHOLD=${CB_FAILURE_RATE_THRESHOLD:-50}
-      - CB_WAIT_DURATION_OPEN=${CB_WAIT_DURATION_OPEN:-15s}
-      - CB_PERMITTED_CALLS_HALF_OPEN=${CB_PERMITTED_CALLS_HALF_OPEN:-5}
+      <<: *cb-env
+      JAVA_OPTS: -Xmx512m -Xms256m -XX:+UseG1GC
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/cascadeshield
+      INVENTORY_SERVICE_URL: http://toxiproxy:8662
+      SHARED_DB_SERVICE_URL: http://toxiproxy:8665
     networks:
       - cascadeshield-net
     depends_on:
@@ -153,16 +151,12 @@ services:
     ports:
       - "8082:8082"
     environment:
-      - JAVA_OPTS=-Xmx512m -Xms256m -XX:+UseG1GC
-      - SPRING_PROFILES_ACTIVE=dev
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/cascadeshield
-      - PAYMENT_SERVICE_URL=http://toxiproxy:8663
-      - SHARED_DB_SERVICE_URL=http://toxiproxy:8665
-      - CB_SLIDING_WINDOW_SIZE=${CB_SLIDING_WINDOW_SIZE:-10}
-      - CB_SLIDING_WINDOW_TYPE=${CB_SLIDING_WINDOW_TYPE:-COUNT_BASED}
-      - CB_FAILURE_RATE_THRESHOLD=${CB_FAILURE_RATE_THRESHOLD:-50}
-      - CB_WAIT_DURATION_OPEN=${CB_WAIT_DURATION_OPEN:-15s}
-      - CB_PERMITTED_CALLS_HALF_OPEN=${CB_PERMITTED_CALLS_HALF_OPEN:-5}
+      <<: *cb-env
+      JAVA_OPTS: -Xmx512m -Xms256m -XX:+UseG1GC
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/cascadeshield
+      PAYMENT_SERVICE_URL: http://toxiproxy:8663
+      SHARED_DB_SERVICE_URL: http://toxiproxy:8665
     networks:
       - cascadeshield-net
     depends_on:
@@ -187,16 +181,12 @@ services:
     ports:
       - "8083:8083"
     environment:
-      - JAVA_OPTS=-Xmx512m -Xms256m -XX:+UseG1GC
-      - SPRING_PROFILES_ACTIVE=dev
-      - AWS_DYNAMODB_ENDPOINT=http://dynamodb-local:8000
-      - NOTIFICATION_SERVICE_URL=http://toxiproxy:8664
-      - SHARED_DB_SERVICE_URL=http://toxiproxy:8665
-      - CB_SLIDING_WINDOW_SIZE=${CB_SLIDING_WINDOW_SIZE:-10}
-      - CB_SLIDING_WINDOW_TYPE=${CB_SLIDING_WINDOW_TYPE:-COUNT_BASED}
-      - CB_FAILURE_RATE_THRESHOLD=${CB_FAILURE_RATE_THRESHOLD:-50}
-      - CB_WAIT_DURATION_OPEN=${CB_WAIT_DURATION_OPEN:-15s}
-      - CB_PERMITTED_CALLS_HALF_OPEN=${CB_PERMITTED_CALLS_HALF_OPEN:-5}
+      <<: *cb-env
+      JAVA_OPTS: -Xmx512m -Xms256m -XX:+UseG1GC
+      SPRING_PROFILES_ACTIVE: dev
+      AWS_DYNAMODB_ENDPOINT: http://dynamodb-local:8000
+      NOTIFICATION_SERVICE_URL: http://toxiproxy:8664
+      SHARED_DB_SERVICE_URL: http://toxiproxy:8665
     networks:
       - cascadeshield-net
     depends_on:
@@ -221,14 +211,10 @@ services:
     ports:
       - "8084:8084"
     environment:
-      - JAVA_OPTS=-Xmx512m -Xms256m -XX:+UseG1GC
-      - SPRING_PROFILES_ACTIVE=dev
-      - SHARED_DB_SERVICE_URL=http://toxiproxy:8665
-      - CB_SLIDING_WINDOW_SIZE=${CB_SLIDING_WINDOW_SIZE:-10}
-      - CB_SLIDING_WINDOW_TYPE=${CB_SLIDING_WINDOW_TYPE:-COUNT_BASED}
-      - CB_FAILURE_RATE_THRESHOLD=${CB_FAILURE_RATE_THRESHOLD:-50}
-      - CB_WAIT_DURATION_OPEN=${CB_WAIT_DURATION_OPEN:-15s}
-      - CB_PERMITTED_CALLS_HALF_OPEN=${CB_PERMITTED_CALLS_HALF_OPEN:-5}
+      <<: *cb-env
+      JAVA_OPTS: -Xmx512m -Xms256m -XX:+UseG1GC
+      SPRING_PROFILES_ACTIVE: dev
+      SHARED_DB_SERVICE_URL: http://toxiproxy:8665
     networks:
       - cascadeshield-net
     depends_on:

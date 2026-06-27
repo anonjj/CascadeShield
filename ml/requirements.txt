@@ -1,0 +1,8 @@
+# CascadeShield ML pipeline -- pinned to the versions the pipeline was built/verified on.
+# Python 3.9+.
+scikit-learn==1.6.1
+pandas==2.3.3
+numpy==2.0.2
+joblib==1.5.3
+# Used by the EDA / heatmap notebooks (analysis/), optional for the core pipeline.
+matplotlib==3.9.4

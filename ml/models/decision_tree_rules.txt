@@ -1,0 +1,187 @@
+|--- fault_type=THROTTLE <= 0.50
+|   |--- topology=LINEAR_CHAIN <= 0.50
+|   |   |--- threshold <= 40.00
+|   |   |   |--- fault_type=LATENCY <= 0.50
+|   |   |   |   |--- window_size <= 30.00
+|   |   |   |   |   |--- window_type_is_time <= 0.50
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |   |   |--- window_type_is_time >  0.50
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |   |--- window_size >  30.00
+|   |   |   |   |   |--- window_size <= 75.00
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |   |   |--- window_size >  75.00
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |--- fault_type=LATENCY >  0.50
+|   |   |   |   |--- window_type_is_time <= 0.50
+|   |   |   |   |   |--- window_size <= 30.00
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |   |   |--- window_size >  30.00
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |   |--- window_type_is_time >  0.50
+|   |   |   |   |   |--- topology=FAN_OUT <= 0.50
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |   |   |--- topology=FAN_OUT >  0.50
+|   |   |   |   |   |   |--- class: safe
+|   |   |--- threshold >  40.00
+|   |   |   |--- topology=FAN_OUT <= 0.50
+|   |   |   |   |--- fault_type=LATENCY <= 0.50
+|   |   |   |   |   |--- window_size <= 30.00
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |   |   |--- window_size >  30.00
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |   |--- fault_type=LATENCY >  0.50
+|   |   |   |   |   |--- class: unsafe
+|   |   |   |--- topology=FAN_OUT >  0.50
+|   |   |   |   |--- window_type_is_time <= 0.50
+|   |   |   |   |   |--- fault_type=LATENCY <= 0.50
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |   |   |--- fault_type=LATENCY >  0.50
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |   |--- window_type_is_time >  0.50
+|   |   |   |   |   |--- fault_type=LATENCY <= 0.50
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |   |   |--- fault_type=LATENCY >  0.50
+|   |   |   |   |   |   |--- class: unsafe
+|   |--- topology=LINEAR_CHAIN >  0.50
+|   |   |--- threshold <= 40.00
+|   |   |   |--- window_size <= 75.00
+|   |   |   |   |--- fault_type=LATENCY <= 0.50
+|   |   |   |   |   |--- window_type_is_time <= 0.50
+|   |   |   |   |   |   |--- class: safe
+|   |   |   |   |   |--- window_type_is_time >  0.50
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |   |--- fault_type=LATENCY >  0.50
+|   |   |   |   |   |--- window_type_is_time <= 0.50
+|   |   |   |   |   |   |--- class: safe
+|   |   |   |   |   |--- window_type_is_time >  0.50
+|   |   |   |   |   |   |--- class: safe
+|   |   |   |--- window_size >  75.00
+|   |   |   |   |--- window_type_is_time <= 0.50
+|   |   |   |   |   |--- fault_type=CRASH <= 0.50
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |   |   |--- fault_type=CRASH >  0.50
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |   |--- window_type_is_time >  0.50
+|   |   |   |   |   |--- fault_type=LATENCY <= 0.50
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |   |   |--- fault_type=LATENCY >  0.50
+|   |   |   |   |   |   |--- class: safe
+|   |   |--- threshold >  40.00
+|   |   |   |--- fault_type=LATENCY <= 0.50
+|   |   |   |   |--- window_size <= 30.00
+|   |   |   |   |   |--- window_type_is_time <= 0.50
+|   |   |   |   |   |   |--- class: safe
+|   |   |   |   |   |--- window_type_is_time >  0.50
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |   |--- window_size >  30.00
+|   |   |   |   |   |--- wait_duration <= 20.00
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |   |   |--- wait_duration >  20.00
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |--- fault_type=LATENCY >  0.50
+|   |   |   |   |--- window_type_is_time <= 0.50
+|   |   |   |   |   |--- wait_duration <= 7.50
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |   |   |--- wait_duration >  7.50
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |   |--- window_type_is_time >  0.50
+|   |   |   |   |   |--- window_size <= 75.00
+|   |   |   |   |   |   |--- class: safe
+|   |   |   |   |   |--- window_size >  75.00
+|   |   |   |   |   |   |--- class: unsafe
+|--- fault_type=THROTTLE >  0.50
+|   |--- threshold <= 60.00
+|   |   |--- topology=SHARED_DEP_MESH <= 0.50
+|   |   |   |--- window_size <= 75.00
+|   |   |   |   |--- threshold <= 40.00
+|   |   |   |   |   |--- wait_duration <= 7.50
+|   |   |   |   |   |   |--- class: safe
+|   |   |   |   |   |--- wait_duration >  7.50
+|   |   |   |   |   |   |--- class: safe
+|   |   |   |   |--- threshold >  40.00
+|   |   |   |   |   |--- topology=FAN_OUT <= 0.50
+|   |   |   |   |   |   |--- class: safe
+|   |   |   |   |   |--- topology=FAN_OUT >  0.50
+|   |   |   |   |   |   |--- class: safe
+|   |   |   |--- window_size >  75.00
+|   |   |   |   |--- threshold <= 40.00
+|   |   |   |   |   |--- window_type_is_time <= 0.50
+|   |   |   |   |   |   |--- class: safe
+|   |   |   |   |   |--- window_type_is_time >  0.50
+|   |   |   |   |   |   |--- class: safe
+|   |   |   |   |--- threshold >  40.00
+|   |   |   |   |   |--- window_type_is_time <= 0.50
+|   |   |   |   |   |   |--- class: safe
+|   |   |   |   |   |--- window_type_is_time >  0.50
+|   |   |   |   |   |   |--- class: safe
+|   |   |--- topology=SHARED_DEP_MESH >  0.50
+|   |   |   |--- window_size <= 75.00
+|   |   |   |   |--- threshold <= 40.00
+|   |   |   |   |   |--- wait_duration <= 20.00
+|   |   |   |   |   |   |--- class: safe
+|   |   |   |   |   |--- wait_duration >  20.00
+|   |   |   |   |   |   |--- class: safe
+|   |   |   |   |--- threshold >  40.00
+|   |   |   |   |   |--- window_type_is_time <= 0.50
+|   |   |   |   |   |   |--- class: safe
+|   |   |   |   |   |--- window_type_is_time >  0.50
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |--- window_size >  75.00
+|   |   |   |   |--- threshold <= 40.00
+|   |   |   |   |   |--- window_type_is_time <= 0.50
+|   |   |   |   |   |   |--- class: safe
+|   |   |   |   |   |--- window_type_is_time >  0.50
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |   |--- threshold >  40.00
+|   |   |   |   |   |--- wait_duration <= 20.00
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |   |   |--- wait_duration >  20.00
+|   |   |   |   |   |   |--- class: unsafe
+|   |--- threshold >  60.00
+|   |   |--- topology=LINEAR_CHAIN <= 0.50
+|   |   |   |--- window_size <= 30.00
+|   |   |   |   |--- topology=FAN_OUT <= 0.50
+|   |   |   |   |   |--- window_type_is_time <= 0.50
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |   |   |--- window_type_is_time >  0.50
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |   |--- topology=FAN_OUT >  0.50
+|   |   |   |   |   |--- window_type_is_time <= 0.50
+|   |   |   |   |   |   |--- class: safe
+|   |   |   |   |   |--- window_type_is_time >  0.50
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |--- window_size >  30.00
+|   |   |   |   |--- window_size <= 75.00
+|   |   |   |   |   |--- window_type_is_time <= 0.50
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |   |   |--- window_type_is_time >  0.50
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |   |--- window_size >  75.00
+|   |   |   |   |   |--- topology=FAN_OUT <= 0.50
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |   |   |--- topology=FAN_OUT >  0.50
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |--- topology=LINEAR_CHAIN >  0.50
+|   |   |   |--- window_size <= 75.00
+|   |   |   |   |--- window_type_is_time <= 0.50
+|   |   |   |   |   |--- wait_duration <= 20.00
+|   |   |   |   |   |   |--- class: safe
+|   |   |   |   |   |--- wait_duration >  20.00
+|   |   |   |   |   |   |--- class: safe
+|   |   |   |   |--- window_type_is_time >  0.50
+|   |   |   |   |   |--- window_size <= 30.00
+|   |   |   |   |   |   |--- class: safe
+|   |   |   |   |   |--- window_size >  30.00
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |--- window_size >  75.00
+|   |   |   |   |--- window_type_is_time <= 0.50
+|   |   |   |   |   |--- wait_duration <= 7.50
+|   |   |   |   |   |   |--- class: safe
+|   |   |   |   |   |--- wait_duration >  7.50
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |   |--- window_type_is_time >  0.50
+|   |   |   |   |   |--- wait_duration <= 20.00
+|   |   |   |   |   |   |--- class: unsafe
+|   |   |   |   |   |--- wait_duration >  20.00
+|   |   |   |   |   |   |--- class: unsafe

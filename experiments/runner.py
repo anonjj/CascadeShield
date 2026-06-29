@@ -230,7 +230,7 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
             config["failureRateThreshold"],
             config["slidingWindowSize"],
             config["waitDurationInOpenState"],
-            PERMITTED_CALLS_HALF_OPEN,
+            config.get("permittedCallsInHalfOpenState", 5),
             ENVIRONMENT,
             replicate,
             time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -293,7 +293,7 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1)
     sampler = threading.Thread(target=_sample_blast_radius, daemon=True)
     sampler.start()
     throughput, error_rate, avg_latency = generate_load(endpoint)
-    sampler.join(timeout=10)
+    sampler.join(timeout=15)
 
     blast_radius = blast_radius_container[0]
     if blast_radius is None:
@@ -349,7 +349,7 @@ def generate_combinations(mode):
 
 def main():
     parser = argparse.ArgumentParser(description="CascadeShield Parameter Sweep Automation Runner")
-    parser.add_argument("--mode", choices=["canary", "full"], default="canary", help="canary (5 configs × 3 replicates = 15 runs) or full (54 configs × 3 replicates = 162 runs per fault type)")
+    parser.add_argument("--mode", choices=["canary", "full"], default="canary", help="canary (5 configs × 3 replicates = 15 runs) or full (162 configs × 3 replicates = 486 runs per fault type)")
     parser.add_argument("--fault", choices=["latency", "crash", "throttle"], default="latency", help="Fault type to inject")
     parser.add_argument("--topology", choices=["linear", "fanout", "mesh"], default="linear", help="Service mesh topology pattern")
     parser.add_argument("--replicates", type=int, default=N_REPLICATES, help=f"Number of replicates per config (default: {N_REPLICATES})")

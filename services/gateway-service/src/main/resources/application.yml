@@ -7,9 +7,8 @@ spring:
 
 downstream:
   order-service-url: ${ORDER_SERVICE_URL:http://localhost:8081}
-  # Direct container names for fanout/mesh — bypass toxiproxy for non-CB calls
-  inventory-service-url: ${INVENTORY_SERVICE_URL:http://inventory-service:8082}
-  payment-service-url: ${PAYMENT_SERVICE_URL:http://payment-service:8083}
+  inventory-service-url: ${INVENTORY_SERVICE_URL:http://localhost:8082}
+  payment-service-url: ${PAYMENT_SERVICE_URL:http://localhost:8083}
 
 resilience4j:
   circuitbreaker:
@@ -27,8 +26,16 @@ resilience4j:
         # Slow-call tracking: calls > 2s count as slow (latency fault injects 3s)
         slow-call-duration-threshold: 2s
         slow-call-rate-threshold: ${CB_FAILURE_RATE_THRESHOLD:50}
+        record-exceptions:
+          - com.cascadeshield.gateway.exception.DownstreamUnavailableException
+        ignore-exceptions:
+          - com.cascadeshield.gateway.exception.DownstreamRejectedException
     instances:
       orderServiceCB:
+        base-config: default
+      inventoryServiceCB:
+        base-config: default
+      paymentServiceCB:
         base-config: default
 
 management:

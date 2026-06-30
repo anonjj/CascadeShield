@@ -7,6 +7,7 @@
 # IDE
 .idea/
 *.iml
+.vscode/
 .DS_Store
 
 # Python artifacts
@@ -21,3 +22,6 @@ data/
 
 # Environment overrides
 .env
+
+# Claude CLI
+.claude/

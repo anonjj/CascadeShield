@@ -24,7 +24,7 @@ COMPOSE_FILE_PATH = BASE_DIR / "infra" / "docker-compose.yml"
 
 DATASET_HEADERS = [
     "experiment_id", "topology", "fault_type", "window_type",
-    "threshold", "window_size", "wait_duration",
+    "threshold", "window_size", "wait_duration", "permitted_calls_half_open",
     "environment", "replicate", "run_timestamp",
     "blast_radius", "time_to_open", "time_to_recover",
     "error_rate", "throughput_loss"
@@ -34,14 +34,14 @@ DATASET_HEADERS = [
 N_REPLICATES = 3
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "LOCAL")  # override to AWS on cloud runs
 
-# Configuration Parameter Values for Sweeps (Total: 3 * 3 * 3 * 2 * 3 = 162 configs per fault)
+# Configuration Parameter Values for Sweeps (3*3*3*2 = 54 configs per fault × 3 faults × 3 replicates = 486 total runs)
 PARAM_VALUES = {
     "failureRateThreshold": [30, 50, 70],
     "slidingWindowSize": [5, 10, 20],
-    "waitDurationInOpenState": [5, 15, 30], # Seconds
+    "waitDurationInOpenState": [5, 15, 30],  # Seconds
     "slidingWindowType": ["COUNT_BASED", "TIME_BASED"],
-    "permittedCallsInHalfOpenState": [3, 5, 10]
 }
+PERMITTED_CALLS_HALF_OPEN = 5  # fixed baseline, not swept
 
 def run_command(args, cwd=None):
     """Helper to run system commands."""
@@ -57,7 +57,7 @@ CB_SLIDING_WINDOW_SIZE={config['slidingWindowSize']}
 CB_SLIDING_WINDOW_TYPE={config['slidingWindowType']}
 CB_FAILURE_RATE_THRESHOLD={config['failureRateThreshold']}
 CB_WAIT_DURATION_OPEN={config['waitDurationInOpenState']}s
-CB_PERMITTED_CALLS_HALF_OPEN={config.get('permittedCallsInHalfOpenState', 5)}
+CB_PERMITTED_CALLS_HALF_OPEN={PERMITTED_CALLS_HALF_OPEN}
 """
     os.makedirs(os.path.dirname(ENV_PATH), exist_ok=True)
     with open(ENV_PATH, "w") as f:
@@ -77,22 +77,36 @@ def update_containers():
     return True
 
 def wait_for_healthy(timeout=60):
-    """Polls the Gateway actuator endpoint to verify the mesh is online and healthy."""
-    url = "http://localhost:8080/actuator/health"
-    print(f"Waiting for Gateway Service to become healthy at {url}...")
+    """Polls gateway and notification-service until both report UP.
+
+    notification-service is checked explicitly because --no-deps in
+    update_containers() bypasses depends_on conditions, so Docker will not
+    wait for shared-db-service before starting notification-service. If
+    notification-service is UP, shared-db-service is also ready.
+    """
+    endpoints = [
+        ("http://localhost:8080/actuator/health", "gateway-service"),
+        ("http://localhost:8084/actuator/health", "notification-service"),
+    ]
+    healthy = {url: False for url, _ in endpoints}
     start_time = time.time()
     while time.time() - start_time < timeout:
-        try:
-            with urllib.request.urlopen(url, timeout=2) as response:
-                if response.status == 200:
-                    data = json.loads(response.read().decode("utf-8"))
-                    if data.get("status") == "UP":
-                        print("Gateway is healthy!")
-                        return True
-        except Exception:
-            pass
+        for url, name in endpoints:
+            if healthy[url]:
+                continue
+            try:
+                with urllib.request.urlopen(url, timeout=2) as response:
+                    if response.status == 200:
+                        data = json.loads(response.read().decode("utf-8"))
+                        if data.get("status") == "UP":
+                            print(f"{name} is healthy!")
+                            healthy[url] = True
+            except Exception:
+                pass
+        if all(healthy.values()):
+            return True
         time.sleep(2)
-    print("Timeout waiting for Gateway health check.", file=sys.stderr)
+    print("Timeout waiting for services to become healthy.", file=sys.stderr)
     return False
 
 def inject_fault(fault_type):
@@ -160,7 +174,7 @@ def generate_load(endpoint_url, requests_count=50, concurrency=5):
     execution_time = max(last_completion - t0, 0.001)
 
     avg_latency = sum(latencies) / len(latencies) if latencies else 0
-    throughput = requests_count / execution_time
+    throughput = success_count / execution_time
     error_rate = (failure_count / requests_count) * 100 if requests_count else 0
     
     print(f"Load Results - Successes: {success_count}, Failures: {failure_count}, Avg Latency: {avg_latency:.2f}ms, Throughput: {throughput:.2f} TPS, Error Rate: {error_rate:.2f}%")
@@ -216,6 +230,7 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
             config["failureRateThreshold"],
             config["slidingWindowSize"],
             config["waitDurationInOpenState"],
+            config.get("permittedCallsInHalfOpenState", 5),
             ENVIRONMENT,
             replicate,
             time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -258,9 +273,29 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1)
         toxiproxy.reset_all()
         return False
 
-    # 5. Generate load UNDER FAULT and sample blast radius at peak
+    # 5. Generate load UNDER FAULT; sample blast radius mid-load via a thread so
+    #    the CB is still OPEN (not recovering) when we read it.
+    blast_radius_container = [None]
+
+    def _sample_blast_radius():
+        # Poll until blast_radius > 0 (CB has opened) or 12s have elapsed.
+        # A fixed 2s sleep is too short for latency/throttle faults where
+        # requests take 3-5s to complete before the CB can evaluate them.
+        deadline = time.time() + 12
+        while time.time() < deadline:
+            time.sleep(0.5)
+            result = get_blast_radius()
+            if result is not None and result > 0.0:
+                blast_radius_container[0] = result
+                return
+        blast_radius_container[0] = get_blast_radius()  # final read at load end
+
+    sampler = threading.Thread(target=_sample_blast_radius, daemon=True)
+    sampler.start()
     throughput, error_rate, avg_latency = generate_load(endpoint)
-    blast_radius = get_blast_radius()   # sampled during fault, not after reset
+    sampler.join(timeout=15)
+
+    blast_radius = blast_radius_container[0]
     if blast_radius is None:
         print("Blast radius measurement failed — skipping run.", file=sys.stderr)
         toxiproxy.reset_all()
@@ -287,36 +322,34 @@ def generate_combinations(mode):
     configs = []
     
     if mode == "canary":
-        # Small sample of extreme and mid configs with permittedCallsInHalfOpenState mapped
+        # 5 representative configs spanning the parameter space (aggressive, conservative, midpoint)
         configs = [
             # Extreme Aggressive
-            {"failureRateThreshold": 30, "slidingWindowSize": 5, "waitDurationInOpenState": 5, "slidingWindowType": "COUNT_BASED", "permittedCallsInHalfOpenState": 3},
-            {"failureRateThreshold": 30, "slidingWindowSize": 5, "waitDurationInOpenState": 5, "slidingWindowType": "TIME_BASED", "permittedCallsInHalfOpenState": 3},
+            {"failureRateThreshold": 30, "slidingWindowSize": 5, "waitDurationInOpenState": 5, "slidingWindowType": "COUNT_BASED"},
+            {"failureRateThreshold": 30, "slidingWindowSize": 5, "waitDurationInOpenState": 5, "slidingWindowType": "TIME_BASED"},
             # Extreme Conservative
-            {"failureRateThreshold": 70, "slidingWindowSize": 20, "waitDurationInOpenState": 30, "slidingWindowType": "COUNT_BASED", "permittedCallsInHalfOpenState": 10},
-            {"failureRateThreshold": 70, "slidingWindowSize": 20, "waitDurationInOpenState": 30, "slidingWindowType": "TIME_BASED", "permittedCallsInHalfOpenState": 10},
+            {"failureRateThreshold": 70, "slidingWindowSize": 20, "waitDurationInOpenState": 30, "slidingWindowType": "COUNT_BASED"},
+            {"failureRateThreshold": 70, "slidingWindowSize": 20, "waitDurationInOpenState": 30, "slidingWindowType": "TIME_BASED"},
             # Midpoint config
-            {"failureRateThreshold": 50, "slidingWindowSize": 10, "waitDurationInOpenState": 15, "slidingWindowType": "COUNT_BASED", "permittedCallsInHalfOpenState": 5}
+            {"failureRateThreshold": 50, "slidingWindowSize": 10, "waitDurationInOpenState": 15, "slidingWindowType": "COUNT_BASED"},
         ]
     else:
-        # Full Sweep (3 * 3 * 3 * 2 * 3 = 162 configs per fault, 486 runs total across 3 faults)
+        # Full Sweep: 3*3*3*2 = 54 configs per fault × 3 faults × 3 replicates = 486 total runs
         for threshold in PARAM_VALUES["failureRateThreshold"]:
             for window in PARAM_VALUES["slidingWindowSize"]:
                 for wait in PARAM_VALUES["waitDurationInOpenState"]:
                     for wtype in PARAM_VALUES["slidingWindowType"]:
-                        for permitted in PARAM_VALUES["permittedCallsInHalfOpenState"]:
-                            configs.append({
-                                "failureRateThreshold": threshold,
-                                "slidingWindowSize": window,
-                                "waitDurationInOpenState": wait,
-                                "slidingWindowType": wtype,
-                                "permittedCallsInHalfOpenState": permitted
-                            })
+                        configs.append({
+                            "failureRateThreshold": threshold,
+                            "slidingWindowSize": window,
+                            "waitDurationInOpenState": wait,
+                            "slidingWindowType": wtype,
+                        })
     return configs
 
 def main():
     parser = argparse.ArgumentParser(description="CascadeShield Parameter Sweep Automation Runner")
-    parser.add_argument("--mode", choices=["canary", "full"], default="canary", help="canary (5 runs) or full (162 runs)")
+    parser.add_argument("--mode", choices=["canary", "full"], default="canary", help="canary (5 configs × 3 replicates = 15 runs) or full (162 configs × 3 replicates = 486 runs per fault type)")
     parser.add_argument("--fault", choices=["latency", "crash", "throttle"], default="latency", help="Fault type to inject")
     parser.add_argument("--topology", choices=["linear", "fanout", "mesh"], default="linear", help="Service mesh topology pattern")
     parser.add_argument("--replicates", type=int, default=N_REPLICATES, help=f"Number of replicates per config (default: {N_REPLICATES})")

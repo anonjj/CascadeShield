@@ -6,7 +6,8 @@ import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
 /**
@@ -33,7 +34,9 @@ public class NotificationDownstreamService {
             return restTemplate.getForObject(sharedDbServiceUrl + "/api/v1/shared-db", Object.class);
         } catch (HttpClientErrorException ex) {
             throw new DownstreamRejectedException(ex.getStatusCode(), ex.getResponseBodyAsString());
-        } catch (RestClientException ex) {
+        } catch (HttpServerErrorException ex) {
+            throw new DownstreamUnavailableException("shared-db-service unreachable", ex);
+        } catch (ResourceAccessException ex) {
             throw new DownstreamUnavailableException("shared-db-service unreachable", ex);
         }
     }

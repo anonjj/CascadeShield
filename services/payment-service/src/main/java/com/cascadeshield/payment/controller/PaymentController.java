@@ -1,5 +1,7 @@
 package com.cascadeshield.payment.controller;
 
+import com.cascadeshield.payment.exception.DownstreamRejectedException;
+import com.cascadeshield.payment.exception.DownstreamUnavailableException;
 import com.cascadeshield.payment.service.PaymentDownstreamService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,24 +25,38 @@ public class PaymentController {
     public ResponseEntity<Map<String, Object>> payment() {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("service", "payment-service");
-        boolean failed = false;
+        org.springframework.http.HttpStatusCode worst = org.springframework.http.HttpStatus.OK;
 
         try {
             Object notifResult = downstreamService.callNotification();
             body.put("notification", notifResult != null ? notifResult : "ok");
-        } catch (Exception e) {
+        } catch (DownstreamRejectedException e) {
+            body.put("notification", Map.of("error", "rejected", "status", e.getStatus().value()));
+            worst = worse(worst, e.getStatus());
+        } catch (io.github.resilience4j.circuitbreaker.CallNotPermittedException
+                | DownstreamUnavailableException e) {
             body.put("notification", Map.of("error", "unavailable", "cause", e.getClass().getSimpleName()));
-            failed = true;
+            worst = worse(worst, org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE);
         }
 
         try {
             Object dbResult = downstreamService.callSharedDb();
             body.put("sharedDb", dbResult != null ? dbResult : "ok");
-        } catch (Exception e) {
+        } catch (DownstreamRejectedException e) {
+            body.put("sharedDb", Map.of("error", "rejected", "status", e.getStatus().value()));
+            worst = worse(worst, e.getStatus());
+        } catch (io.github.resilience4j.circuitbreaker.CallNotPermittedException
+                | DownstreamUnavailableException e) {
             body.put("sharedDb", Map.of("error", "unavailable", "cause", e.getClass().getSimpleName()));
-            failed = true;
+            worst = worse(worst, org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE);
         }
 
-        return failed ? ResponseEntity.status(503).body(body) : ResponseEntity.ok(body);
+        return ResponseEntity.status(worst).body(body);
+    }
+
+    private static org.springframework.http.HttpStatusCode worse(
+            org.springframework.http.HttpStatusCode a,
+            org.springframework.http.HttpStatusCode b) {
+        return b.value() > a.value() ? b : a;
     }
 }

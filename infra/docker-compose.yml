@@ -98,6 +98,8 @@ services:
       JAVA_OPTS: -Xmx512m -Xms256m -XX:+UseG1GC
       SPRING_PROFILES_ACTIVE: dev
       ORDER_SERVICE_URL: http://toxiproxy:8661
+      INVENTORY_SERVICE_URL: http://toxiproxy:8662
+      PAYMENT_SERVICE_URL: http://toxiproxy:8663
       SHARED_DB_SERVICE_URL: http://toxiproxy:8665
     networks:
       - cascadeshield-net

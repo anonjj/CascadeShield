@@ -2,12 +2,10 @@ package com.cascadeshield.gateway.controller;
 
 import com.cascadeshield.gateway.service.BlastRadiusService;
 import com.cascadeshield.gateway.service.GatewayDownstreamService;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.client.RestTemplate;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -21,20 +19,11 @@ public class GatewayController {
 
     private final GatewayDownstreamService downstreamService;
     private final BlastRadiusService blastRadiusService;
-    private final RestTemplate restTemplate;
-
-    @Value("${downstream.inventory-service-url:http://inventory-service:8082}")
-    private String inventoryServiceUrl;
-
-    @Value("${downstream.payment-service-url:http://payment-service:8083}")
-    private String paymentServiceUrl;
 
     public GatewayController(GatewayDownstreamService downstreamService,
-                              BlastRadiusService blastRadiusService,
-                              RestTemplate restTemplate) {
+                              BlastRadiusService blastRadiusService) {
         this.downstreamService = downstreamService;
         this.blastRadiusService = blastRadiusService;
-        this.restTemplate = restTemplate;
     }
 
     /**
@@ -66,9 +55,9 @@ public class GatewayController {
             CompletableFuture<Object> orderFuture = CompletableFuture.supplyAsync(
                 () -> safeCall(downstreamService::callOrder, "order-service"), exec);
             CompletableFuture<Object> inventoryFuture = CompletableFuture.supplyAsync(
-                () -> safeCall(() -> restTemplate.getForObject(inventoryServiceUrl + "/api/v1/inventory", Object.class), "inventory-service"), exec);
+                () -> safeCall(downstreamService::callInventory, "inventory-service"), exec);
             CompletableFuture<Object> paymentFuture = CompletableFuture.supplyAsync(
-                () -> safeCall(() -> restTemplate.getForObject(paymentServiceUrl + "/api/v1/payment", Object.class), "payment-service"), exec);
+                () -> safeCall(downstreamService::callPayment, "payment-service"), exec);
 
             CompletableFuture.allOf(orderFuture, inventoryFuture, paymentFuture).join();
 

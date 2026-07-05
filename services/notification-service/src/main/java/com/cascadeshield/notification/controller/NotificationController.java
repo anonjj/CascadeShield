@@ -1,5 +1,7 @@
 package com.cascadeshield.notification.controller;
 
+import com.cascadeshield.notification.exception.DownstreamRejectedException;
+import com.cascadeshield.notification.exception.DownstreamUnavailableException;
 import com.cascadeshield.notification.service.NotificationDownstreamService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,16 +25,26 @@ public class NotificationController {
     public ResponseEntity<Map<String, Object>> notification() {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("service", "notification-service");
-        boolean failed = false;
+        org.springframework.http.HttpStatusCode worst = org.springframework.http.HttpStatus.OK;
 
         try {
             Object dbResult = downstreamService.callSharedDb();
             body.put("sharedDb", dbResult != null ? dbResult : "ok");
-        } catch (Exception e) {
+        } catch (DownstreamRejectedException e) {
+            body.put("sharedDb", Map.of("error", "rejected", "status", e.getStatus().value()));
+            worst = worse(worst, e.getStatus());
+        } catch (io.github.resilience4j.circuitbreaker.CallNotPermittedException
+                | DownstreamUnavailableException e) {
             body.put("sharedDb", Map.of("error", "unavailable", "cause", e.getClass().getSimpleName()));
-            failed = true;
+            worst = worse(worst, org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE);
         }
 
-        return failed ? ResponseEntity.status(503).body(body) : ResponseEntity.ok(body);
+        return ResponseEntity.status(worst).body(body);
+    }
+
+    private static org.springframework.http.HttpStatusCode worse(
+            org.springframework.http.HttpStatusCode a,
+            org.springframework.http.HttpStatusCode b) {
+        return b.value() > a.value() ? b : a;
     }
 }

@@ -25,7 +25,7 @@ COMPOSE_FILE_PATH = BASE_DIR / "infra" / "docker-compose.yml"
 DATASET_HEADERS = [
     "experiment_id", "topology", "fault_type", "window_type",
     "threshold", "window_size", "wait_duration", "permitted_calls_half_open",
-    "environment", "replicate", "run_timestamp",
+    "environment", "mode", "replicate", "run_timestamp",
     "blast_radius", "time_to_open", "time_to_recover",
     "error_rate", "throughput_loss"
 ]
@@ -211,7 +211,7 @@ def make_experiment_id(topology, fault_type, config):
             f"-D{config['waitDurationInOpenState']}")
 
 def log_results(config, fault_type, mode, topology, metrics, replicate):
-    """Appends experiment run results to master_dataset.csv (15-col schema)."""
+    """Appends experiment run results to master_dataset.csv (17-col schema incl. canary/full mode)."""
     os.makedirs(os.path.dirname(DATASET_PATH), exist_ok=True)
     file_exists = os.path.exists(DATASET_PATH)
 
@@ -232,6 +232,7 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
             config["waitDurationInOpenState"],
             config.get("permittedCallsInHalfOpenState", 5),
             ENVIRONMENT,
+            mode,
             replicate,
             time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             f"{metrics.get('blast_radius', ''):.4f}" if metrics.get('blast_radius') is not None else "",
@@ -349,7 +350,7 @@ def generate_combinations(mode):
 
 def main():
     parser = argparse.ArgumentParser(description="CascadeShield Parameter Sweep Automation Runner")
-    parser.add_argument("--mode", choices=["canary", "full"], default="canary", help="canary (5 configs × 3 replicates = 15 runs) or full (162 configs × 3 replicates = 486 runs per fault type)")
+    parser.add_argument("--mode", choices=["canary", "full"], default="canary", help="canary (5 configs × 3 replicates = 15 runs) or full (54 configs × 3 replicates = 162 runs per fault type; 486 total across 3 faults)")
     parser.add_argument("--fault", choices=["latency", "crash", "throttle"], default="latency", help="Fault type to inject")
     parser.add_argument("--topology", choices=["linear", "fanout", "mesh"], default="linear", help="Service mesh topology pattern")
     parser.add_argument("--replicates", type=int, default=N_REPLICATES, help=f"Number of replicates per config (default: {N_REPLICATES})")

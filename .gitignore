@@ -25,3 +25,5 @@ data/
 
 # Claude CLI
 .claude/
+logs/
+experiments/logs/

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Results - CascadeShield Dashboard{% endblock %}
+{% block content %}
+  <h1>Results</h1>
+
+  <form method="get" class="filters">
+    {% for col, values in options.items() %}
+    <label>
+      {{ col }}
+      <select name="{{ col }}">
+        <option value="" {% if not filters[col] %}selected{% endif %}>All</option>
+        {% for v in values %}
+        <option value="{{ v }}" {% if filters[col] == v|string %}selected{% endif %}>{{ v }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% endfor %}
+    <button type="submit">Apply filters</button>
+  </form>
+
+  {% if empty %}
+    <p class="empty-message">No runs match these filters.</p>
+  {% else %}
+    <p class="stat">{{ row_count }} run(s) match these filters.</p>
+
+    <h2>Blast radius heatmaps</h2>
+    <div class="chart-row">
+      <img src="data:image/png;base64,{{ fig1_median }}" alt="Median blast radius heatmap">
+      <img src="data:image/png;base64,{{ fig1_mean }}" alt="Mean blast radius heatmap">
+    </div>
+
+    <h2>Breaker trip rate</h2>
+    <img src="data:image/png;base64,{{ fig2 }}" alt="Breaker trip rate heatmap">
+
+    {% if fig3 %}
+    <h2>Blast radius distribution (COUNT_BASED)</h2>
+    <img src="data:image/png;base64,{{ fig3 }}" alt="Blast radius distribution">
+    {% endif %}
+
+    <h2>Summary stats</h2>
+    {{ summary_table | safe }}
+  {% endif %}
+{% endblock %}

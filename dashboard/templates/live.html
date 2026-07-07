@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Live - CascadeShield Dashboard{% endblock %}
+{% block content %}
+  {% if status and status.phase == "running" %}
+  <meta http-equiv="refresh" content="5">
+  {% endif %}
+
+  <h1>Live Sweep Progress</h1>
+
+  {% if status is none %}
+    <p class="empty-message">No sweep has been run yet.</p>
+  {% else %}
+    {% if status.stale %}
+    <p class="stale-warning">Warning: no update in over 5 minutes — the sweep process may have crashed or stalled.</p>
+    {% endif %}
+
+    <p class="stat">{{ status.mode }} / {{ status.topology }} / {{ status.fault_type }}
+       — run {{ status.run_number }} of {{ status.total_runs }}
+       ({{ status.percent_complete }}%)</p>
+
+    <div class="progress-bar">
+      <div class="progress-bar-fill" style="width: {{ status.percent_complete }}%;"></div>
+    </div>
+
+    <table class="options-table">
+      <tr><th>Phase</th><td>{{ status.phase }}</td></tr>
+      <tr><th>Current config</th><td>{{ status.current_config if status.current_config else "—" }}</td></tr>
+      <tr><th>Replicate</th><td>{{ status.replicate if status.replicate else "—" }} / {{ status.replicates }}</td></tr>
+      <tr><th>Successful runs</th><td>{{ status.success_runs }}</td></tr>
+      <tr><th>Failed runs</th><td>{{ status.failed_runs }}</td></tr>
+      <tr><th>Started</th><td>{{ status.started_at }}</td></tr>
+      <tr><th>Last updated</th><td>{{ status.updated_at }}</td></tr>
+      {% if status.eta_seconds %}
+      <tr><th>Estimated remaining</th><td>{{ (status.eta_seconds / 60) | round(1) }} min</td></tr>
+      {% endif %}
+    </table>
+
+    {% if status.phase == "completed" %}
+    <p><a href="{{ url_for('results') }}">Sweep complete — view results &rarr;</a></p>
+    {% endif %}
+  {% endif %}
+{% endblock %}

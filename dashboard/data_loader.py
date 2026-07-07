@@ -6,13 +6,23 @@ the real CSV header) and will likely drift again as new topologies/environments
 are added. Every filter option and column reference here is derived from
 whatever is actually in the loaded DataFrame.
 """
+import json
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 
 DATASET_PATH = Path(__file__).resolve().parent.parent / "data" / "master_dataset.csv"
+STATUS_PATH = Path(__file__).resolve().parent.parent / "data" / "run_status.json"
 
 FILTERABLE_COLUMNS = ["fault_type", "window_type", "topology", "environment", "mode"]
+
+# Must exceed the worst-case gap between runner.py's status writes -- a single
+# run's health-wait budget alone is 60s (see experiments/runner.py wait_for_healthy),
+# and full-run wall time is realistically 60-150s+. A shorter threshold would
+# flag every normal run as "stalled".
+STALE_THRESHOLD_SECONDS = 300
 
 
 def load_data(path: Path = DATASET_PATH) -> pd.DataFrame:
@@ -69,3 +79,41 @@ def trip_rate_pivot(df: pd.DataFrame) -> pd.DataFrame:
 def count_based_blast(df: pd.DataFrame) -> pd.DataFrame:
     """fig3 input: COUNT_BASED rows only, blast_radius grouped by fault_type."""
     return df[df["window_type"] == "COUNT_BASED"][["fault_type", "blast_radius"]]
+
+
+def load_status(path: Path = STATUS_PATH) -> Optional[dict]:
+    """Returns the current sweep status, or None if no sweep has run yet or the
+    file is unreadable (a torn/corrupt read is treated as "no data", not a crash)."""
+    if not path.exists():
+        return None
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def _parse_utc(ts: str) -> datetime:
+    return datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+
+
+def annotate_status(status: dict) -> dict:
+    """Pure function: adds elapsed_seconds, eta_seconds (naive linear projection),
+    percent_complete, and stale (bool) for the template. Does no I/O itself."""
+    now = datetime.now(timezone.utc)
+    started = _parse_utc(status["started_at"])
+    updated = _parse_utc(status["updated_at"])
+    elapsed = (now - started).total_seconds()
+    run_number, total_runs = status["run_number"], status["total_runs"]
+    percent = round(100 * run_number / total_runs, 1) if total_runs else 0
+    eta = None
+    if status["phase"] == "running" and run_number > 0:
+        eta = (elapsed / run_number) * (total_runs - run_number)
+    stale = status["phase"] == "running" and (now - updated).total_seconds() > STALE_THRESHOLD_SECONDS
+    return {
+        **status,
+        "elapsed_seconds": elapsed,
+        "eta_seconds": eta,
+        "percent_complete": percent,
+        "stale": stale,
+    }

@@ -19,6 +19,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # CSV Dataset Schema
 DATASET_PATH = BASE_DIR / "data" / "master_dataset.csv"
+CANARY_DATASET_PATH = BASE_DIR / "data" / "canary_runs.csv"
 STATUS_PATH = BASE_DIR / "data" / "run_status.json"
 ENV_PATH = BASE_DIR / "infra" / ".env"
 COMPOSE_FILE_PATH = BASE_DIR / "infra" / "docker-compose.yml"
@@ -226,17 +227,23 @@ def write_status(status):
         json.dump(status, f, indent=2)
     os.replace(tmp_path, STATUS_PATH)
 
+def get_dataset_path(mode):
+    """canary writes to a disposable file; full writes to the real research dataset."""
+    return CANARY_DATASET_PATH if mode == "canary" else DATASET_PATH
+
 def log_results(config, fault_type, mode, topology, metrics, replicate):
-    """Appends experiment run results to master_dataset.csv (17-col schema incl. canary/full mode)."""
-    os.makedirs(os.path.dirname(DATASET_PATH), exist_ok=True)
-    file_exists = os.path.exists(DATASET_PATH)
+    """Appends experiment run results to master_dataset.csv (full mode) or
+    canary_runs.csv (canary mode) -- 17-col schema, same DATASET_HEADERS either way."""
+    dataset_path = get_dataset_path(mode)
+    os.makedirs(os.path.dirname(dataset_path), exist_ok=True)
+    file_exists = os.path.exists(dataset_path)
 
     if file_exists:
-        with open(DATASET_PATH, newline="") as f:
+        with open(dataset_path, newline="") as f:
             existing_header = next(csv.reader(f), [])
         if existing_header != DATASET_HEADERS:
             print(
-                f"master_dataset.csv header does not match the current DATASET_HEADERS "
+                f"{os.path.basename(dataset_path)} header does not match the current DATASET_HEADERS "
                 f"(expected {DATASET_HEADERS}, found {existing_header}). Refusing to "
                 "append — this would silently shift columns for every downstream row. "
                 "Move or rename the stale file first.",
@@ -248,7 +255,7 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
     time_to_open = metrics.get("time_to_open")
     time_to_recover = metrics.get("time_to_recover")
 
-    with open(DATASET_PATH, mode="a", newline="") as f:
+    with open(dataset_path, mode="a", newline="") as f:
         writer = csv.writer(f)
         if not file_exists:
             writer.writerow(DATASET_HEADERS)
@@ -272,7 +279,7 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
             f"{metrics['error_rate']:.4f}",
             f"{metrics['throughput_loss']:.4f}",
         ])
-    print(f"Saved run metrics to {DATASET_PATH}")
+    print(f"Saved run metrics to {dataset_path}")
 
 def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1):
     """Orchestrates a single configuration and fault run."""
@@ -402,6 +409,9 @@ def main():
         sys.exit(1)
         
     configs = generate_combinations(args.mode)
+    if args.mode == "canary" and CANARY_DATASET_PATH.exists():
+        CANARY_DATASET_PATH.unlink()
+        print(f"Cleared previous canary run data at {CANARY_DATASET_PATH}")
     total_runs = len(configs) * args.replicates
     print(f"Generated {len(configs)} configs × {args.replicates} replicates = {total_runs} total runs.")
 
@@ -443,7 +453,7 @@ def main():
 
     print("\n" + "="*60)
     print(f"SWEEP COMPLETED: {success_runs}/{total_runs} runs executed successfully.")
-    print(f"Master dataset: {DATASET_PATH}")
+    print(f"Master dataset: {get_dataset_path(args.mode)}")
     print("="*60)
     write_status({
         "mode": args.mode, "fault_type": args.fault, "topology": args.topology,

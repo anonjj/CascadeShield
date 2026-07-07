@@ -36,7 +36,11 @@
     </table>
 
     {% if status.phase == "completed" %}
-    <p><a href="{{ url_for('results') }}">Sweep complete — view results &rarr;</a></p>
+      {% if status.mode == "canary" %}
+      <p><a href="{{ url_for('results', dataset='canary') }}">Sweep complete — view canary results &rarr;</a></p>
+      {% else %}
+      <p><a href="{{ url_for('results') }}">Sweep complete — view results &rarr;</a></p>
+      {% endif %}
     {% endif %}
   {% endif %}
 {% endblock %}

@@ -19,6 +19,7 @@ __pycache__/
 # Experiment data (large files, generated)
 data/
 *.csv
+data/canary_runs.csv
 
 # Environment overrides
 .env

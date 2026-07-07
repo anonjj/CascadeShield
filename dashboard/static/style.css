@@ -54,6 +54,17 @@ th, td {
 .stat {
   font-size: 1.05rem;
 }
+.dataset-toggle {
+  margin-bottom: 1rem;
+}
+.dataset-toggle a {
+  color: #666;
+  text-decoration: none;
+}
+.dataset-toggle a.active {
+  color: #2563eb;
+  font-weight: 600;
+}
 .progress-bar {
   background: #eee;
   border-radius: 4px;

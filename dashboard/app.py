@@ -119,5 +119,11 @@ def results():
     )
 
 
+@app.route("/live")
+def live():
+    status = dl.load_status()
+    return render_template("live.html", status=dl.annotate_status(status) if status else None)
+
+
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=5050, debug=True)

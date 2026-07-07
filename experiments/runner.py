@@ -19,6 +19,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # CSV Dataset Schema
 DATASET_PATH = BASE_DIR / "data" / "master_dataset.csv"
+STATUS_PATH = BASE_DIR / "data" / "run_status.json"
 ENV_PATH = BASE_DIR / "infra" / ".env"
 COMPOSE_FILE_PATH = BASE_DIR / "infra" / "docker-compose.yml"
 
@@ -210,6 +211,21 @@ def make_experiment_id(topology, fault_type, config):
             f"-W{config['slidingWindowSize']}"
             f"-D{config['waitDurationInOpenState']}")
 
+def _now_iso():
+    """UTC timestamp in the same format log_results() uses for run_timestamp,
+    so the dashboard can compare run_status.json times without a tz mismatch."""
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+def write_status(status):
+    """Atomically writes sweep progress to data/run_status.json for the dashboard's
+    /live route to poll. Writes to a .tmp file in the same directory, then
+    os.replace()'s it into place, so readers never observe a partial write."""
+    os.makedirs(os.path.dirname(STATUS_PATH), exist_ok=True)
+    tmp_path = str(STATUS_PATH) + ".tmp"
+    with open(tmp_path, "w") as f:
+        json.dump(status, f, indent=2)
+    os.replace(tmp_path, STATUS_PATH)
+
 def log_results(config, fault_type, mode, topology, metrics, replicate):
     """Appends experiment run results to master_dataset.csv (17-col schema incl. canary/full mode)."""
     os.makedirs(os.path.dirname(DATASET_PATH), exist_ok=True)
@@ -388,21 +404,55 @@ def main():
     configs = generate_combinations(args.mode)
     total_runs = len(configs) * args.replicates
     print(f"Generated {len(configs)} configs × {args.replicates} replicates = {total_runs} total runs.")
-    
+
+    started_at = _now_iso()
     success_runs = 0
+    failed_runs = 0
     run_number = 0
+    write_status({
+        "mode": args.mode, "fault_type": args.fault, "topology": args.topology,
+        "replicates": args.replicates, "total_configs": len(configs), "total_runs": total_runs,
+        "run_number": 0, "config_index": None, "current_config": None, "replicate": None,
+        "success_runs": 0, "failed_runs": 0,
+        "phase": "running", "started_at": started_at, "updated_at": started_at,
+    })
+
     for i, config in enumerate(configs):
         for rep in range(1, args.replicates + 1):
             run_number += 1
             print(f"\nProgress: Run {run_number} of {total_runs} (config {i+1}/{len(configs)}, replicate {rep}/{args.replicates})")
+            write_status({
+                "mode": args.mode, "fault_type": args.fault, "topology": args.topology,
+                "replicates": args.replicates, "total_configs": len(configs), "total_runs": total_runs,
+                "run_number": run_number, "config_index": i, "current_config": config, "replicate": rep,
+                "success_runs": success_runs, "failed_runs": failed_runs,
+                "phase": "running", "started_at": started_at, "updated_at": _now_iso(),
+            })
             success = run_experiment_run(config, args.fault, args.mode, args.topology, replicate=rep)
             if success:
                 success_runs += 1
-            
+            else:
+                failed_runs += 1
+            write_status({
+                "mode": args.mode, "fault_type": args.fault, "topology": args.topology,
+                "replicates": args.replicates, "total_configs": len(configs), "total_runs": total_runs,
+                "run_number": run_number, "config_index": i, "current_config": config, "replicate": rep,
+                "success_runs": success_runs, "failed_runs": failed_runs,
+                "phase": "running", "started_at": started_at, "updated_at": _now_iso(),
+            })
+
     print("\n" + "="*60)
     print(f"SWEEP COMPLETED: {success_runs}/{total_runs} runs executed successfully.")
     print(f"Master dataset: {DATASET_PATH}")
     print("="*60)
+    write_status({
+        "mode": args.mode, "fault_type": args.fault, "topology": args.topology,
+        "replicates": args.replicates, "total_configs": len(configs), "total_runs": total_runs,
+        "run_number": total_runs, "config_index": len(configs) - 1 if configs else None,
+        "current_config": None, "replicate": None,
+        "success_runs": success_runs, "failed_runs": failed_runs,
+        "phase": "completed", "started_at": started_at, "updated_at": _now_iso(),
+    })
 
 if __name__ == "__main__":
     main()

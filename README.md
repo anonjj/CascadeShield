@@ -293,6 +293,12 @@ A second, richer implementation of the Order→Inventory edge that runs *outside
 | `capstone_full_plan.docx` | The 10-week research plan (phases, gates, decision log D1–D6) |
 | `services/README.md` | Service A/B track documentation: run instructions, response contract, seeded stock, env-var table |
 
+### 2.8 `dashboard/` — Post-Hoc Results Viewer
+
+* **Purpose:** A local Flask app that turns `data/master_dataset.csv` into a browsable results view (fault_type × window_type blast-radius heatmaps, breaker trip-rate, summary stats) — the successor to a lost, never-committed ad-hoc matplotlib script. Run with `python dashboard/app.py`, serves on `http://127.0.0.1:5050`.
+* **Mechanics worth defending:** `data_loader.py` never hardcodes a column list or an enum of expected values — it reads whatever's actually in the CSV via pandas and derives filter options from the DataFrame's real distinct values. This is deliberate: `data/master_dataset_schema.csv` and `ml/preprocessing.py`'s `TOPOLOGIES`/`WINDOW_SIZES` constants have both drifted from the real sweep output before, so the dashboard is built to be immune to that class of bug rather than to assume the docs are current.
+* **Scope:** post-hoc results only (a completed sweep's CSV). Live run-progress monitoring is a separate, not-yet-built phase; Grafana (`infra/grafana/`) remains the tool for watching an active run's Prometheus metrics.
+
 ---
 
 ## 3. Trade-Off Analysis & Architectural Decisions
@@ -425,6 +431,10 @@ python3 experiments/runner.py --mode canary --fault latency
 
 # 5. Full sweep (162 configs — run overnight)
 python3 experiments/runner.py --mode full --fault latency --topology linear
+
+# 6. Browse the results instead of staring at the terminal
+cd dashboard && pip install -r requirements.txt && python app.py
+# → http://127.0.0.1:5050
 
 # Dashboards: Grafana at http://localhost:3000 (admin/admin), Prometheus at :9090
 ```

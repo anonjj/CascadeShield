@@ -215,7 +215,22 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
     os.makedirs(os.path.dirname(DATASET_PATH), exist_ok=True)
     file_exists = os.path.exists(DATASET_PATH)
 
+    if file_exists:
+        with open(DATASET_PATH, newline="") as f:
+            existing_header = next(csv.reader(f), [])
+        if existing_header != DATASET_HEADERS:
+            print(
+                f"master_dataset.csv header does not match the current DATASET_HEADERS "
+                f"(expected {DATASET_HEADERS}, found {existing_header}). Refusing to "
+                "append — this would silently shift columns for every downstream row. "
+                "Move or rename the stale file first.",
+                file=sys.stderr,
+            )
+            return
+
     experiment_id = make_experiment_id(topology, fault_type, config)
+    time_to_open = metrics.get("time_to_open")
+    time_to_recover = metrics.get("time_to_recover")
 
     with open(DATASET_PATH, mode="a", newline="") as f:
         writer = csv.writer(f)
@@ -236,8 +251,8 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
             replicate,
             time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             f"{metrics.get('blast_radius', ''):.4f}" if metrics.get('blast_radius') is not None else "",
-            metrics.get("time_to_open", ""),   # "" = CB never opened (meaningful null)
-            metrics.get("time_to_recover", ""),  # "" = system did not recover (meaningful null)
+            time_to_open if time_to_open is not None else "",   # "" = CB never opened (meaningful null)
+            time_to_recover if time_to_recover is not None else "",  # "" = system did not recover (meaningful null)
             f"{metrics['error_rate']:.4f}",
             f"{metrics['throughput_loss']:.4f}",
         ])
@@ -265,6 +280,9 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1)
     endpoint = f"http://localhost:8080/api/v1/{topology}"
     print("Measuring pre-fault baseline...")
     baseline_throughput, _, _ = generate_load(endpoint, requests_count=20, concurrency=3)
+    if baseline_throughput <= 0:
+        print("Baseline throughput is zero — mesh unhealthy pre-fault, skipping run.", file=sys.stderr)
+        return False
 
     # 4. Inject fault into Toxiproxy
     try:
@@ -306,7 +324,7 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1)
     toxiproxy.reset_all()
 
     # 7. Save results
-    throughput_loss = max(0.0, 1.0 - (throughput / baseline_throughput)) if baseline_throughput > 0 else 0.0
+    throughput_loss = max(0.0, 1.0 - (throughput / baseline_throughput))
     metrics = {
         "blast_radius": blast_radius,
         "throughput_loss": throughput_loss,

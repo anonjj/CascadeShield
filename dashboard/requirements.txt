@@ -1,0 +1,5 @@
+# CascadeShield Results Dashboard -- pinned to match ml/requirements.txt where shared.
+Flask==3.0.3
+pandas==2.3.3
+numpy==2.0.2
+matplotlib==3.9.4

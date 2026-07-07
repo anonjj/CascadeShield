@@ -21,8 +21,13 @@ deployment.
 
 | Route | Purpose |
 |---|---|
-| `/` | Overview: total run count, distinct swept values (fault_type, window_type, topology, environment, mode), data-health panel (e.g. % of rows with null `time_to_open`/`time_to_recover`). |
-| `/results` | Filterable via query params (`?fault_type=CRASH&window_type=COUNT_BASED&...`). Renders the blast-radius heatmaps (median + mean), the breaker trip-rate heatmap, the COUNT_BASED blast-radius distribution, and the underlying summary table — all recomputed fresh on every request. |
+| `/` | Overview: total run count, distinct swept values (fault_type, window_type, topology, environment, mode), data-health panel (e.g. % of rows with null `time_to_open`/`time_to_recover`). Always reflects the master dataset. |
+| `/results` | Filterable via query params (`?fault_type=CRASH&window_type=COUNT_BASED&...`). Renders the blast-radius heatmaps (median + mean), the breaker trip-rate heatmap, the COUNT_BASED blast-radius distribution, and the underlying summary table — all recomputed fresh on every request. Add `?dataset=canary` (or use the toggle link at the top of the page) to view `data/canary_runs.csv` instead of the master dataset — see "Canary vs. master dataset" below. |
+| `/live` | Polls `data/run_status.json`, written by `runner.py` as a sweep runs. Shows current run #/total, current config, success/fail counts, ETA, and a stale-sweep warning if there's been no update in 5+ minutes. Auto-refreshes every 5s while a sweep is running. Once it completes, links to `/results` — routed to `?dataset=canary` automatically if the sweep that just finished was a canary run. |
+
+## Canary vs. master dataset
+
+`runner.py --mode canary` writes to `data/canary_runs.csv`, **not** `data/master_dataset.csv` — every canary invocation clears that file first, so it only ever holds the most recent canary test, and canary runs can never contaminate the real research dataset. `data/canary_runs.csv` is gitignored. Use the "Canary test data" toggle on `/results` (or `?dataset=canary`) to inspect it; if no canary run has been executed yet, that view shows a message telling you to run one instead of an empty page.
 
 ## Design notes / caveats
 
@@ -44,10 +49,6 @@ deployment.
 
 ## Out of scope (for now)
 
-- **Live run progress** — this only shows completed runs. Watching a sweep in progress
-  still means the terminal, or Grafana (`infra/grafana/`) for live Prometheus metrics
-  during an active run. A live-progress view is a planned future phase; it would need
-  `runner.py` to write a status file as it runs, which it doesn't today.
 - Fixing the `master_dataset_schema.csv` / `ml/preprocessing.py` enum drift — adjacent,
   pre-existing issue, not this dashboard's responsibility.
 - AWS/cloud deployment.

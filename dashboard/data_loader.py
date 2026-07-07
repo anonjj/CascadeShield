@@ -14,6 +14,7 @@ from typing import Optional
 import pandas as pd
 
 DATASET_PATH = Path(__file__).resolve().parent.parent / "data" / "master_dataset.csv"
+CANARY_DATASET_PATH = Path(__file__).resolve().parent.parent / "data" / "canary_runs.csv"
 STATUS_PATH = Path(__file__).resolve().parent.parent / "data" / "run_status.json"
 
 FILTERABLE_COLUMNS = ["fault_type", "window_type", "topology", "environment", "mode"]

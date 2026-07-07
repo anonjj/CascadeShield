@@ -86,7 +86,20 @@ def index():
 
 @app.route("/results")
 def results():
-    df = dl.load_data()
+    dataset = request.args.get("dataset", "master")
+    dataset_path = dl.CANARY_DATASET_PATH if dataset == "canary" else dl.DATASET_PATH
+
+    if not dataset_path.exists():
+        return render_template(
+            "results.html",
+            options={},
+            filters=get_current_filters(),
+            dataset=dataset,
+            empty=True,
+            no_file=True,
+        )
+
+    df = dl.load_data(dataset_path)
     options = dl.get_filter_options(df)
     filters = get_current_filters()
     filtered = dl.apply_filters(df, filters)
@@ -96,7 +109,9 @@ def results():
             "results.html",
             options=options,
             filters=filters,
+            dataset=dataset,
             empty=True,
+            no_file=False,
         )
 
     fig1_median = render_heatmap(dl.blast_pivot(filtered, "median"), "Median blast radius (%)")
@@ -109,6 +124,7 @@ def results():
         "results.html",
         options=options,
         filters=filters,
+        dataset=dataset,
         empty=False,
         fig1_median=fig1_median,
         fig1_mean=fig1_mean,

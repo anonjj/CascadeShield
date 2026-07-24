@@ -28,12 +28,19 @@ past 486 (e.g. 486 configs × 2 environments × 3 replicates = 2,916 rows).
 
 | Column | Type | Valid values | Unit | ML encoding |
 |--------|------|--------------|------|-------------|
-| `topology` | categorical | `LINEAR_CHAIN`, `FAN_OUT`, `SHARED_DEP_MESH` | — | one-hot |
+| `topology` | categorical | `LINEAR` (planned: `FAN_OUT`, `SHARED_DEP_MESH`) | — | one-hot |
 | `fault_type` | categorical | `LATENCY`, `CRASH`, `THROTTLE` | — | one-hot |
 | `window_type` | categorical (binary) | `COUNT_BASED`, `TIME_BASED` | — | binary (0/1) — **the primary novelty variable** |
 | `threshold` | int | `{30, 50, 70}` (range 1–100) | percent | numeric |
-| `window_size` | int | `{10, 50, 100}` (range 1–1000) | **calls if COUNT_BASED, seconds if TIME_BASED** | numeric (see note) |
-| `wait_duration` | int | `{5, 10, 30}` (range 1–600) | seconds in OPEN state | numeric |
+| `window_size` | int | `{5, 10, 20}` (range 1–1000) | **calls if COUNT_BASED, seconds if TIME_BASED** | numeric (see note) |
+| `wait_duration` | int | `{5, 15, 30}` (range 1–600) | seconds in OPEN state | numeric |
+
+> **Sweep vs. plan.** The values above reflect the **actual 486-run sweep** in
+> `master_dataset.csv`. Only the `LINEAR` topology has been run so far; `experiment_matrix.csv`
+> still lists the originally *planned* grid (`LINEAR_CHAIN`/`FAN_OUT`/`SHARED_DEP_MESH`,
+> `window_size {10,50,100}`, `wait_duration {5,10,30}`). `preprocessing.py` keeps the
+> unrun topologies in its one-hot category list so the feature matrix stays stable when
+> they land.
 
 > **`window_size` unit warning.** Its meaning *changes with `window_type`*: a value of `50` means
 > "50 calls" under COUNT_BASED but "50 seconds" under TIME_BASED. The raw number is therefore not
@@ -44,15 +51,22 @@ past 486 (e.g. 486 configs × 2 environments × 3 replicates = 2,916 rows).
 
 | Column | Type | Valid values | Notes |
 |--------|------|--------------|-------|
+| `permitted_calls_half_open` | int | `{5}` in this sweep (range ≥ 1) | Half-open probe budget — a **fixed** CB knob, not swept. Carried for provenance; **excluded from features**. |
 | `environment` | categorical | `LOCAL`, `AWS` | **Required for the ±15% divergence claim** — that metric is a per-config LOCAL-vs-AWS comparison. |
+| `mode` | categorical | `full` (this sweep); e.g. `canary` | Run mode/batch label. Carried for provenance; **excluded from features**. |
 | `replicate` | int | `1..R` (R ≥ 3 recommended) | Repeat index. Enables mean ± variance per config instead of a single noisy run. |
 | `run_timestamp` | string (ISO 8601) | `2026-06-21T14:32:05Z` | Provenance. Never used as a model feature. |
+
+> **17-column real file.** The live `master_dataset.csv` carries two operational columns
+> — `permitted_calls_half_open` and `mode` — beyond the original 15-column skeleton.
+> `preprocessing.py` recognises them as provenance (excluded from features) so the file
+> validates cleanly against the schema contract.
 
 ### Dependent variables — measured outcomes → **targets / Isolation Forest inputs**
 
 | Column | Type | Range | Unit | Null when… |
 |--------|------|-------|------|------------|
-| `blast_radius` | float | `0.0–1.0` | fraction | never null. **Primary outcome.** Share of the topology's services that breached their error-rate SLO during the fault window. |
+| `blast_radius` | float | raw `{0, 20, 40}` (percent) → scaled `0.0–1.0` | fraction | never null. **Primary outcome.** Share of the topology's services that breached their error-rate SLO during the fault window. Stored on a **percent** scale in the CSV; `preprocessing.py` divides by 100 to a 0–1 fraction (comparable to `DEFAULT_TAU`). |
 | `time_to_open` | float | `≥ 0` | seconds | CB never opened (threshold not reached / fault too mild) → **null is meaningful, not missing** |
 | `time_to_recover` | float | `≥ 0` | seconds | system did not return to baseline within the observation window → null is meaningful |
 | `error_rate` | float | `0.0–1.0` | fraction | never null. Peak error rate across the mesh during the fault. |
@@ -68,8 +82,12 @@ past 486 (e.g. 486 configs × 2 environments × 3 replicates = 2,916 rows).
 ## How the two models use these columns
 
 - **Decision Tree recommender** — features = the 6 independent variables; target = a label derived
-  from `blast_radius` (e.g. `safe` if `blast_radius ≤ τ`). Given a desired fault/topology, it
+  from `blast_radius` (`safe` if `blast_radius ≤ τ`, else `unsafe`). Given a desired fault/topology, it
   recommends a CB config. Interpretability is the reason it was chosen over deep learning.
+  - **τ = 0.1** (`DEFAULT_TAU` in `preprocessing.py`). After the `blast_radius` /100 rescale, values
+    are `{0.0, 0.2, 0.4}`, so the earlier `τ = 0.5` collapsed every row into a single "all safe" class
+    (untrainable). `τ = 0.1` preserves the original pre-rescale semantics — *zero blast radius = safe,
+    any propagation = unsafe* — and reproduces the **325 safe / 161 unsafe** split.
 - **Isolation Forest anomaly detector** — fit on the (scaled) outcome columns to flag
   config/outcome combinations that behave unexpectedly (e.g. a "safe-looking" config that produced a
   large blast radius). `StandardScaler` before fitting.

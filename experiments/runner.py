@@ -28,9 +28,38 @@ DATASET_HEADERS = [
     "experiment_id", "topology", "fault_type", "window_type",
     "threshold", "window_size", "wait_duration", "permitted_calls_half_open",
     "environment", "mode", "replicate", "run_timestamp",
-    "blast_radius", "time_to_open", "time_to_recover",
+    "blast_radius", "open_breaker_rate", "time_to_open", "time_to_recover",
     "error_rate", "throughput_loss"
 ]
+
+# Downstream services and their host-mapped ports, used by the per-service SLO
+# error-rate collector (see snapshot_error_counts). These are the five services
+# BlastRadiusService.java polls for open breakers; here we read their Actuator
+# request metrics directly to measure real downstream damage, not just CB state.
+SERVICE_METRICS_PORTS = {
+    "order": 8081,
+    "inventory": 8082,
+    "payment": 8083,
+    "notification": 8084,
+    "shared-db": 8085,
+}
+
+# A service "breaches" its SLO when its error rate over the fault window exceeds
+# this line. blast_radius = (breached services) / (measured services). Fixed and
+# config-independent on purpose, so the outcome never depends on the swept CB
+# config (which would re-introduce the collinearity artifact we are fixing).
+# PROVISIONAL — pending Soham/mentor sign-off (see check-this §8 / DATA_DICTIONARY).
+SLO_ERROR_RATE_THRESHOLD = 0.05
+
+# Slack added after a window/wait-duration so a TIME_BASED window can fully fill
+# and trip, and so recovery (half-open → closed) can be observed after the fault
+# is removed. Keeps the observation window from cutting off a 20s window + 30s wait.
+RECOVERY_MARGIN_SECONDS = 15
+
+# Pinned minimum calls before a breaker evaluates its failure rate. Small and
+# fixed (not swept) so window-fill is governed by the window itself, not by an
+# uncontrolled Resilience4j default (100). Exposed to the mesh via CB_MIN_CALLS.
+MIN_NUMBER_OF_CALLS = 10
 
 # How many replicates per config (min 3 for variance estimation)
 N_REPLICATES = 3
@@ -60,6 +89,7 @@ CB_SLIDING_WINDOW_TYPE={config['slidingWindowType']}
 CB_FAILURE_RATE_THRESHOLD={config['failureRateThreshold']}
 CB_WAIT_DURATION_OPEN={config['waitDurationInOpenState']}s
 CB_PERMITTED_CALLS_HALF_OPEN={PERMITTED_CALLS_HALF_OPEN}
+CB_MIN_CALLS={MIN_NUMBER_OF_CALLS}
 """
     os.makedirs(os.path.dirname(ENV_PATH), exist_ok=True)
     with open(ENV_PATH, "w") as f:
@@ -125,15 +155,30 @@ def inject_fault(fault_type):
         toxiproxy.set_enabled("payment-service-proxy", False)
         
     elif fault_type == "throttle":
-        # Limit database proxy bandwidth to 1 KB/s (simulates DB connection/resource limits)
+        # Throttle the shared-db dependency (guarded by notification-service's sharedDbCB).
+        # A 1 KB/s bandwidth cap alone barely bit: small DB payloads still transferred
+        # under the 2s slow-call threshold, so the breaker almost never tripped (1/81 runs).
+        # Stack a latency toxic on top so calls reliably exceed the slow-call threshold and
+        # engage the breaker, while the bandwidth cap keeps the "resource-limit" semantics.
+        # Values are a starting point — tune against the slow-call-duration-threshold (2s).
         toxiproxy.inject_bandwidth_limit("shared-db-service-proxy", rate_kbps=1, toxicity=1.0)
-        
+        toxiproxy.inject_latency("shared-db-service-proxy", delay_ms=3000, toxicity=1.0, clear_first=False)
+
     else:
         print(f"No fault injected. Type '{fault_type}' is unknown.", file=sys.stderr)
 
-def generate_load(endpoint_url, requests_count=50, concurrency=5):
-    """Lightweight built-in HTTP load generator to test the mesh."""
-    print(f"Generating load: sending {requests_count} concurrent requests to {endpoint_url}...")
+def generate_load(endpoint_url, requests_count=50, concurrency=5, duration_s=None):
+    """Lightweight built-in HTTP load generator to test the mesh.
+
+    Fixed mode (duration_s=None): dispatch exactly requests_count paced requests.
+    Sustained mode (duration_s set): keep dispatching paced requests until the
+    duration elapses, so a TIME_BASED window has enough traffic over enough wall
+    time to fill and trip. error_rate is computed from completed calls either way.
+    """
+    if duration_s is not None:
+        print(f"Generating sustained load for {duration_s:.0f}s to {endpoint_url}...")
+    else:
+        print(f"Generating load: sending {requests_count} concurrent requests to {endpoint_url}...")
 
     success_count = 0
     failure_count = 0
@@ -166,18 +211,25 @@ def generate_load(endpoint_url, requests_count=50, concurrency=5):
             last_completion = time.time()  # true last-completion timestamp
 
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
-        for _ in range(requests_count):
-            executor.submit(send_request)
-            time.sleep(0.05)  # Pacing: avoids thundering-herd on the gateway
+        if duration_s is not None:
+            deadline = t0 + duration_s
+            while time.time() < deadline:
+                executor.submit(send_request)
+                time.sleep(0.05)  # Pacing: avoids thundering-herd on the gateway
+        else:
+            for _ in range(requests_count):
+                executor.submit(send_request)
+                time.sleep(0.05)  # Pacing: avoids thundering-herd on the gateway
     # executor.__exit__ blocks until ALL futures complete.
 
     # Execution window = first dispatch to last completion.
     # Avoids the pacing-overhead subtraction which over-corrects under fast-fail.
     execution_time = max(last_completion - t0, 0.001)
 
+    completed = success_count + failure_count
     avg_latency = sum(latencies) / len(latencies) if latencies else 0
     throughput = success_count / execution_time
-    error_rate = (failure_count / requests_count) * 100 if requests_count else 0
+    error_rate = (failure_count / completed) * 100 if completed else 0
     
     print(f"Load Results - Successes: {success_count}, Failures: {failure_count}, Avg Latency: {avg_latency:.2f}ms, Throughput: {throughput:.2f} TPS, Error Rate: {error_rate:.2f}%")
     return throughput, error_rate, avg_latency
@@ -198,6 +250,62 @@ def get_blast_radius():
     except Exception as e:
         print(f"Failed to query blast radius from Gateway: {e}", file=sys.stderr)
     return None  # Sentinel: distinguishable from a real 0.0 (healthy mesh)
+
+def _metric_count(port, outcome=None):
+    """Reads the COUNT of http.server.requests from a service's Actuator metrics
+    endpoint. When outcome is given (e.g. 'SERVER_ERROR'), counts only that class.
+    Returns a float count, or None if the endpoint could not be read/parsed."""
+    url = f"http://localhost:{port}/actuator/metrics/http.server.requests"
+    if outcome:
+        url += f"?tag=outcome:{outcome}"
+    try:
+        with urllib.request.urlopen(url, timeout=2) as response:
+            if response.status != 200:
+                return None
+            data = json.loads(response.read().decode("utf-8"))
+    except Exception:
+        return None
+    for m in data.get("measurements", []):
+        if m.get("statistic") == "COUNT":
+            return float(m.get("value", 0.0))
+    return None
+
+def snapshot_error_counts():
+    """Snapshots each downstream service's cumulative (total, server-error) request
+    counts from its Actuator metrics. The counters are lifetime, so a single read
+    cannot give a windowed rate — diff two snapshots around the fault window (see
+    compute_slo_blast). Services whose endpoint can't be read map to None."""
+    snapshot = {}
+    for svc, port in SERVICE_METRICS_PORTS.items():
+        total = _metric_count(port)
+        errors = _metric_count(port, outcome="SERVER_ERROR")
+        snapshot[svc] = None if total is None else (total, errors if errors is not None else 0.0)
+    return snapshot
+
+def compute_slo_blast(before, after, threshold=SLO_ERROR_RATE_THRESHOLD):
+    """Blast radius as the fraction of downstream services that breached their
+    error-rate SLO during the fault window. Per service, error rate =
+    Δserver_errors / Δtotal_requests across the before/after snapshots; a service
+    breaches if that exceeds `threshold`. Services with no traffic in the window
+    (Δtotal <= 0) or a missing snapshot are excluded from numerator and denominator.
+    Returns a float in [0.0, 1.0], or None if nothing was measurable."""
+    breached = 0
+    measured = 0
+    for svc in SERVICE_METRICS_PORTS:
+        b = before.get(svc)
+        a = after.get(svc)
+        if b is None or a is None:
+            continue
+        d_total = a[0] - b[0]
+        d_errors = a[1] - b[1]
+        if d_total <= 0:
+            continue
+        measured += 1
+        if (d_errors / d_total) > threshold:
+            breached += 1
+    if measured == 0:
+        return None
+    return breached / measured
 
 def make_experiment_id(topology, fault_type, config):
     """Builds a deterministic ID matching experiment_matrix.csv e.g. LIN-LAT-CNT-T50-W10-D15."""
@@ -233,7 +341,7 @@ def get_dataset_path(mode):
 
 def log_results(config, fault_type, mode, topology, metrics, replicate):
     """Appends experiment run results to master_dataset.csv (full mode) or
-    canary_runs.csv (canary mode) -- 17-col schema, same DATASET_HEADERS either way."""
+    canary_runs.csv (canary mode) -- 18-col schema, same DATASET_HEADERS either way."""
     dataset_path = get_dataset_path(mode)
     os.makedirs(os.path.dirname(dataset_path), exist_ok=True)
     file_exists = os.path.exists(dataset_path)
@@ -273,7 +381,8 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
             mode,
             replicate,
             time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            f"{metrics.get('blast_radius', ''):.4f}" if metrics.get('blast_radius') is not None else "",
+            f"{metrics.get('blast_radius'):.4f}" if metrics.get('blast_radius') is not None else "",
+            f"{metrics.get('open_breaker_rate'):.4f}" if metrics.get('open_breaker_rate') is not None else "",
             time_to_open if time_to_open is not None else "",   # "" = CB never opened (meaningful null)
             time_to_recover if time_to_recover is not None else "",  # "" = system did not recover (meaningful null)
             f"{metrics['error_rate']:.4f}",
@@ -307,54 +416,97 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1)
         print("Baseline throughput is zero — mesh unhealthy pre-fault, skipping run.", file=sys.stderr)
         return False
 
-    # 4. Inject fault into Toxiproxy
+    # 4. Compute per-run observation durations from the config. A TIME_BASED
+    #    window is measured in seconds and must fully fill before it can trip; a
+    #    COUNT_BASED window fills in a few calls, so a short floor is enough.
+    #    Recovery needs the wait-duration (open→half-open) plus a margin.
+    window_seconds = config["slidingWindowSize"] if config["slidingWindowType"] == "TIME_BASED" else 5
+    trip_deadline = window_seconds + RECOVERY_MARGIN_SECONDS
+    recovery_deadline = config["waitDurationInOpenState"] + RECOVERY_MARGIN_SECONDS
+
+    # 5. Snapshot per-service request/error counters BEFORE the fault, so the
+    #    windowed error rate can be diffed after the load (counters are lifetime).
+    before_counts = snapshot_error_counts()
+
+    # 6. Inject fault into Toxiproxy
     try:
         inject_fault(fault_type)
     except Exception as e:
         print(f"Fault injection failed: {e} — skipping run.", file=sys.stderr)
         toxiproxy.reset_all()
         return False
+    fault_injected_at = time.time()
 
-    # 5. Generate load UNDER FAULT; sample blast radius mid-load via a thread so
-    #    the CB is still OPEN (not recovering) when we read it.
-    blast_radius_container = [None]
+    # 7. TRIP PHASE: sustained load across the whole trip window while polling
+    #    open-breaker state, so a TIME_BASED window has time + traffic to fill and
+    #    trip. Record when the first breaker opens (time_to_open) and the peak
+    #    open-breaker rate reached during the window.
+    time_to_open_box = [None]
+    peak_open_rate = [0.0]
 
-    def _sample_blast_radius():
-        # Poll until blast_radius > 0 (CB has opened) or 12s have elapsed.
-        # A fixed 2s sleep is too short for latency/throttle faults where
-        # requests take 3-5s to complete before the CB can evaluate them.
-        deadline = time.time() + 12
+    def _poll_breakers():
+        deadline = time.time() + trip_deadline
         while time.time() < deadline:
-            time.sleep(0.5)
             result = get_blast_radius()
-            if result is not None and result > 0.0:
-                blast_radius_container[0] = result
-                return
-        blast_radius_container[0] = get_blast_radius()  # final read at load end
+            if result is not None:
+                if result > peak_open_rate[0]:
+                    peak_open_rate[0] = result
+                if result > 0.0 and time_to_open_box[0] is None:
+                    time_to_open_box[0] = round(time.time() - fault_injected_at, 2)
+            time.sleep(0.5)
 
-    sampler = threading.Thread(target=_sample_blast_radius, daemon=True)
-    sampler.start()
-    throughput, error_rate, avg_latency = generate_load(endpoint)
-    sampler.join(timeout=15)
+    poller = threading.Thread(target=_poll_breakers, daemon=True)
+    poller.start()
+    throughput, error_rate, avg_latency = generate_load(endpoint, duration_s=trip_deadline)
+    poller.join(timeout=trip_deadline + 5)
 
-    blast_radius = blast_radius_container[0]
+    # 8. Snapshot counters AFTER the fault window; compute the SLO-breach blast
+    #    radius (primary) and the open-breaker rate (secondary, 0-100 → 0-1).
+    after_counts = snapshot_error_counts()
+    blast_radius = compute_slo_blast(before_counts, after_counts)
+    open_breaker_rate = peak_open_rate[0] / 100.0
+
     if blast_radius is None:
-        print("Blast radius measurement failed — skipping run.", file=sys.stderr)
+        print("SLO blast-radius measurement failed (no service traffic measured) — skipping run.", file=sys.stderr)
         toxiproxy.reset_all()
         return False
 
-    # 6. Reset Toxiproxy
+    # 9. Remove the fault and observe RECOVERY under light load. Traffic is
+    #    essential here: with automatic-transition-from-open-to-half-open enabled,
+    #    a *passive* poll would see the breaker flip to half-open on a timer at
+    #    ~wait_duration regardless of real health, so time_to_recover would just
+    #    re-derive wait_duration. Half-open also needs probe calls to actually
+    #    close. So we drive a few requests each poll and record recovery as the
+    #    first moment no breaker reports OPEN while traffic is flowing. (A precise
+    #    open→CLOSED timing would need per-service CB-state polling — a future
+    #    refinement.) A run that never clears leaves time_to_recover null.
     toxiproxy.reset_all()
+    recovery_started_at = time.time()
+    time_to_recover = None
+    recover_by = recovery_started_at + recovery_deadline
+    while time.time() < recover_by:
+        for _ in range(3):  # light probe traffic so half-open breakers can close
+            try:
+                with urllib.request.urlopen(endpoint, timeout=5) as res:
+                    res.read()
+            except Exception:
+                pass
+        result = get_blast_radius()
+        if result is not None and result <= 0.0:
+            time_to_recover = round(time.time() - recovery_started_at, 2)
+            break
+        time.sleep(0.5)
 
-    # 7. Save results
+    # 10. Save results
     throughput_loss = max(0.0, 1.0 - (throughput / baseline_throughput))
     metrics = {
-        "blast_radius": blast_radius,
+        "blast_radius": blast_radius,                 # SLO-breach share (0.0-1.0), PRIMARY
+        "open_breaker_rate": open_breaker_rate,       # open-breaker share (0.0-1.0), SECONDARY
         "throughput_loss": throughput_loss,
-        "error_rate": error_rate / 100.0,   # convert % → fraction
+        "error_rate": error_rate / 100.0,             # convert % → fraction
         "avg_latency_ms": avg_latency,
-        "time_to_open": None,    # TODO: wire from CB event listener in a future PR
-        "time_to_recover": None,
+        "time_to_open": time_to_open_box[0],          # s from fault → first open (null = never opened)
+        "time_to_recover": time_to_recover,           # s from fault removal → all closed (null = never recovered)
     }
     log_results(config, fault_type, mode, topology, metrics, replicate)
     return True

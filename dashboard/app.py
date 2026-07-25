@@ -59,7 +59,7 @@ def render_distribution(count_based_df):
     fault_types = sorted(count_based_df["fault_type"].unique())
     data = [count_based_df.loc[count_based_df["fault_type"] == ft, "blast_radius"].values for ft in fault_types]
     ax.boxplot(data, tick_labels=fault_types, showmeans=True)
-    ax.set_ylabel("Blast radius (% of mesh)")
+    ax.set_ylabel("Blast radius (fraction of mesh)")
     ax.set_title("Blast radius distribution (COUNT_BASED runs)")
     return fig_to_base64(fig)
 
@@ -114,8 +114,8 @@ def results():
             no_file=False,
         )
 
-    fig1_median = render_heatmap(dl.blast_pivot(filtered, "median"), "Median blast radius (%)")
-    fig1_mean = render_heatmap(dl.blast_pivot(filtered, "mean"), "Mean blast radius (%)")
+    fig1_median = render_heatmap(dl.blast_pivot(filtered, "median"), "Median blast radius (fraction)", fmt="{:.2f}")
+    fig1_mean = render_heatmap(dl.blast_pivot(filtered, "mean"), "Mean blast radius (fraction)", fmt="{:.2f}")
     fig2 = render_heatmap(dl.trip_rate_pivot(filtered), "Breaker trip rate (%)", cmap="Blues")
     fig3 = render_distribution(dl.count_based_blast(filtered)) if not dl.count_based_blast(filtered).empty else None
     summary_table = dl.compute_summary_stats(filtered).round(4).to_html(index=False, classes="summary-table")

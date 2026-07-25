@@ -57,18 +57,21 @@ past 486 (e.g. 486 configs × 2 environments × 3 replicates = 2,916 rows).
 | `replicate` | int | `1..R` (R ≥ 3 recommended) | Repeat index. Enables mean ± variance per config instead of a single noisy run. |
 | `run_timestamp` | string (ISO 8601) | `2026-06-21T14:32:05Z` | Provenance. Never used as a model feature. |
 
-> **17-column real file.** The live `master_dataset.csv` carries two operational columns
-> — `permitted_calls_half_open` and `mode` — beyond the original 15-column skeleton.
-> `preprocessing.py` recognises them as provenance (excluded from features) so the file
-> validates cleanly against the schema contract.
+> **18-column real file.** The live `master_dataset.csv` carries two operational columns
+> — `permitted_calls_half_open` and `mode` — beyond the original 15-column skeleton, plus
+> the new `open_breaker_rate` secondary outcome (18 total).
+> `preprocessing.py` recognises the operational columns as provenance (excluded from
+> features) and treats `open_breaker_rate` as an extra outcome column; the file validates
+> cleanly against the schema contract (which checks for required columns, extras ride along).
 
 ### Dependent variables — measured outcomes → **targets / Isolation Forest inputs**
 
 | Column | Type | Range | Unit | Null when… |
 |--------|------|-------|------|------------|
-| `blast_radius` | float | raw `{0, 20, 40}` (percent) → scaled `0.0–1.0` | fraction | never null. **Primary outcome.** Share of the topology's services that breached their error-rate SLO during the fault window. Stored on a **percent** scale in the CSV; `preprocessing.py` divides by 100 to a 0–1 fraction (comparable to `DEFAULT_TAU`). |
-| `time_to_open` | float | `≥ 0` | seconds | CB never opened (threshold not reached / fault too mild) → **null is meaningful, not missing** |
-| `time_to_recover` | float | `≥ 0` | seconds | system did not return to baseline within the observation window → null is meaningful |
+| `blast_radius` | float | `0.0–1.0` | fraction | never null. **Primary outcome.** Share of the downstream services that breached their error-rate SLO during the fault window (a service *breaches* when its window error rate exceeds `SLO_ERROR_RATE_THRESHOLD`, **provisionally 5%** — pending Soham/mentor sign-off). Emitted directly as a 0.0–1.0 fraction by the runner (like `error_rate`/`throughput_loss`); `preprocessing.py` no longer rescales it (`BLAST_RADIUS_SCALE = 1.0`). |
+| `open_breaker_rate` | float | `0.0–1.0` | fraction | never null. **Secondary metric.** Share of services reporting ≥1 OPEN circuit breaker at the peak of the fault window (the old open-breaker "blast radius" from `BlastRadiusService.java`, now on a 0–1 scale). Retained as a diagnostic alongside the SLO-breach primary; measures the *mechanism firing*, not the *damage*. |
+| `time_to_open` | float | `≥ 0` | seconds | seconds from fault injection to the first OPEN breaker. CB never opened (threshold not reached / fault too mild) → **null is meaningful, not missing** |
+| `time_to_recover` | float | `≥ 0` | seconds | seconds from fault removal until no breaker reports OPEN, measured under light recovery load. System did not clear within the recovery window → null is meaningful |
 | `error_rate` | float | `0.0–1.0` | fraction | never null. Peak error rate across the mesh during the fault. |
 | `throughput_loss` | float | `0.0–1.0` | fraction | never null. Fractional drop in successful TPS vs the pre-fault baseline. |
 

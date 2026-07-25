@@ -8,8 +8,9 @@ BEFORE the real 486-config chaos sweep has run on the mesh.
 
     *** THIS DATA IS SIMULATED -- NOT MEASURED. ***
     Replace data/master_dataset.csv with the real runner.py output once the
-    canary / full sweep lands. The 15-column schema is identical, so nothing
-    downstream (preprocessing, both models, the Lambda) changes.
+    canary / full sweep lands. The 17-column schema is identical to runner.py's
+    DATASET_HEADERS, so nothing downstream (preprocessing, both models, the
+    Lambda) changes.
 
 How it works
 ------------
@@ -49,11 +50,12 @@ import pandas as pd
 SCRIPT_DIR = Path(__file__).resolve().parent
 DATA_DIR = SCRIPT_DIR.parent / "data"
 
-# ---- the 15-column master schema (must stay identical to runner.py output) ----
+# ---- the 17-column master schema (must stay identical to runner.py DATASET_HEADERS) ----
 SCHEMA_COLUMNS = [
     "experiment_id", "topology", "fault_type", "window_type",
     "threshold", "window_size", "wait_duration",
-    "environment", "replicate", "run_timestamp",
+    "permitted_calls_half_open",          # fixed knob; not a sweep dim, not an ML feature
+    "environment", "mode", "replicate", "run_timestamp",
     "blast_radius", "time_to_open", "time_to_recover",
     "error_rate", "throughput_loss",
 ]
@@ -62,6 +64,8 @@ FEATURE_COLUMNS = ["topology", "fault_type", "window_type",
 
 # ---- response-model coefficients (all documented in README.md) ----------------
 FAULT_BASE = {"CRASH": 0.55, "LATENCY": 0.45, "THROTTLE": 0.30}
+# Topology keys must match SCHEMA_COLUMNS topology values exactly (LINEAR_CHAIN,
+# not LINEAR) so one-hot encoding in preprocessing.py produces non-zero columns.
 TOPO_MULT = {"SHARED_DEP_MESH": 1.30, "FAN_OUT": 1.05, "LINEAR_CHAIN": 0.82}
 # (fault_type, window_type) -> additive effect on blast radius. The sign flip
 # across fault types is the empirical novelty the study is built to surface.
@@ -140,8 +144,11 @@ def simulate_outcomes(cfg, environment: str, rng: np.random.Generator) -> dict:
         )
         time_to_recover = np.nan if never_recovered else float(ttr)
     else:
-        # never opened -> mild fault, system stays near baseline -> trivial recovery
-        time_to_recover = float(max(0.0, rng.normal(2.0, 0.5)))
+        # never opened -> nothing to recover from -> null (meaningful, not missing).
+        # A non-null time_to_recover here would be the logically-impossible
+        # combination time_to_open=null + time_to_recover=non-null that
+        # runner.py's harness now explicitly guards against.
+        time_to_recover = np.nan
 
     return {
         "blast_radius": round(blast, 4),
@@ -204,7 +211,11 @@ def generate(matrix_path: Path, out_path: Path, truth_path: Path,
                     "threshold": cfg.threshold,
                     "window_size": cfg.window_size,
                     "wait_duration": cfg.wait_duration,
+                    # Fixed knob (not swept); 5 is the runner.py default
+                    "permitted_calls_half_open": 5,
                     "environment": environment,
+                    # Synthetic data always represents a full-sweep run
+                    "mode": "full",
                     "replicate": replicate,
                     "run_timestamp": ts,
                     **out,

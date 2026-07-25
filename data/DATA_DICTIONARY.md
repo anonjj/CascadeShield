@@ -52,7 +52,7 @@ past 486 (e.g. 486 configs × 2 environments × 3 replicates = 2,916 rows).
 
 | Column | Type | Range | Unit | Null when… |
 |--------|------|-------|------|------------|
-| `blast_radius` | float | `0.0–1.0` | fraction | never null. **Primary outcome.** Share of the topology's services that breached their error-rate SLO during the fault window. |
+| `blast_radius` | float | `0.0–1.0` | fraction | never null. **Primary outcome.** Share of the topology's services that breached their error-rate SLO during the fault window. Stored as a 0.0–1.0 fraction; the Java `BlastRadiusService` endpoint returns 0–100 and `runner.py`'s `get_blast_radius()` normalises to the fraction before writing to CSV. |
 | `time_to_open` | float | `≥ 0` | seconds | CB never opened (threshold not reached / fault too mild) → **null is meaningful, not missing** |
 | `time_to_recover` | float | `≥ 0` | seconds | system did not return to baseline within the observation window → null is meaningful |
 | `error_rate` | float | `0.0–1.0` | fraction | never null. Peak error rate across the mesh during the fault. |
@@ -70,9 +70,14 @@ past 486 (e.g. 486 configs × 2 environments × 3 replicates = 2,916 rows).
 - **Decision Tree recommender** — features = the 6 independent variables; target = a label derived
   from `blast_radius` (e.g. `safe` if `blast_radius ≤ τ`). Given a desired fault/topology, it
   recommends a CB config. Interpretability is the reason it was chosen over deep learning.
-- **Isolation Forest anomaly detector** — fit on the (scaled) outcome columns to flag
-  config/outcome combinations that behave unexpectedly (e.g. a "safe-looking" config that produced a
-  large blast radius). `StandardScaler` before fitting.
+- **Isolation Forest anomaly detector** — fit on the outcome columns to flag config/outcome
+  combinations that behave unexpectedly (e.g. a "safe-looking" config that produced a large
+  blast radius). Feature set (see `ml/preprocessing.py → build_outcome_frame`):
+  - Numeric (StandardScaler-normalised): `blast_radius`, `error_rate`, `throughput_loss`
+  - Boolean flags for meaningful nulls: `cb_opened` (1 if `time_to_open` is non-null),
+    `recovered` (1 if `time_to_recover` is non-null)
+  - **`open_breaker_rate` is NOT an Isolation Forest feature** — it is not in the dataset
+    schema and is not computed anywhere in the pipeline.
 
 ## Source of truth for outcome values
 

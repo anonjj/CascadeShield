@@ -2,7 +2,7 @@
 """
 preprocessing.py -- CascadeShield ML pipeline (Soham)
 
-The single, shared source of truth for turning the 15-column master dataset into
+The single, shared source of truth for turning the 17-column master dataset into
 model-ready matrices. BOTH models and the Lambda import this module, so a config
 is encoded identically at training time and at serving time (no train/serve skew).
 
@@ -10,8 +10,9 @@ Design decisions are inherited from data/DATA_DICTIONARY.md and
 ml/feature_engineering.md:
 
   * Features (Decision Tree inputs) = the 6 swept independent variables only.
-    Provenance columns (experiment_id, environment, replicate, run_timestamp) are
-    NEVER features -- the recommender must not learn LOCAL-vs-AWS shortcuts.
+    Provenance columns (experiment_id, permitted_calls_half_open, environment,
+    mode, replicate, run_timestamp) are NEVER features -- the recommender must
+    not learn LOCAL-vs-AWS shortcuts or fixed-knob values.
   * topology, fault_type    -> one-hot (all categories kept, fixed order).
   * window_type             -> single binary column window_type_is_time.
   * threshold/window_size/wait_duration -> numeric, untouched (trees split, no scaling).
@@ -29,20 +30,31 @@ import numpy as np
 import pandas as pd
 
 # ---- schema contract ----------------------------------------------------------
+# TOPOLOGIES must match the values emitted by experiment_matrix.csv and
+# generate_synthetic_data.py exactly. Using the wrong string (e.g. "LINEAR")
+# produces silent all-zero topology one-hot columns — no exception is raised.
 TOPOLOGIES = ["LINEAR_CHAIN", "FAN_OUT", "SHARED_DEP_MESH"]
 FAULT_TYPES = ["LATENCY", "CRASH", "THROTTLE"]
 WINDOW_TYPES = ["COUNT_BASED", "TIME_BASED"]
 THRESHOLDS = [30, 50, 70]
-WINDOW_SIZES = [10, 50, 100]
-WAIT_DURATIONS = [5, 10, 30]
+# Matches the real data/experiment_matrix.csv sweep grid exactly (verified:
+# unique window_size={10,50,100}, wait_duration={5,10,30} in that file).
+WINDOW_SIZES = [10, 50, 100]   # calls (COUNT_BASED) or seconds (TIME_BASED)
+WAIT_DURATIONS = [5, 10, 30]   # seconds in OPEN state
 
 FEATURE_COLUMNS = ["topology", "fault_type", "window_type",
                    "threshold", "window_size", "wait_duration"]
 OUTCOME_COLUMNS = ["blast_radius", "time_to_open", "time_to_recover",
                    "error_rate", "throughput_loss"]
-PROVENANCE_COLUMNS = ["experiment_id", "environment", "replicate", "run_timestamp"]
-SCHEMA_COLUMNS = (["experiment_id"] + FEATURE_COLUMNS
-                  + ["environment", "replicate", "run_timestamp"] + OUTCOME_COLUMNS)
+PROVENANCE_COLUMNS = ["experiment_id", "permitted_calls_half_open",
+                      "environment", "mode", "replicate", "run_timestamp"]
+# 17-col schema: matches DATASET_HEADERS in experiments/runner.py exactly.
+# Includes permitted_calls_half_open (fixed knob, not a feature) and mode.
+SCHEMA_COLUMNS = (
+    ["experiment_id"] + FEATURE_COLUMNS
+    + ["permitted_calls_half_open", "environment", "mode", "replicate", "run_timestamp"]
+    + OUTCOME_COLUMNS
+)
 
 # Stable encoded-feature order. The Lambda relies on this exact order.
 ENCODED_FEATURE_NAMES = (
@@ -59,11 +71,15 @@ DEFAULT_TAU = 0.5  # blast_radius > tau  => "unsafe". Tunable; documented in REA
 
 
 def load_dataset(path: str | Path) -> pd.DataFrame:
-    """Load master_dataset.csv and assert the 15-column contract holds."""
+    """Load master_dataset.csv and assert the 17-column contract holds."""
     df = pd.read_csv(path)
     missing = [c for c in SCHEMA_COLUMNS if c not in df.columns]
     if missing:
-        raise ValueError(f"{path}: dataset missing required columns: {missing}")
+        raise ValueError(
+            f"{path}: dataset missing required columns: {missing}\n"
+            "Hint: if this is synthetic data, re-run generate_synthetic_data.py "
+            "after pulling the latest schema from runner.py's DATASET_HEADERS."
+        )
     return df
 
 

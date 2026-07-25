@@ -19,6 +19,8 @@ resilience4j:
         allow-health-indicator-to-fail: false
         sliding-window-type: ${CB_SLIDING_WINDOW_TYPE:COUNT_BASED}
         sliding-window-size: ${CB_SLIDING_WINDOW_SIZE:10}
+        # Pinned low so window-fill governs tripping, not R4j's uncontrolled default (100)
+        minimum-number-of-calls: ${CB_MIN_CALLS:10}
         failure-rate-threshold: ${CB_FAILURE_RATE_THRESHOLD:50}
         wait-duration-in-open-state: ${CB_WAIT_DURATION_OPEN:15s}
         permitted-number-of-calls-in-half-open-state: ${CB_PERMITTED_CALLS_HALF_OPEN:5}

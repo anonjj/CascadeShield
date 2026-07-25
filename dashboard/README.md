@@ -39,7 +39,9 @@ deployment.
   `ml/preprocessing.py`'s hardcoded `TOPOLOGIES`/`WINDOW_SIZES` constants — those are
   already stale relative to the real sweep (real data only has `topology=LINEAR` so far,
   not the 3-way `LINEAR_CHAIN`/`FAN_OUT`/`SHARED_DEP_MESH` enum).
-- **`blast_radius` is 0–100** (percent of mesh), not a 0.0–1.0 fraction — displayed as-is.
+- **`blast_radius` is a 0.0–1.0 fraction** (share of services that breached their error-rate
+  SLO during the fault window) — displayed as-is. A secondary `open_breaker_rate` column
+  (also 0.0–1.0) carries the old open-breaker measure for diagnostics.
 - **`time_to_open`/`time_to_recover` are always null today** — `runner.py` doesn't wire
   these up yet (separate, tracked TODO). No chart here touches those columns.
 - Charts are rendered server-side with matplotlib's `Agg` backend + the object-oriented

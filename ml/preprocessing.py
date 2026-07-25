@@ -18,9 +18,10 @@ ml/feature_engineering.md:
     list so the encoded matrix (and the Lambda contract) is stable once they land.
   * window_type             -> single binary column window_type_is_time.
   * threshold/window_size/wait_duration -> numeric, untouched (trees split, no scaling).
-  * blast_radius is rescaled from the sweep's percent scale (0/20/40) to a 0.0-1.0
-    fraction (/100) so it is comparable against DEFAULT_TAU. A drift guard warns if a
-    value still exceeds 1.0 after scaling.
+  * blast_radius is emitted by the runner already as a 0.0-1.0 SLO-breach fraction
+    (share of services that breached their error-rate SLO), so BLAST_RADIUS_SCALE is
+    now 1.0 (no rescale) -- it matches error_rate / throughput_loss. A drift guard
+    warns if a value exceeds 1.0, which would signal the source scale drifted again.
   * Outcomes feed the Isolation Forest. time_to_open / time_to_recover have
     MEANINGFUL nulls (breaker never opened / never recovered) -- per the data
     dictionary we do NOT mean-impute. We encode the *event* via companion booleans
@@ -49,8 +50,11 @@ THRESHOLDS = [30, 50, 70]
 WINDOW_SIZES = [5, 10, 20]      # matches the real sweep (was the planned [10, 50, 100])
 WAIT_DURATIONS = [5, 15, 30]    # matches the real sweep (was the planned [5, 10, 30])
 
-# blast_radius arrives on a percent scale (0/20/40); divide by this to get a 0-1 fraction.
-BLAST_RADIUS_SCALE = 100.0
+# blast_radius is now emitted by the runner already as a 0.0-1.0 SLO-breach fraction
+# (like error_rate / throughput_loss), so no rescale is needed. Kept as a named constant
+# so a future scale change is a one-line edit and the drift guard stays meaningful.
+# (Was 100.0 when the Java aggregator returned an open-breaker percentage on 0-100.)
+BLAST_RADIUS_SCALE = 1.0
 
 FEATURE_COLUMNS = ["topology", "fault_type", "window_type",
                    "threshold", "window_size", "wait_duration"]
@@ -76,10 +80,9 @@ IF_NUMERIC_FEATURES = ["blast_radius", "error_rate", "throughput_loss"]
 IF_FLAG_FEATURES = ["cb_opened", "recovered"]
 IF_FEATURE_NAMES = IF_NUMERIC_FEATURES + IF_FLAG_FEATURES
 
-# blast_radius > tau => "unsafe". After the /100 rescale, blast_radius is a fraction in
-# {0.0, 0.2, 0.4}, so tau=0.5 would collapse everything into a single "all safe" class.
-# tau=0.1 preserves the pre-rescale semantics ("zero blast radius = safe, any propagation
-# = unsafe") and reproduces the 325 safe / 161 unsafe split. Tunable; documented in README.
+# blast_radius > tau => "unsafe". blast_radius is a 0-1 SLO-breach fraction in steps of
+# 1/(services measured) (e.g. {0.0, 0.2, 0.4, ...} for 5 services), so tau=0.1 encodes
+# "zero services breached = safe, any breach = unsafe". Tunable; documented in README.
 DEFAULT_TAU = 0.1
 
 
@@ -147,10 +150,12 @@ def featurize_config(topology: str, fault_type: str, window_type: str,
 
 
 def blast_radius_fraction(df: pd.DataFrame) -> pd.Series:
-    """blast_radius rescaled from the sweep's percent scale (0/20/40) to a 0-1 fraction.
+    """blast_radius as a 0-1 SLO-breach fraction (BLAST_RADIUS_SCALE is 1.0; the column
+    is already a fraction). Retained as a function so every consumer routes through one
+    place if the source scale ever changes again.
 
-    A drift guard warns if any value still exceeds 1.0 after scaling, which would mean
-    the incoming scale changed again (e.g. a raw count) and DEFAULT_TAU no longer applies.
+    A drift guard warns if any value exceeds 1.0 after scaling, which would mean the
+    incoming scale changed again (e.g. back to a percent) and DEFAULT_TAU no longer applies.
     """
     frac = df["blast_radius"].astype(float) / BLAST_RADIUS_SCALE
     over = frac > 1.0

@@ -29,7 +29,10 @@ DATASET_HEADERS = [
     "threshold", "window_size", "wait_duration", "permitted_calls_half_open",
     "environment", "mode", "replicate", "run_timestamp",
     "blast_radius", "time_to_open", "time_to_recover",
-    "error_rate", "throughput_loss"
+    "error_rate", "throughput_loss",
+    # Task 2: request-level blast radius (real observed failure), kept ALONGSIDE the
+    # legacy CB-state blast_radius above so the two definitions can be compared.
+    "real_blast_radius",
 ]
 
 # How many replicates per config (min 3 for variance estimation)
@@ -44,6 +47,41 @@ PARAM_VALUES = {
     "slidingWindowType": ["COUNT_BASED", "TIME_BASED"],
 }
 PERMITTED_CALLS_HALF_OPEN = 5  # fixed baseline, not swept
+# Resilience4j defaults minimumNumberOfCalls to 100. With sliding windows of 5-20 and a
+# short load, that threshold is never reached, so the breaker never evaluates and never
+# trips -- especially for TIME_BASED windows. We expose it (default 5) so it is actually
+# reachable within every swept window. See fix/measurement-validity + application.yml.
+CB_MINIMUM_CALLS = 5  # fixed baseline, not swept (must be <= smallest slidingWindowSize)
+
+# ---- Load fairness (Task 1) --------------------------------------------------
+# COUNT_BASED and TIME_BASED interpret slidingWindowSize in different units (calls vs
+# seconds). A fixed ~50-request burst fills a COUNT_BASED window but never fills a
+# TIME_BASED window of 5-20s, so TIME_BASED breakers never evaluate -- making their
+# "0% blast radius" an artifact of the harness, not a property of the breaker. We size
+# the offered load per window type so BOTH get a fair chance to fill, trip, sit OPEN,
+# and transition to HALF_OPEN:
+#   * TIME_BASED : sustain load for slidingWindowSize + waitDurationInOpenState + margin
+#                  seconds, so the trailing time-window fills and a HALF_OPEN probe fires.
+#   * COUNT_BASED: fire enough calls to turn the ring buffer over several times.
+LOAD_RATE_RPS = 10                 # steady offered request rate (requests/second)
+LOAD_CONCURRENCY = 5
+TIME_BASED_MARGIN_S = 10           # safety margin on top of window + wait duration
+COUNT_BASED_WINDOW_MULTIPLE = 3    # fire >= this * slidingWindowSize calls
+COUNT_BASED_MIN_REQUESTS = 40      # floor: keep error-rate estimate statistically stable
+
+# ---- Real (request-level) blast radius (Task 2) ------------------------------
+# Downstream services whose real per-leg failure we observe from Resilience4j call
+# outcomes (NOT circuit-breaker OPEN/CLOSED state). Ports are published by docker-compose.
+DOWNSTREAM_METRIC_TARGETS = {
+    "order-service": "http://localhost:8081",
+    "inventory-service": "http://localhost:8082",
+    "payment-service": "http://localhost:8083",
+    "notification-service": "http://localhost:8084",
+    "shared-db-service": "http://localhost:8085",
+}
+# A leg counts as "degraded" if its observed error rate over the fault window exceeds this.
+# OPEN QUESTION -- threshold to be signed off; see docs/proposals/blast-radius-redefinition.md
+REAL_BLAST_LEG_ERROR_THRESHOLD = 0.50
 
 def run_command(args, cwd=None):
     """Helper to run system commands."""
@@ -60,6 +98,7 @@ CB_SLIDING_WINDOW_TYPE={config['slidingWindowType']}
 CB_FAILURE_RATE_THRESHOLD={config['failureRateThreshold']}
 CB_WAIT_DURATION_OPEN={config['waitDurationInOpenState']}s
 CB_PERMITTED_CALLS_HALF_OPEN={PERMITTED_CALLS_HALF_OPEN}
+CB_MINIMUM_CALLS={CB_MINIMUM_CALLS}
 """
     os.makedirs(os.path.dirname(ENV_PATH), exist_ok=True)
     with open(ENV_PATH, "w") as f:
@@ -131,9 +170,39 @@ def inject_fault(fault_type):
     else:
         print(f"No fault injected. Type '{fault_type}' is unknown.", file=sys.stderr)
 
-def generate_load(endpoint_url, requests_count=50, concurrency=5):
-    """Lightweight built-in HTTP load generator to test the mesh."""
-    print(f"Generating load: sending {requests_count} concurrent requests to {endpoint_url}...")
+def compute_load_plan(config):
+    """Sizes the offered load per window type so both COUNT_BASED and TIME_BASED windows
+    get a fair chance to fill, trip, sit OPEN, and transition to HALF_OPEN.
+
+    See the "Load fairness (Task 1)" comment block near the top of this module for the
+    rationale. Returns dict(requests_count, interval_s, concurrency, duration_s).
+    """
+    interval_s = 1.0 / LOAD_RATE_RPS
+    window = int(config["slidingWindowSize"])
+    wait = int(config["waitDurationInOpenState"])
+
+    if config["slidingWindowType"] == "TIME_BASED":
+        # Sustain load long enough for the trailing time-window (seconds) to fill, the
+        # breaker to sit OPEN for wait_duration, and an automatic HALF_OPEN probe to fire.
+        duration_s = window + wait + TIME_BASED_MARGIN_S
+        requests_count = max(int(duration_s * LOAD_RATE_RPS), CB_MINIMUM_CALLS + 1)
+    else:  # COUNT_BASED -- window is measured in calls
+        requests_count = max(window * COUNT_BASED_WINDOW_MULTIPLE,
+                             CB_MINIMUM_CALLS * 3, COUNT_BASED_MIN_REQUESTS)
+        duration_s = requests_count * interval_s
+
+    return {"requests_count": requests_count, "interval_s": interval_s,
+            "concurrency": LOAD_CONCURRENCY, "duration_s": duration_s}
+
+
+def generate_load(endpoint_url, requests_count=50, concurrency=5, interval_s=0.05):
+    """Lightweight built-in HTTP load generator to test the mesh.
+
+    requests_count requests are dispatched spaced by interval_s (steady offered rate),
+    so the same function drives both the short baseline warm-up and the longer,
+    duration-sized fault load (via compute_load_plan)."""
+    print(f"Generating load: {requests_count} requests to {endpoint_url} "
+          f"@ ~{1.0/interval_s:.0f} req/s (~{requests_count*interval_s:.1f}s dispatch)...")
 
     success_count = 0
     failure_count = 0
@@ -168,7 +237,7 @@ def generate_load(endpoint_url, requests_count=50, concurrency=5):
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
         for _ in range(requests_count):
             executor.submit(send_request)
-            time.sleep(0.05)  # Pacing: avoids thundering-herd on the gateway
+            time.sleep(interval_s)  # Pacing: steady rate, avoids thundering-herd
     # executor.__exit__ blocks until ALL futures complete.
 
     # Execution window = first dispatch to last completion.
@@ -178,7 +247,7 @@ def generate_load(endpoint_url, requests_count=50, concurrency=5):
     avg_latency = sum(latencies) / len(latencies) if latencies else 0
     throughput = success_count / execution_time
     error_rate = (failure_count / requests_count) * 100 if requests_count else 0
-    
+
     print(f"Load Results - Successes: {success_count}, Failures: {failure_count}, Avg Latency: {avg_latency:.2f}ms, Throughput: {throughput:.2f} TPS, Error Rate: {error_rate:.2f}%")
     return throughput, error_rate, avg_latency
 
@@ -198,6 +267,66 @@ def get_blast_radius():
     except Exception as e:
         print(f"Failed to query blast radius from Gateway: {e}", file=sys.stderr)
     return None  # Sentinel: distinguishable from a real 0.0 (healthy mesh)
+
+# ---- Real (request-level) blast radius (Task 2) ------------------------------
+# The legacy get_blast_radius() above measures breaker STATE (% of services with an OPEN
+# CB). A service can fail every request with its breaker still CLOSED and score 0% there.
+# The functions below instead measure REAL observed failures per leg, from Resilience4j
+# call-outcome counters (kind=successful/failed) -- which reflect actual call results, not
+# the OPEN/CLOSED state. See docs/proposals/blast-radius-redefinition.md.
+
+def _get_cb_call_count(base_url, kind):
+    """Sum of resilience4j.circuitbreaker.calls (kind=successful|failed) across a service's
+    CB instances, via its actuator metrics endpoint. Returns float, or None if unreachable."""
+    url = f"{base_url}/actuator/metrics/resilience4j.circuitbreaker.calls?tag=kind:{kind}"
+    try:
+        with urllib.request.urlopen(url, timeout=2) as response:
+            if response.status == 200:
+                data = json.loads(response.read().decode("utf-8"))
+                for m in data.get("measurements", []):
+                    if m.get("statistic") == "COUNT":
+                        return float(m.get("value", 0.0))
+    except Exception:
+        pass  # metric absent / service unreachable -> None (not measurable), never fabricate
+    return None
+
+def snapshot_cb_calls():
+    """Per-service cumulative call outcomes. {service: {"success": x, "failed": y}} or
+    {service: None} when that service exposes no CB metric / is unreachable."""
+    snap = {}
+    for svc, base in DOWNSTREAM_METRIC_TARGETS.items():
+        success = _get_cb_call_count(base, "successful")
+        failed = _get_cb_call_count(base, "failed")
+        snap[svc] = None if (success is None and failed is None) else {
+            "success": success or 0.0, "failed": failed or 0.0}
+    return snap
+
+def compute_real_blast_radius(before, after, tau=REAL_BLAST_LEG_ERROR_THRESHOLD):
+    """Fraction (as a percent, comparable to legacy blast_radius) of observed legs whose
+    per-leg error rate over the fault window exceeded tau.
+
+    A leg is only counted if it was actually exercised during the window (calls > 0) and
+    measurable in both snapshots. Returns None if no leg was observable -- a meaningful
+    null (measurement gap), never a fabricated 0.0."""
+    if not before or not after:
+        return None
+    observed_legs = 0
+    degraded_legs = 0
+    for svc in DOWNSTREAM_METRIC_TARGETS:
+        b, a = before.get(svc), after.get(svc)
+        if not b or not a:
+            continue  # leg not measurable this run
+        d_success = max(a["success"] - b["success"], 0.0)
+        d_failed = max(a["failed"] - b["failed"], 0.0)
+        total = d_success + d_failed
+        if total <= 0:
+            continue  # leg not exercised during the window
+        observed_legs += 1
+        if (d_failed / total) > tau:
+            degraded_legs += 1
+    if observed_legs == 0:
+        return None
+    return degraded_legs / observed_legs * 100.0
 
 def make_experiment_id(topology, fault_type, config):
     """Builds a deterministic ID matching experiment_matrix.csv e.g. LIN-LAT-CNT-T50-W10-D15."""
@@ -233,7 +362,7 @@ def get_dataset_path(mode):
 
 def log_results(config, fault_type, mode, topology, metrics, replicate):
     """Appends experiment run results to master_dataset.csv (full mode) or
-    canary_runs.csv (canary mode) -- 17-col schema, same DATASET_HEADERS either way."""
+    canary_runs.csv (canary mode) -- 18-col schema, same DATASET_HEADERS either way."""
     dataset_path = get_dataset_path(mode)
     os.makedirs(os.path.dirname(dataset_path), exist_ok=True)
     file_exists = os.path.exists(dataset_path)
@@ -278,6 +407,7 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
             time_to_recover if time_to_recover is not None else "",  # "" = system did not recover (meaningful null)
             f"{metrics['error_rate']:.4f}",
             f"{metrics['throughput_loss']:.4f}",
+            f"{metrics['real_blast_radius']:.4f}" if metrics.get('real_blast_radius') is not None else "",  # "" = no leg observable (measurement gap)
         ])
     print(f"Saved run metrics to {dataset_path}")
 
@@ -315,15 +445,22 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1)
         toxiproxy.reset_all()
         return False
 
-    # 5. Generate load UNDER FAULT; sample blast radius mid-load via a thread so
-    #    the CB is still OPEN (not recovering) when we read it.
+    # 5. Size the fault load per window type so TIME_BASED windows can actually fill
+    #    (Task 1). Snapshot per-leg CB call counters just before the fault window so the
+    #    real (request-level) blast radius is a clean delta over the window (Task 2).
+    plan = compute_load_plan(config)
+    print(f"Load plan ({config['slidingWindowType']}): {plan['requests_count']} requests "
+          f"over ~{plan['duration_s']:.0f}s @ {LOAD_RATE_RPS} req/s")
+    cb_calls_before = snapshot_cb_calls()
+
+    # Sample blast radius mid-load via a thread so the CB is still OPEN (not recovering)
+    # when we read it. The sampling window tracks the (now variable) load duration so
+    # longer TIME_BASED runs are covered, not cut off at a fixed 12s.
     blast_radius_container = [None]
+    sample_deadline_s = plan["duration_s"] + TIME_BASED_MARGIN_S
 
     def _sample_blast_radius():
-        # Poll until blast_radius > 0 (CB has opened) or 12s have elapsed.
-        # A fixed 2s sleep is too short for latency/throttle faults where
-        # requests take 3-5s to complete before the CB can evaluate them.
-        deadline = time.time() + 12
+        deadline = time.time() + sample_deadline_s
         while time.time() < deadline:
             time.sleep(0.5)
             result = get_blast_radius()
@@ -334,8 +471,14 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1)
 
     sampler = threading.Thread(target=_sample_blast_radius, daemon=True)
     sampler.start()
-    throughput, error_rate, avg_latency = generate_load(endpoint)
-    sampler.join(timeout=15)
+    throughput, error_rate, avg_latency = generate_load(
+        endpoint, requests_count=plan["requests_count"],
+        concurrency=plan["concurrency"], interval_s=plan["interval_s"])
+    sampler.join(timeout=sample_deadline_s + 5)
+
+    # Snapshot per-leg CB counters again at the end of the fault window (Task 2).
+    cb_calls_after = snapshot_cb_calls()
+    real_blast_radius = compute_real_blast_radius(cb_calls_before, cb_calls_after)
 
     blast_radius = blast_radius_container[0]
     if blast_radius is None:
@@ -349,7 +492,8 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1)
     # 7. Save results
     throughput_loss = max(0.0, 1.0 - (throughput / baseline_throughput))
     metrics = {
-        "blast_radius": blast_radius,
+        "blast_radius": blast_radius,                 # legacy: % services with an OPEN CB
+        "real_blast_radius": real_blast_radius,       # Task 2: % legs failing real requests
         "throughput_loss": throughput_loss,
         "error_rate": error_rate / 100.0,   # convert % → fraction
         "avg_latency_ms": avg_latency,

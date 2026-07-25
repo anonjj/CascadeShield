@@ -17,6 +17,10 @@ resilience4j:
         allow-health-indicator-to-fail: false
         sliding-window-type: ${CB_SLIDING_WINDOW_TYPE:COUNT_BASED}
         sliding-window-size: ${CB_SLIDING_WINDOW_SIZE:10}
+        # Must be reachable within the window. Resilience4j defaults this to 100, which a
+        # 5-20 call/second window never reaches in a short run, so the breaker never
+        # evaluates (esp. TIME_BASED). Exposed + defaulted low so every swept window fills.
+        minimum-number-of-calls: ${CB_MINIMUM_CALLS:5}
         failure-rate-threshold: ${CB_FAILURE_RATE_THRESHOLD:50}
         wait-duration-in-open-state: ${CB_WAIT_DURATION_OPEN:15s}
         permitted-number-of-calls-in-half-open-state: ${CB_PERMITTED_CALLS_HALF_OPEN:5}

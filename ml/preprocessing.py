@@ -83,12 +83,19 @@ IF_NUMERIC_FEATURES = ["blast_radius", "error_rate", "throughput_loss"]
 IF_FLAG_FEATURES = ["cb_opened", "recovered"]
 IF_FEATURE_NAMES = IF_NUMERIC_FEATURES + IF_FLAG_FEATURES
 
-# blast_radius > tau => "unsafe". blast_radius is a continuous 0.0-1.0 fraction
-# in this branch (see BLAST_RADIUS_SCALE above), so tau=0.1 means "any meaningful
-# damage counts as unsafe" rather than the near-zero-only threshold main's
-# discrete {0.0, 0.2, 0.4} open-breaker-count values would need. Tunable;
-# documented in README.
-DEFAULT_TAU = 0.1
+# blast_radius > tau => "unsafe". main's DEFAULT_TAU=0.1 is calibrated for its
+# discrete real-data distribution (values cluster at {0.0, 0.2, 0.4}, with many
+# rows genuinely at 0.0 -- "zero blast = safe" is a meaningful, common case
+# there). THIS branch's synthetic generator produces a continuous distribution
+# with a hard floor around 0.03-0.06 (see generate_synthetic_data.py's
+# simulate_outcomes: `np.clip(latent + noise, 0.03, 0.99)`) -- almost no row is
+# ever near true zero. Applying main's tau=0.1 here collapsed the label to 19
+# safe / 2897 unsafe (near-constant, cv_f1_macro dropped to 0.45) -- the same
+# degenerate-split failure mode this whole harness-fix effort exists to catch.
+# tau=0.5 is this branch's own calibrated value against its own distribution
+# (743 safe / 2173 unsafe, cv_f1_macro=0.86) and is kept for that reason, not
+# reverted to main's. Tunable; documented in README.
+DEFAULT_TAU = 0.5
 
 
 def load_dataset(path: str | Path) -> pd.DataFrame:

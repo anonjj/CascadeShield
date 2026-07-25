@@ -39,9 +39,15 @@ deployment.
   `ml/preprocessing.py`'s hardcoded `TOPOLOGIES`/`WINDOW_SIZES` constants — those are
   already stale relative to the real sweep (real data only has `topology=LINEAR` so far,
   not the 3-way `LINEAR_CHAIN`/`FAN_OUT`/`SHARED_DEP_MESH` enum).
-- **`blast_radius` is 0–100** (percent of mesh), not a 0.0–1.0 fraction — displayed as-is.
-- **`time_to_open`/`time_to_recover` are always null today** — `runner.py` doesn't wire
-  these up yet (separate, tracked TODO). No chart here touches those columns.
+- **`blast_radius` is a 0.0–1.0 fraction** (share of services that breached their SLO),
+  normalised from the Java endpoint's 0–100 range by `runner.py`'s `get_blast_radius()`.
+  Any dataset generated before this fix will contain 0–100 values and will display
+  incorrectly; regenerate with `python ml/generate_synthetic_data.py` or run a fresh sweep.
+- **`time_to_open`/`time_to_recover` are wired** — `runner.py` now records the wall-clock
+  time from load start to first observed open CB (`time_to_open`) and polls for recovery
+  after Toxiproxy reset (`time_to_recover`). Meaningful nulls remain: `time_to_open=null`
+  means the CB never opened; `time_to_recover=null` means the system did not return to
+  baseline within the observation window.
 - Charts are rendered server-side with matplotlib's `Agg` backend + the object-oriented
   `Figure` API (not global `pyplot`, which isn't thread-safe under Flask's dev server),
   streamed as base64 PNGs embedded directly in the HTML. Nothing is written to disk, so

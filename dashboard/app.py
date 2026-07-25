@@ -27,7 +27,11 @@ def fig_to_base64(fig) -> str:
     return base64.b64encode(buf.getvalue()).decode("ascii")
 
 
-def render_heatmap(pivot, title, fmt="{:.1f}", cmap="Reds"):
+def render_heatmap(pivot, title, fmt="{:.2f}", cmap="Reds"):
+    # Default precision bumped from {:.1f} to {:.2f}: blast_radius/trip_rate are
+    # 0.0-1.0 fractions now (not 0-100 percentages), so 1 decimal place collapsed
+    # most distinct configurations into the same rounded label (e.g. both 0.34
+    # and 0.44 displayed as "0.4").
     fig = Figure(figsize=(4, 3))
     ax = fig.subplots()
     im = ax.imshow(pivot.values, cmap=cmap, vmin=0)
@@ -59,7 +63,8 @@ def render_distribution(count_based_df):
     fault_types = sorted(count_based_df["fault_type"].unique())
     data = [count_based_df.loc[count_based_df["fault_type"] == ft, "blast_radius"].values for ft in fault_types]
     ax.boxplot(data, tick_labels=fault_types, showmeans=True)
-    ax.set_ylabel("Blast radius (% of mesh)")
+    # blast_radius is stored as a 0.0–1.0 fraction (normalised by runner.py).
+    ax.set_ylabel("Blast radius (fraction of mesh, 0–1)")
     ax.set_title("Blast radius distribution (COUNT_BASED runs)")
     return fig_to_base64(fig)
 
@@ -114,9 +119,13 @@ def results():
             no_file=False,
         )
 
-    fig1_median = render_heatmap(dl.blast_pivot(filtered, "median"), "Median blast radius (%)")
-    fig1_mean = render_heatmap(dl.blast_pivot(filtered, "mean"), "Mean blast radius (%)")
-    fig2 = render_heatmap(dl.trip_rate_pivot(filtered), "Breaker trip rate (%)", cmap="Blues")
+    # blast_radius values are 0.0–1.0 fractions (normalised by runner.py).
+    # Labels use the fraction scale; the old 0–100 values in any pre-fix dataset
+    # will appear to be 0.0x — re-run generate_synthetic_data.py or a real sweep
+    # to get correctly-scaled data before publishing these charts.
+    fig1_median = render_heatmap(dl.blast_pivot(filtered, "median"), "Median blast radius (0–1 fraction)")
+    fig1_mean = render_heatmap(dl.blast_pivot(filtered, "mean"), "Mean blast radius (0–1 fraction)")
+    fig2 = render_heatmap(dl.trip_rate_pivot(filtered), "Breaker trip rate (fraction of runs > 0)", cmap="Blues")
     fig3 = render_distribution(dl.count_based_blast(filtered)) if not dl.count_based_blast(filtered).empty else None
     summary_table = dl.compute_summary_stats(filtered).round(4).to_html(index=False, classes="summary-table")
 

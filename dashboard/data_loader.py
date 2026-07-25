@@ -49,15 +49,15 @@ def apply_filters(df: pd.DataFrame, filters: dict) -> pd.DataFrame:
 
 def compute_summary_stats(df: pd.DataFrame) -> pd.DataFrame:
     """Reproduces figures/summary_stats.csv: per (fault_type, window_type),
-    the blast_radius distribution plus the % of runs where the breaker tripped
-    (blast_radius > 0).
+    the blast_radius distribution plus the fraction of runs where the breaker
+    tripped (blast_radius > 0). blast_radius is stored as a 0.0–1.0 fraction.
     """
     grouped = df.groupby(["fault_type", "window_type"])["blast_radius"]
     stats = grouped.agg(n="count", median="median", mean="mean", std="std", min="min", max="max").reset_index()
     trip_rate = (
         df.groupby(["fault_type", "window_type"])["blast_radius"]
-        .apply(lambda s: (s > 0).mean() * 100)
-        .reset_index(name="trip_rate_pct")
+        .apply(lambda s: (s > 0).mean())   # fraction of runs where any CB opened
+        .reset_index(name="trip_rate_frac")
     )
     return stats.merge(trip_rate, on=["fault_type", "window_type"])
 
@@ -68,12 +68,14 @@ def blast_pivot(df: pd.DataFrame, agg: str) -> pd.DataFrame:
 
 
 def trip_rate_pivot(df: pd.DataFrame) -> pd.DataFrame:
-    """fig2: % of runs where the breaker tripped, fault_type x window_type."""
+    """fig2: fraction of runs where any CB tripped (blast_radius > 0).
+    blast_radius is a 0.0–1.0 fraction; the pivot cell is also a fraction.
+    """
     return df.pivot_table(
         index="fault_type",
         columns="window_type",
         values="blast_radius",
-        aggfunc=lambda s: (s > 0).mean() * 100,
+        aggfunc=lambda s: (s > 0).mean(),   # fraction, not percent
     )
 
 

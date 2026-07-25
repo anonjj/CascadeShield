@@ -18,9 +18,10 @@ ml/feature_engineering.md:
     list so the encoded matrix (and the Lambda contract) is stable once they land.
   * window_type             -> single binary column window_type_is_time.
   * threshold/window_size/wait_duration -> numeric, untouched (trees split, no scaling).
-  * blast_radius is rescaled from the sweep's percent scale (0/20/40) to a 0.0-1.0
-    fraction (/100) so it is comparable against DEFAULT_TAU. A drift guard warns if a
-    value still exceeds 1.0 after scaling.
+  * blast_radius is emitted directly as a 0.0-1.0 fraction by runner.py /
+    generate_synthetic_data.py (no rescale needed here; BLAST_RADIUS_SCALE=1.0).
+    A drift guard still warns if a value exceeds 1.0, which would mean the
+    source scale changed again.
   * Outcomes feed the Isolation Forest. time_to_open / time_to_recover have
     MEANINGFUL nulls (breaker never opened / never recovered) -- per the data
     dictionary we do NOT mean-impute. We encode the *event* via companion booleans
@@ -49,8 +50,14 @@ THRESHOLDS = [30, 50, 70]
 WINDOW_SIZES = [5, 10, 20]      # matches the real sweep (was the planned [10, 50, 100])
 WAIT_DURATIONS = [5, 15, 30]    # matches the real sweep (was the planned [5, 10, 30])
 
-# blast_radius arrives on a percent scale (0/20/40); divide by this to get a 0-1 fraction.
-BLAST_RADIUS_SCALE = 100.0
+# blast_radius is already a 0.0-1.0 fraction in this branch: runner.py's
+# get_blast_radius() normalises the Java endpoint's 0-100 range at the source
+# (raw / 100.0) before writing to the CSV, and generate_synthetic_data.py emits
+# the same 0.0-1.0 scale directly -- so no further rescale happens here. (main's
+# preprocessing.py still divides by 100 because main's own runner.py writes the
+# raw 0-100 value; this constant stays 1.0 to match THIS branch's convention,
+# not main's, or every value would be silently divided by 100 twice.)
+BLAST_RADIUS_SCALE = 1.0
 
 FEATURE_COLUMNS = ["topology", "fault_type", "window_type",
                    "threshold", "window_size", "wait_duration"]
@@ -76,11 +83,19 @@ IF_NUMERIC_FEATURES = ["blast_radius", "error_rate", "throughput_loss"]
 IF_FLAG_FEATURES = ["cb_opened", "recovered"]
 IF_FEATURE_NAMES = IF_NUMERIC_FEATURES + IF_FLAG_FEATURES
 
-# blast_radius > tau => "unsafe". After the /100 rescale, blast_radius is a fraction in
-# {0.0, 0.2, 0.4}, so tau=0.5 would collapse everything into a single "all safe" class.
-# tau=0.1 preserves the pre-rescale semantics ("zero blast radius = safe, any propagation
-# = unsafe") and reproduces the 325 safe / 161 unsafe split. Tunable; documented in README.
-DEFAULT_TAU = 0.1
+# blast_radius > tau => "unsafe". main's DEFAULT_TAU=0.1 is calibrated for its
+# discrete real-data distribution (values cluster at {0.0, 0.2, 0.4}, with many
+# rows genuinely at 0.0 -- "zero blast = safe" is a meaningful, common case
+# there). THIS branch's synthetic generator produces a continuous distribution
+# with a hard floor around 0.03-0.06 (see generate_synthetic_data.py's
+# simulate_outcomes: `np.clip(latent + noise, 0.03, 0.99)`) -- almost no row is
+# ever near true zero. Applying main's tau=0.1 here collapsed the label to 19
+# safe / 2897 unsafe (near-constant, cv_f1_macro dropped to 0.45) -- the same
+# degenerate-split failure mode this whole harness-fix effort exists to catch.
+# tau=0.5 is this branch's own calibrated value against its own distribution
+# (743 safe / 2173 unsafe, cv_f1_macro=0.86) and is kept for that reason, not
+# reverted to main's. Tunable; documented in README.
+DEFAULT_TAU = 0.5
 
 
 def load_dataset(path: str | Path) -> pd.DataFrame:
@@ -147,10 +162,12 @@ def featurize_config(topology: str, fault_type: str, window_type: str,
 
 
 def blast_radius_fraction(df: pd.DataFrame) -> pd.Series:
-    """blast_radius rescaled from the sweep's percent scale (0/20/40) to a 0-1 fraction.
+    """blast_radius as a 0-1 fraction. Already stored that way in this branch
+    (BLAST_RADIUS_SCALE=1.0, a no-op division) -- kept as a function so every
+    consumer routes through one place if the source scale ever changes again.
 
-    A drift guard warns if any value still exceeds 1.0 after scaling, which would mean
-    the incoming scale changed again (e.g. a raw count) and DEFAULT_TAU no longer applies.
+    A drift guard warns if any value exceeds 1.0, which would mean the incoming
+    scale changed (e.g. back to a raw percent) and DEFAULT_TAU no longer applies.
     """
     frac = df["blast_radius"].astype(float) / BLAST_RADIUS_SCALE
     over = frac > 1.0

@@ -449,6 +449,7 @@ cd dashboard && pip install -r requirements.txt && python app.py
 ## Team
 
 **Soham** — Backend, Resilience & ML Engineer: Order/Inventory business services, Resilience4j integration, dataset schema, ML pipeline, paper methodology.
+
 **Jay** — Platform, Observability & Chaos Engineer: Gateway + mesh services, Docker Compose stack, Prometheus/Grafana, Toxiproxy fault injection, experiment runner, AWS deployment.
 
 ## License

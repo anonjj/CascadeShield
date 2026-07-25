@@ -14,12 +14,20 @@ BEFORE the real 486-config chaos sweep has run on the mesh.
 
 How it works
 ------------
-Reads the 486 planned configurations from data/experiment_matrix.csv and, for
-each (config x environment x replicate), simulates the 5 measured outcomes with
-a documented response model that encodes the study's working hypotheses:
+Builds the 486 real-sweep configurations directly from ml/preprocessing.py's
+schema constants (topology/fault/window/threshold/window_size/wait_duration),
+NOT from data/experiment_matrix.csv -- that file documents the originally
+*planned* grid, which the real sweep deviated from (see data/DATA_DICTIONARY.md's
+"Sweep vs. plan" note: real window_size={5,10,20}/wait_duration={5,15,30}/
+topology=LINEAR, vs. the plan's {10,50,100}/{5,10,30}/LINEAR_CHAIN). Building
+from preprocessing.py keeps synthetic data schema-identical to the real one
+and prevents the two from drifting apart again.
+
+For each (config x environment x replicate), simulates the 5 measured outcomes
+with a documented response model that encodes the study's working hypotheses:
 
   * Fault contagion:   CRASH > LATENCY > THROTTLE.
-  * Topology blast:    SHARED_DEP_MESH > FAN_OUT > LINEAR_CHAIN (shared deps
+  * Topology blast:    SHARED_DEP_MESH > FAN_OUT > LINEAR (shared deps
                        cause common-mode failure).
   * Breaker tightness: looser breakers (higher threshold, larger window) contain
                        less, so blast radius goes up.
@@ -48,6 +56,11 @@ import numpy as np
 import pandas as pd
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPT_DIR))
+from preprocessing import (  # noqa: E402
+    FAULT_TYPES, THRESHOLDS, TOPOLOGIES, WAIT_DURATIONS, WINDOW_SIZES, WINDOW_TYPES,
+)
+
 DATA_DIR = SCRIPT_DIR.parent / "data"
 
 # ---- the 17-column master schema (must stay identical to runner.py DATASET_HEADERS) ----
@@ -59,14 +72,18 @@ SCHEMA_COLUMNS = [
     "blast_radius", "time_to_open", "time_to_recover",
     "error_rate", "throughput_loss",
 ]
-FEATURE_COLUMNS = ["topology", "fault_type", "window_type",
-                   "threshold", "window_size", "wait_duration"]
+
+# Short codes for experiment_id generation, matching runner.py's make_experiment_id
+# naming style (e.g. LIN-LAT-CNT-T30-W10-D5).
+TOPO_CODE = {"LINEAR": "LIN", "FAN_OUT": "FAN", "SHARED_DEP_MESH": "MSH"}
+FAULT_CODE = {"LATENCY": "LAT", "CRASH": "CRS", "THROTTLE": "THR"}
+WTYPE_CODE = {"COUNT_BASED": "CNT", "TIME_BASED": "TIM"}
 
 # ---- response-model coefficients (all documented in README.md) ----------------
 FAULT_BASE = {"CRASH": 0.55, "LATENCY": 0.45, "THROTTLE": 0.30}
-# Topology keys must match SCHEMA_COLUMNS topology values exactly (LINEAR_CHAIN,
-# not LINEAR) so one-hot encoding in preprocessing.py produces non-zero columns.
-TOPO_MULT = {"SHARED_DEP_MESH": 1.30, "FAN_OUT": 1.05, "LINEAR_CHAIN": 0.82}
+# Topology keys must match preprocessing.TOPOLOGIES exactly (LINEAR, matching the
+# real sweep) so one-hot encoding in preprocessing.py produces non-zero columns.
+TOPO_MULT = {"SHARED_DEP_MESH": 1.30, "FAN_OUT": 1.05, "LINEAR": 0.82}
 # (fault_type, window_type) -> additive effect on blast radius. The sign flip
 # across fault types is the empirical novelty the study is built to surface.
 WT_INTERACTION = {
@@ -76,9 +93,11 @@ WT_INTERACTION = {
 }
 FAULT_ERROR_ADJ = {"CRASH": 0.08, "LATENCY": 0.02, "THROTTLE": -0.03}
 
-THRESHOLD_RANGE = (30, 70)
-WINDOW_RANGE = (10, 100)
-WAIT_RANGE = (5, 30)
+# Normalisation bounds derived directly from preprocessing.py's real sweep grid
+# so they can never drift out of sync with it again.
+THRESHOLD_RANGE = (min(THRESHOLDS), max(THRESHOLDS))
+WINDOW_RANGE = (min(WINDOW_SIZES), max(WINDOW_SIZES))
+WAIT_RANGE = (min(WAIT_DURATIONS), max(WAIT_DURATIONS))
 OBSERVATION_WINDOW_S = 120.0  # past this, "not recovered" -> meaningful null
 
 ANOMALY_KINDS = ("blast_spike", "error_blast_decouple", "recover_flip")
@@ -182,13 +201,40 @@ def inject_anomaly(out: dict, rng: np.random.Generator) -> tuple[dict, str]:
     return out, kind
 
 
-def generate(matrix_path: Path, out_path: Path, truth_path: Path,
+def _build_config_grid() -> pd.DataFrame:
+    """Builds the 486-config grid as the cartesian product of preprocessing.py's
+    real sweep constants -- the single source of truth for topology/fault/window
+    values, kept in sync with runner.py's DATASET_HEADERS. Deliberately does NOT
+    read data/experiment_matrix.csv (see module docstring: that file is the
+    originally planned grid, not what the real sweep ran)."""
+    rows = []
+    for topology in TOPOLOGIES:
+        for fault_type in FAULT_TYPES:
+            for window_type in WINDOW_TYPES:
+                for threshold in THRESHOLDS:
+                    for window_size in WINDOW_SIZES:
+                        for wait_duration in WAIT_DURATIONS:
+                            experiment_id = (
+                                f"{TOPO_CODE[topology]}-{FAULT_CODE[fault_type]}"
+                                f"-{WTYPE_CODE[window_type]}-T{threshold}"
+                                f"-W{window_size}-D{wait_duration}"
+                            )
+                            rows.append({
+                                "experiment_id": experiment_id,
+                                "topology": topology,
+                                "fault_type": fault_type,
+                                "window_type": window_type,
+                                "threshold": threshold,
+                                "window_size": window_size,
+                                "wait_duration": wait_duration,
+                            })
+    return pd.DataFrame(rows)
+
+
+def generate(out_path: Path, truth_path: Path,
              environments, replicates: int, anomaly_rate: float, seed: int) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
-    matrix = pd.read_csv(matrix_path)
-    missing = [c for c in (["experiment_id"] + FEATURE_COLUMNS) if c not in matrix.columns]
-    if missing:
-        raise SystemExit(f"experiment_matrix.csv missing columns: {missing}")
+    matrix = _build_config_grid()
 
     base_ts = datetime(2026, 6, 21, 9, 0, 0, tzinfo=timezone.utc)
     rows, truth_rows = [], []
@@ -239,7 +285,6 @@ def generate(matrix_path: Path, out_path: Path, truth_path: Path,
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description="Generate a synthetic, schema-conformant CascadeShield dataset.")
-    p.add_argument("--matrix", type=Path, default=DATA_DIR / "experiment_matrix.csv")
     p.add_argument("--out", type=Path, default=DATA_DIR / "master_dataset.csv")
     p.add_argument("--truth-out", type=Path, default=DATA_DIR / "_synthetic_truth.csv")
     p.add_argument("--environments", default="LOCAL,AWS",
@@ -250,7 +295,7 @@ def main(argv=None) -> int:
     args = p.parse_args(argv)
 
     environments = [e.strip().upper() for e in args.environments.split(",") if e.strip()]
-    df = generate(args.matrix, args.out, args.truth_out,
+    df = generate(args.out, args.truth_out,
                   environments, args.replicates, args.anomaly_rate, args.seed)
 
     n_open_null = df["time_to_open"].isna().sum()

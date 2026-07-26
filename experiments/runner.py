@@ -260,17 +260,23 @@ def generate_load(endpoint_url, requests_count=50, concurrency=5, interval_s=0.0
 
 def get_blast_radius():
     """Queries the Gateway's custom aggregator endpoint for the current blast radius.
-    
-    Returns the blast radius as a float, or None if the measurement failed.
-    Returning None (rather than 0.0) ensures failed measurements are distinguishable
-    from a genuinely healthy mesh with no open circuit breakers in the CSV dataset.
+
+    Returns the blast radius as a float in [0.0, 1.0], or None if the
+    measurement failed.  Returning None (rather than 0.0) ensures failed
+    measurements are distinguishable from a genuinely healthy mesh with no
+    open circuit breakers in the CSV dataset.
+
+    The Java BlastRadiusService returns values on a 0–100 scale (percent).
+    We normalise to 0.0–1.0 here so every downstream consumer (preprocessing,
+    DATA_DICTIONARY, Isolation Forest) sees a consistent fraction.
     """
     url = "http://localhost:8080/api/v1/blast-radius"
     try:
         with urllib.request.urlopen(url, timeout=2) as response:
             if response.status == 200:
                 data = json.loads(response.read().decode("utf-8"))
-                return data.get("blastRadius", 0.0)
+                raw = data.get("blastRadius", 0.0)   # Java returns 0–100
+                return round(raw / 100.0, 6)          # normalise → 0.0–1.0
     except Exception as e:
         print(f"Failed to query blast radius from Gateway: {e}", file=sys.stderr)
     return None  # Sentinel: distinguishable from a real 0.0 (healthy mesh)
@@ -318,8 +324,8 @@ def snapshot_cb_calls():
     return snap
 
 def compute_real_blast_radius(before, after, tau=REAL_BLAST_LEG_ERROR_THRESHOLD):
-    """Fraction (as a percent, comparable to legacy blast_radius) of observed legs whose
-    per-leg failure rate over the fault window exceeded tau.
+    """Fraction (0.0-1.0, same scale as the legacy blast_radius after normalisation) of
+    observed legs whose per-leg failure rate over the fault window exceeded tau.
 
     Leg damage = failed + rejected(not_permitted): a call that was short-circuited by an
     OPEN breaker never reached the downstream, so from the caller's perspective it is
@@ -347,7 +353,7 @@ def compute_real_blast_radius(before, after, tau=REAL_BLAST_LEG_ERROR_THRESHOLD)
             degraded_legs += 1
     if observed_legs == 0:
         return None
-    return degraded_legs / observed_legs * 100.0
+    return degraded_legs / observed_legs   # 0.0-1.0 fraction, matches normalised blast_radius
 
 def make_experiment_id(topology, fault_type, config):
     """Builds a deterministic ID matching experiment_matrix.csv e.g. LIN-LAT-CNT-T50-W10-D15."""
@@ -477,21 +483,43 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1)
     # Sample blast radius mid-load via a thread so the CB is still OPEN (not recovering)
     # when we read it. The sampling window tracks the (now variable) load duration so
     # longer TIME_BASED runs are covered, not cut off at a fixed 12s.
+    cb_open_at = [None]           # wall-clock time when CB first opened (for time_to_open)
     blast_radius_container = [None]
     sample_deadline_s = plan["duration_s"] + TIME_BASED_MARGIN_S
 
     def _sample_blast_radius():
+        # Poll until blast_radius > 0 (CB has opened) or the load window elapses.
+        # NOTE: time_to_open is stamped at poll-success time, not the true CB open
+        # event, so it carries up to ~1 poll-interval + HTTP timeout of upward bias.
+        # A precise value needs a Resilience4j CB event listener; this poll cadence
+        # keeps that bias small rather than eliminating it. The deadline tracks the
+        # (variable) load duration so longer TIME_BASED runs aren't cut off at 12s.
         deadline = time.time() + sample_deadline_s
         while time.time() < deadline:
-            time.sleep(0.5)
+            time.sleep(0.2)
             result = get_blast_radius()
             if result is not None and result > 0.0:
                 blast_radius_container[0] = result
+                cb_open_at[0] = time.time()   # record when we first saw an open CB
                 return
-        blast_radius_container[0] = get_blast_radius()  # final read at load end
+        # Final read after the deadline: for latency/throttle faults, each request
+        # can take 3-5s, so the CB may not trip until after the 12s poll window.
+        # If this read finds a nonzero blast radius, stamp cb_open_at here too —
+        # otherwise we'd write a row with blast_radius > 0 but time_to_open = null,
+        # a logically impossible combination that corrupts the ML outcome columns.
+        final = get_blast_radius()
+        if final is None and blast_radius_container[0] is None:
+            # Every poll returned None — gateway was unreachable throughout the
+            # trip window.  Leave blast_radius_container[0] as None so the run
+            # is aborted below rather than written as a fabricated healthy row.
+            return
+        blast_radius_container[0] = final if final is not None else 0.0
+        if final is not None and final > 0.0:
+            cb_open_at[0] = time.time()
 
     sampler = threading.Thread(target=_sample_blast_radius, daemon=True)
     sampler.start()
+    load_start = time.time()   # reference for time_to_open (cb_open_at - load_start)
     throughput, error_rate, avg_latency = generate_load(
         endpoint, requests_count=plan["requests_count"],
         concurrency=plan["concurrency"], interval_s=plan["interval_s"])
@@ -502,24 +530,83 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1)
     real_blast_radius = compute_real_blast_radius(cb_calls_before, cb_calls_after)
 
     blast_radius = blast_radius_container[0]
+    # Bug #3 guard: if every blast-radius poll returned None the gateway was
+    # unreachable for the entire trip window.  Writing a 0.0 blast row here
+    # would fabricate a "healthy mesh" observation — abort instead.
     if blast_radius is None:
-        print("Blast radius measurement failed — skipping run.", file=sys.stderr)
+        print(
+            "Blast radius measurement failed (gateway unreachable throughout trip window) "
+            "— aborting run to avoid writing a fabricated healthy-mesh row.",
+            file=sys.stderr,
+        )
         toxiproxy.reset_all()
         return False
+
+    # Determine whether a circuit breaker actually opened during this run.
+    # Used to gate the recovery-phase timing so we never write a row with
+    # time_to_open=null but time_to_recover=non-null (logically impossible).
+    cb_opened = cb_open_at[0] is not None
 
     # 6. Reset Toxiproxy
     toxiproxy.reset_all()
 
-    # 7. Save results
+    # 7. Measure time_to_open and time_to_recover.
+    #    time_to_recover is ONLY computed when a breaker was confirmed open
+    #    (cb_opened=True). Running the recovery phase unconditionally produces
+    #    the corrupt combination: time_to_open=null + time_to_recover=0.5 s.
+    time_to_open = None
+    time_to_recover = None
+
+    if cb_opened:
+        time_to_open = round(cb_open_at[0] - load_start, 3)
+
+        # Poll for recovery, driving light traffic each iteration. Two caveats,
+        # documented rather than silently glossed over:
+        #  1. Resilience4j auto-transitions OPEN -> HALF_OPEN purely on elapsed
+        #     wait_duration, with no traffic required, and the Gateway's
+        #     blast-radius endpoint (BlastRadiusService.hasOpenCircuitBreaker)
+        #     only flags the literal "CIRCUIT_OPEN" status -- so blast_radius
+        #     reads 0.0 the moment the breaker LEAVES OPEN, before it has
+        #     necessarily reached CLOSED. Without traffic, a HALF_OPEN breaker
+        #     can't even attempt its permitted probe calls, so we send a few
+        #     real requests each iteration to give it that chance.
+        #  2. This still can't perfectly distinguish "HALF_OPEN, about to
+        #     re-open" from "genuinely CLOSED" using only this endpoint -- that
+        #     would need the breaker's precise state (e.g. via
+        #     /actuator/circuitbreakerevents STATE_TRANSITION events, not
+        #     wired here). To reduce (not eliminate) false-early recovery
+        #     reads, require the reading to stay at 0.0 across two consecutive
+        #     probes, one second apart, before declaring recovery.
+        recovery_deadline = time.time() + config["waitDurationInOpenState"] + 10
+        consecutive_zero_reads = 0
+        while time.time() < recovery_deadline:
+            time.sleep(1.0)
+            try:
+                with urllib.request.urlopen(endpoint, timeout=5) as res:
+                    res.read()
+            except Exception:
+                pass
+            current_br = get_blast_radius()
+            if current_br is not None and current_br == 0.0:
+                consecutive_zero_reads += 1
+                if consecutive_zero_reads >= 2:
+                    time_to_recover = round(time.time() - cb_open_at[0], 3)
+                    break
+            else:
+                consecutive_zero_reads = 0
+        # If we exit the loop without recovering, time_to_recover stays None
+        # (meaningful null: system did not return to baseline within the window).
+
+    # 8. Save results
     throughput_loss = max(0.0, 1.0 - (throughput / baseline_throughput))
     metrics = {
-        "blast_radius": blast_radius,                 # legacy: % services with an OPEN CB
-        "real_blast_radius": real_blast_radius,       # Task 2: % legs failing real requests
+        "blast_radius": blast_radius,                 # normalised 0.0-1.0 by get_blast_radius()
+        "real_blast_radius": real_blast_radius,       # Task 2: fraction of legs failing real requests
         "throughput_loss": throughput_loss,
         "error_rate": error_rate / 100.0,   # convert % → fraction
         "avg_latency_ms": avg_latency,
-        "time_to_open": None,    # TODO: wire from CB event listener in a future PR
-        "time_to_recover": None,
+        "time_to_open": time_to_open,
+        "time_to_recover": time_to_recover,
     }
     log_results(config, fault_type, mode, topology, metrics, replicate)
     return True

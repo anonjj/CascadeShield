@@ -52,7 +52,7 @@ def main(argv=None) -> int:
 
     _banner("DONE")
     print("artifacts:")
-    print("  data/master_dataset.csv        (15-col dataset; swap for real sweep output)")
+    print("  data/master_dataset.csv        (17-col dataset; swap for real sweep output)")
     print("  data/feature_importance.csv    (recommender feature ranking)")
     print("  data/anomalies.csv             (flagged runs)")
     print("  ml/models/decision_tree.pkl    (recommender bundle -> Lambda)")

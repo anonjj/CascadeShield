@@ -35,12 +35,14 @@ past 486 (e.g. 486 configs × 2 environments × 3 replicates = 2,916 rows).
 | `window_size` | int | `{5, 10, 20}` (range 1–1000) | **calls if COUNT_BASED, seconds if TIME_BASED** | numeric (see note) |
 | `wait_duration` | int | `{5, 15, 30}` (range 1–600) | seconds in OPEN state | numeric |
 
-> **Sweep vs. plan.** The values above reflect the **actual 486-run sweep** in
-> `master_dataset.csv`. Only the `LINEAR` topology has been run so far; `experiment_matrix.csv`
-> still lists the originally *planned* grid (`LINEAR_CHAIN`/`FAN_OUT`/`SHARED_DEP_MESH`,
-> `window_size {10,50,100}`, `wait_duration {5,10,30}`). `preprocessing.py` keeps the
-> unrun topologies in its one-hot category list so the feature matrix stays stable when
-> they land.
+> **Sweep vs. plan.** The values above reflect the **real sweep grid** (what `runner.py`
+> actually sweeps), not `experiment_matrix.csv`, which still lists the originally *planned*
+> grid (`LINEAR_CHAIN`/`FAN_OUT`/`SHARED_DEP_MESH`, `window_size {10,50,100}`,
+> `wait_duration {5,10,30}`) and is kept only as historical documentation.
+> `ml/generate_synthetic_data.py` builds its config grid directly from
+> `ml/preprocessing.py`'s constants (not from `experiment_matrix.csv`) so it stays
+> schema-identical to the real grid. **`data/master_dataset.csv` is currently
+> synthetic placeholder data** — real measured data replaces it once a live sweep runs.
 
 > **`window_size` unit warning.** Its meaning *changes with `window_type`*: a value of `50` means
 > "50 calls" under COUNT_BASED but "50 seconds" under TIME_BASED. The raw number is therefore not
@@ -66,7 +68,7 @@ past 486 (e.g. 486 configs × 2 environments × 3 replicates = 2,916 rows).
 
 | Column | Type | Range | Unit | Null when… |
 |--------|------|-------|------|------------|
-| `blast_radius` | float | raw `{0, 20, 40}` (percent) → scaled `0.0–1.0` | fraction | never null. **Primary outcome.** Share of the topology's services that breached their error-rate SLO during the fault window. Stored on a **percent** scale in the CSV; `preprocessing.py` divides by 100 to a 0–1 fraction (comparable to `DEFAULT_TAU`). |
+| `blast_radius` | float | `0.0–1.0` | fraction | never null. **Primary outcome.** Share of the topology's services that breached their error-rate SLO during the fault window. Emitted directly as a 0.0–1.0 fraction: the Java `BlastRadiusService` endpoint returns 0–100 and `runner.py`'s `get_blast_radius()` normalises to the fraction before writing to CSV — `preprocessing.py` does not rescale it again (`BLAST_RADIUS_SCALE = 1.0`). |
 | `time_to_open` | float | `≥ 0` | seconds | CB never opened (threshold not reached / fault too mild) → **null is meaningful, not missing** |
 | `time_to_recover` | float | `≥ 0` | seconds | system did not return to baseline within the observation window → null is meaningful |
 | `error_rate` | float | `0.0–1.0` | fraction | never null. Peak error rate across the mesh during the fault. |
@@ -84,16 +86,26 @@ past 486 (e.g. 486 configs × 2 environments × 3 replicates = 2,916 rows).
 - **Decision Tree recommender** — features = the 6 independent variables; target = a label derived
   from `blast_radius` (`safe` if `blast_radius ≤ τ`, else `unsafe`). Given a desired fault/topology, it
   recommends a CB config. Interpretability is the reason it was chosen over deep learning.
-  - **τ = 0.1** (`DEFAULT_TAU` in `preprocessing.py`). After the `blast_radius` /100 rescale, values
-    are `{0.0, 0.2, 0.4}`, so the earlier `τ = 0.5` collapsed every row into a single "all safe" class
-    (untrainable). `τ = 0.1` preserves the original pre-rescale semantics — *zero blast radius = safe,
-    any propagation = unsafe* — and reproduces the **325 safe / 161 unsafe** split.
-- **Isolation Forest anomaly detector** — fit on the (scaled) outcome columns to flag
-  config/outcome combinations that behave unexpectedly (e.g. a "safe-looking" config that produced a
-  large blast radius). `StandardScaler` before fitting.
+  - **τ = 0.1** (`DEFAULT_TAU` in `preprocessing.py`). `blast_radius` is already a 0.0–1.0
+    fraction (no rescale in this branch), so `τ = 0.1` means *any meaningful propagation
+    counts as unsafe* — the earlier `τ = 0.5` would have collapsed most rows into a single
+    "all safe" class (untrainable). Tunable; see `ml/preprocessing.py`.
+- **Isolation Forest anomaly detector** — fit on the outcome columns to flag config/outcome
+  combinations that behave unexpectedly (e.g. a "safe-looking" config that produced a large
+  blast radius). Feature set (see `ml/preprocessing.py → build_outcome_frame`):
+  - Numeric (StandardScaler-normalised): `blast_radius`, `error_rate`, `throughput_loss`
+  - Boolean flags for meaningful nulls: `cb_opened` (1 if `time_to_open` is non-null),
+    `recovered` (1 if `time_to_recover` is non-null)
+  - **`open_breaker_rate` is NOT an Isolation Forest feature** — it is not in the dataset
+    schema and is not computed anywhere in the pipeline.
 
 ## Source of truth for outcome values
 
 Each measured column maps 1:1 to a Prometheus metric scraped during the run (Jay's stack). The
 `blast_radius` metric in particular **must** fire and be scrapable before any full sweep — confirm
 this in the Week 2 metrics-exposure check.
+
+**Current state:** `data/master_dataset.csv` is synthetic (`ml/generate_synthetic_data.py`), not
+measured — see the `*** THIS DATA IS SIMULATED ***` notice in that script. It exists so the ML
+pipeline can be developed and demonstrated before the real sweep lands; swap it for real
+`runner.py` output (`python ml/train_all.py --no-generate`) once that sweep runs.

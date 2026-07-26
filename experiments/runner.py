@@ -70,9 +70,16 @@ COUNT_BASED_WINDOW_MULTIPLE = 3    # fire >= this * slidingWindowSize calls
 COUNT_BASED_MIN_REQUESTS = 40      # floor: keep error-rate estimate statistically stable
 
 # ---- Real (request-level) blast radius (Task 2) ------------------------------
-# Downstream services whose real per-leg failure we observe from Resilience4j call
-# outcomes (NOT circuit-breaker OPEN/CLOSED state). Ports are published by docker-compose.
-DOWNSTREAM_METRIC_TARGETS = {
+# CB-bearing nodes whose real per-leg failure we observe from Resilience4j call outcomes
+# (NOT circuit-breaker OPEN/CLOSED state). Ports are published by docker-compose.
+# The GATEWAY is included: failure registers on the CALLER side, and in linear/fanout the
+# gateway's outbound breakers are where propagation shows up first -- once the gateway CB
+# opens it stops calling downstream, so the deeper services can look "healthy". A live
+# diagnostic under a latency fault confirmed 115 not_permitted rejections on the gateway vs
+# ~0 failures on the five downstream services. Omitting the gateway made real blast radius
+# read 0. shared-db-service is a leaf with no CB (scrapes as None, excluded automatically).
+CB_METRIC_TARGETS = {
+    "gateway-service": "http://localhost:8080",
     "order-service": "http://localhost:8081",
     "inventory-service": "http://localhost:8082",
     "payment-service": "http://localhost:8083",
@@ -272,13 +279,16 @@ def get_blast_radius():
 # The legacy get_blast_radius() above measures breaker STATE (% of services with an OPEN
 # CB). A service can fail every request with its breaker still CLOSED and score 0% there.
 # The functions below instead measure REAL observed failures per leg, from Resilience4j
-# call-outcome counters (kind=successful/failed) -- which reflect actual call results, not
-# the OPEN/CLOSED state. See docs/proposals/blast-radius-redefinition.md.
+# call-outcome counters (failed + not_permitted vs successful) -- actual call results, not
+# the OPEN/CLOSED state. not_permitted (calls short-circuited by an OPEN breaker) is counted
+# as damage: the canary showed that omitting it made latency faults read 0% real blast
+# radius despite 70-94% gateway error rate. See docs/proposals/blast-radius-redefinition.md.
 
-def _get_cb_call_count(base_url, kind):
-    """Sum of resilience4j.circuitbreaker.calls (kind=successful|failed) across a service's
-    CB instances, via its actuator metrics endpoint. Returns float, or None if unreachable."""
-    url = f"{base_url}/actuator/metrics/resilience4j.circuitbreaker.calls?tag=kind:{kind}"
+def _get_cb_metric_count(base_url, metric, kind):
+    """Sum of a resilience4j circuit-breaker COUNT metric across a service's CB instances,
+    filtered by kind, via its actuator metrics endpoint. Returns float, or None if
+    unreachable / metric absent."""
+    url = f"{base_url}/actuator/metrics/{metric}?tag=kind:{kind}"
     try:
         with urllib.request.urlopen(url, timeout=2) as response:
             if response.status == 200:
@@ -291,38 +301,49 @@ def _get_cb_call_count(base_url, kind):
     return None
 
 def snapshot_cb_calls():
-    """Per-service cumulative call outcomes. {service: {"success": x, "failed": y}} or
-    {service: None} when that service exposes no CB metric / is unreachable."""
+    """Per-service cumulative call outcomes from Resilience4j counters:
+      success  = calls{kind=successful}   (includes slow-but-completed calls)
+      failed   = calls{kind=failed}       (recorded exceptions)
+      rejected = not.permitted.calls      (calls short-circuited while the breaker is OPEN)
+    'ignored' calls (business 4xx rejections) are deliberately excluded -- they are not
+    infrastructure failures. Returns {service: {...}} or {service: None} when a service
+    exposes no CB metric / is unreachable."""
     snap = {}
-    for svc, base in DOWNSTREAM_METRIC_TARGETS.items():
-        success = _get_cb_call_count(base, "successful")
-        failed = _get_cb_call_count(base, "failed")
-        snap[svc] = None if (success is None and failed is None) else {
-            "success": success or 0.0, "failed": failed or 0.0}
+    for svc, base in CB_METRIC_TARGETS.items():
+        success = _get_cb_metric_count(base, "resilience4j.circuitbreaker.calls", "successful")
+        failed = _get_cb_metric_count(base, "resilience4j.circuitbreaker.calls", "failed")
+        rejected = _get_cb_metric_count(base, "resilience4j.circuitbreaker.not.permitted.calls", "not_permitted")
+        snap[svc] = None if (success is None and failed is None and rejected is None) else {
+            "success": success or 0.0, "failed": failed or 0.0, "rejected": rejected or 0.0}
     return snap
 
 def compute_real_blast_radius(before, after, tau=REAL_BLAST_LEG_ERROR_THRESHOLD):
     """Fraction (as a percent, comparable to legacy blast_radius) of observed legs whose
-    per-leg error rate over the fault window exceeded tau.
+    per-leg failure rate over the fault window exceeded tau.
 
-    A leg is only counted if it was actually exercised during the window (calls > 0) and
-    measurable in both snapshots. Returns None if no leg was observable -- a meaningful
-    null (measurement gap), never a fabricated 0.0."""
+    Leg damage = failed + rejected(not_permitted): a call that was short-circuited by an
+    OPEN breaker never reached the downstream, so from the caller's perspective it is
+    propagated failure, not success. Slow-but-completed calls stay counted as success.
+        leg_failure_rate = (failed + rejected) / (successful + failed + rejected)
+    A leg is only counted if it was actually exercised during the window and measurable in
+    both snapshots. Returns None if no leg was observable -- a meaningful null (measurement
+    gap), never a fabricated 0.0. See docs/proposals/blast-radius-redefinition.md."""
     if not before or not after:
         return None
     observed_legs = 0
     degraded_legs = 0
-    for svc in DOWNSTREAM_METRIC_TARGETS:
+    for svc in CB_METRIC_TARGETS:
         b, a = before.get(svc), after.get(svc)
         if not b or not a:
             continue  # leg not measurable this run
         d_success = max(a["success"] - b["success"], 0.0)
         d_failed = max(a["failed"] - b["failed"], 0.0)
-        total = d_success + d_failed
+        d_rejected = max(a["rejected"] - b["rejected"], 0.0)
+        total = d_success + d_failed + d_rejected
         if total <= 0:
             continue  # leg not exercised during the window
         observed_legs += 1
-        if (d_failed / total) > tau:
+        if ((d_failed + d_rejected) / total) > tau:
             degraded_legs += 1
     if observed_legs == 0:
         return None

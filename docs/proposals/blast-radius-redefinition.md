@@ -23,15 +23,20 @@ Written to the existing `blast_radius` column. **Unchanged by this proposal.**
 ### Definition B — proposed: "% of legs actually failing requests" (request outcomes)
 
 Measured by the runner (`experiments/runner.py`) from Resilience4j **call-outcome**
-counters — `resilience4j.circuitbreaker.calls{kind=successful|failed}` — scraped from each
-service's actuator `/actuator/metrics` endpoint immediately **before** and **after** the
-fault window. For each leg we take the delta over the window:
+counters scraped from each service's actuator `/actuator/metrics` endpoint immediately
+**before** and **after** the fault window. Per leg, over the window delta:
 
 ```
-leg_error_rate      = failed / (successful + failed)          # over the fault window only
-leg is "degraded"   iff leg_error_rate > TAU_LEG
-blast_radius_B      = (# degraded legs) / (# observed legs) * 100
+leg_failure_rate  = (failed + not_permitted) / (successful + failed + not_permitted)
+leg is "degraded" iff leg_failure_rate > TAU_LEG
+blast_radius_B    = (# degraded legs) / (# observed legs) * 100
 ```
+
+where `successful`/`failed` come from `resilience4j.circuitbreaker.calls{kind=…}` and
+`not_permitted` from `resilience4j.circuitbreaker.not.permitted.calls`. `not_permitted`
+calls (short-circuited by an OPEN breaker) are counted as damage — see the canary evidence
+in §6. `ignored` calls (business 4xx rejections) are excluded; slow-but-completed calls
+remain `successful` (a slow success is still a completed request).
 
 Written to the **new** `real_blast_radius` column. A leg is only counted if it was actually
 exercised during the window (calls > 0) and measurable in both snapshots; if no leg is
@@ -61,9 +66,10 @@ failure propagates through the mesh under a fault.**
 
 ## 3. Exact formula (Definition B)
 
-Let `S` = set of downstream services with a circuit breaker (order, inventory, payment,
-notification; shared-db is a leaf with no CB). For service `s`, over the fault window
-`[t_before, t_after]`:
+Let `S` = set of CB-bearing nodes: the **gateway** plus order, inventory, payment,
+notification (shared-db is a leaf with no CB). The gateway is included because failure
+registers on the *caller* side — see the diagnostic in §6. For node `s`, over the fault
+window `[t_before, t_after]`:
 
 ```
 Δsuccess(s) = successful_after(s) - successful_before(s)
@@ -98,10 +104,31 @@ column on the same run.
 4. **Report the raw per-leg error rates** and defer thresholding to analysis time, so the
    cutoff isn't baked into the dataset.
 
+### 6. Canary evidence (2026-07-26, `--mode canary --fault latency --topology linear`)
+
+A first canary of 15 runs on branch `fix/measurement-validity` settled the `not_permitted`
+question empirically:
+
+- **Task 1 confirmed fixed**: TIME_BASED breakers now trip (legacy `blast_radius` = 20 for
+  both COUNT_BASED and TIME_BASED; previously TIME_BASED was 0 across all 243 full-sweep
+  rows). Duration-driven load + a reachable `minimum-number-of-calls` resolved the artifact.
+- **`not_permitted` must be counted**: with the first formula (`failed / (successful +
+  failed)`), `real_blast_radius` read **0.0 on all 15 runs despite gateway error rates of
+  70–94%**. Under a latency fault the pre-trip calls are slow-but-successful and the
+  post-trip calls are `not_permitted` (not `failed`), so failures were invisible. The
+  formula above now counts `failed + not_permitted`, which reflects the real propagation.
+  → **Decision taken: `not_permitted` counts as damage.**
+- **The leg set must include the gateway.** Even after counting `not_permitted`, a second
+  canary still read 0. A live counter diagnostic under the latency fault showed the failure
+  lands entirely on the **gateway's** outbound breaker (Δnot_permitted = 115) while the five
+  downstream services showed ~10 successful / 0 failed / 0 rejected each — because once the
+  gateway CB opens it stops calling downstream, so the deeper nodes look healthy. The
+  original leg set (downstream services only) therefore missed the whole signal.
+  → **Decision taken: include the gateway's caller-side breakers in the leg set.**
+
+**Remaining open decision:** `TAU_LEG` value (§4 options 1–4) still needs sign-off.
+
 Secondary questions:
-- **Should `kind=not_permitted` calls** (rejected because the breaker was already OPEN)
-  count as failures, be excluded, or be tracked as a third category? Current code ignores
-  them (only successful/failed), which may undercount damage when a breaker is open.
 - **Crash faults**: when a downstream proxy is fully disabled, the *caller's* outgoing
   calls fail (captured here) but the crashed service receives no traffic. Confirm we are
   reading the caller-side CB metrics on every leg (we are, since each caller owns the CB),

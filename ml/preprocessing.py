@@ -50,13 +50,14 @@ THRESHOLDS = [30, 50, 70]
 WINDOW_SIZES = [5, 10, 20]      # matches the real sweep (was the planned [10, 50, 100])
 WAIT_DURATIONS = [5, 15, 30]    # matches the real sweep (was the planned [5, 10, 30])
 
-# This integration branch runs on the EXISTING real 486-row sweep, whose blast_radius is
-# recorded in percent (0/20/40) by the pre-normalisation runner -- so we divide by 100 to a
-# 0.0-1.0 fraction here. NOTE: the hand-resolved runner.py now normalises *new* output to
-# 0.0-1.0 at the source (get_blast_radius: raw/100). So once this branch is re-swept with the
-# current runner, the real data will already be 0-1 and this constant MUST return to 1.0 to
-# avoid a double divide. Tracked as a follow-up; see the integration notes / PR description.
-BLAST_RADIUS_SCALE = 100.0
+# The pre-fix percent-scaled sweep is archived (data/master_dataset_v1_prefix.csv) and is
+# NEVER trained on. Everything this branch trains on comes from the hand-resolved runner.py,
+# which normalises blast_radius to 0.0-1.0 at the source (get_blast_radius: raw/100), and from
+# generate_synthetic_data.py, which emits 0.0-1.0 directly -- so no rescale happens here.
+# Keeping this at 1.0 (instead of a scale that must be flipped once the data is re-swept) means
+# pre-fix and post-fix runs never share a scale, which removes the stateful-constant drift
+# footgun entirely. A drift guard still warns if a value ever exceeds 1.0.
+BLAST_RADIUS_SCALE = 1.0
 
 FEATURE_COLUMNS = ["topology", "fault_type", "window_type",
                    "threshold", "window_size", "wait_duration"]

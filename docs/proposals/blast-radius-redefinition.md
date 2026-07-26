@@ -126,7 +126,12 @@ question empirically:
   original leg set (downstream services only) therefore missed the whole signal.
   → **Decision taken: include the gateway's caller-side breakers in the leg set.**
 
-**Remaining open decision:** `TAU_LEG` value (§4 options 1–4) still needs sign-off.
+**Remaining open decision:** `TAU_LEG` value (§4 options 1–4) still needs sign-off — but it is
+now **non-blocking**. The runner persists the raw per-leg failure rates in a `leg_failure_rates`
+column (`svc:rate;svc:rate`, each 0–1) alongside the scalar `real_blast_radius`. `real_blast_radius`
+can therefore be recomputed at any `TAU_LEG` straight from the CSV (verified: tau=0.5→0.333,
+tau=0.1→0.667 on the same row), so a threshold chosen after the sweep does **not** require
+re-running the 486 configs.
 
 Secondary questions:
 - **Crash faults**: when a downstream proxy is fully disabled, the *caller's* outgoing

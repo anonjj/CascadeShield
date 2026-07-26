@@ -33,6 +33,9 @@ DATASET_HEADERS = [
     # Task 2: request-level blast radius (real observed failure), kept ALONGSIDE the
     # legacy CB-state blast_radius above so the two definitions can be compared.
     "real_blast_radius",
+    # Raw per-leg failure rates behind real_blast_radius ("svc:rate;svc:rate", each 0-1), so a
+    # different TAU_LEG can be applied post-hoc from the CSV without re-running the sweep.
+    "leg_failure_rates",
 ]
 
 # How many replicates per config (min 3 for variance estimation)
@@ -323,21 +326,21 @@ def snapshot_cb_calls():
             "success": success or 0.0, "failed": failed or 0.0, "rejected": rejected or 0.0}
     return snap
 
-def compute_real_blast_radius(before, after, tau=REAL_BLAST_LEG_ERROR_THRESHOLD):
-    """Fraction (0.0-1.0, same scale as the legacy blast_radius after normalisation) of
-    observed legs whose per-leg failure rate over the fault window exceeded tau.
+def compute_leg_failure_rates(before, after):
+    """Per-leg failure rate over the fault window, for each CB leg that was exercised and
+    measurable in both snapshots: {service: rate_0_to_1}.
 
-    Leg damage = failed + rejected(not_permitted): a call that was short-circuited by an
-    OPEN breaker never reached the downstream, so from the caller's perspective it is
-    propagated failure, not success. Slow-but-completed calls stay counted as success.
-        leg_failure_rate = (failed + rejected) / (successful + failed + rejected)
-    A leg is only counted if it was actually exercised during the window and measurable in
-    both snapshots. Returns None if no leg was observable -- a meaningful null (measurement
-    gap), never a fabricated 0.0. See docs/proposals/blast-radius-redefinition.md."""
+        leg_failure_rate = (failed + rejected(not_permitted)) / (successful + failed + rejected)
+
+    A call short-circuited by an OPEN breaker never reached the downstream, so from the
+    caller's perspective it is propagated failure, not success; slow-but-completed calls stay
+    success. This RAW per-leg breakdown is persisted (leg_failure_rates column) so
+    real_blast_radius can be recomputed at ANY TAU_LEG straight from the CSV -- no need to
+    re-run the 486-run sweep if the threshold changes after sign-off. Returns {} if nothing
+    observable (measurement gap). See docs/proposals/blast-radius-redefinition.md."""
+    rates = {}
     if not before or not after:
-        return None
-    observed_legs = 0
-    degraded_legs = 0
+        return rates
     for svc in CB_METRIC_TARGETS:
         b, a = before.get(svc), after.get(svc)
         if not b or not a:
@@ -348,12 +351,23 @@ def compute_real_blast_radius(before, after, tau=REAL_BLAST_LEG_ERROR_THRESHOLD)
         total = d_success + d_failed + d_rejected
         if total <= 0:
             continue  # leg not exercised during the window
-        observed_legs += 1
-        if ((d_failed + d_rejected) / total) > tau:
-            degraded_legs += 1
-    if observed_legs == 0:
+        rates[svc] = (d_failed + d_rejected) / total
+    return rates
+
+
+def real_blast_radius_from_rates(rates, tau=REAL_BLAST_LEG_ERROR_THRESHOLD):
+    """Fraction (0.0-1.0, same scale as the normalised blast_radius) of observed legs whose
+    failure rate exceeded tau. Returns None if no leg was observable -- a meaningful null,
+    never a fabricated 0.0."""
+    if not rates:
         return None
-    return degraded_legs / observed_legs   # 0.0-1.0 fraction, matches normalised blast_radius
+    return sum(1 for r in rates.values() if r > tau) / len(rates)
+
+
+def compute_real_blast_radius(before, after, tau=REAL_BLAST_LEG_ERROR_THRESHOLD):
+    """Convenience: leg failure rates -> scalar real blast radius. Derived from
+    compute_leg_failure_rates so the scalar and the persisted raw column never disagree."""
+    return real_blast_radius_from_rates(compute_leg_failure_rates(before, after), tau)
 
 def make_experiment_id(topology, fault_type, config):
     """Builds a deterministic ID matching experiment_matrix.csv e.g. LIN-LAT-CNT-T50-W10-D15."""
@@ -435,6 +449,7 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
             f"{metrics['error_rate']:.4f}",
             f"{metrics['throughput_loss']:.4f}",
             f"{metrics['real_blast_radius']:.4f}" if metrics.get('real_blast_radius') is not None else "",  # "" = no leg observable (measurement gap)
+            ";".join(f"{svc}:{rate:.4f}" for svc, rate in (metrics.get('leg_failure_rates') or {}).items()),  # raw per-leg rates; "" = none observed
         ])
     print(f"Saved run metrics to {dataset_path}")
 
@@ -527,7 +542,8 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1)
 
     # Snapshot per-leg CB counters again at the end of the fault window (Task 2).
     cb_calls_after = snapshot_cb_calls()
-    real_blast_radius = compute_real_blast_radius(cb_calls_before, cb_calls_after)
+    leg_failure_rates = compute_leg_failure_rates(cb_calls_before, cb_calls_after)
+    real_blast_radius = real_blast_radius_from_rates(leg_failure_rates)
 
     blast_radius = blast_radius_container[0]
     # Bug #3 guard: if every blast-radius poll returned None the gateway was
@@ -602,6 +618,7 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1)
     metrics = {
         "blast_radius": blast_radius,                 # normalised 0.0-1.0 by get_blast_radius()
         "real_blast_radius": real_blast_radius,       # Task 2: fraction of legs failing real requests
+        "leg_failure_rates": leg_failure_rates,       # raw per-leg rates (for post-hoc TAU_LEG)
         "throughput_loss": throughput_loss,
         "error_rate": error_rate / 100.0,   # convert % → fraction
         "avg_latency_ms": avg_latency,

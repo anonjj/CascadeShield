@@ -51,11 +51,15 @@ class ToxiproxyClient:
         print(f"Setting proxy '{name}' enabled={enabled}")
         self._request(f"/proxies/{name}", method="PATCH", data=payload)
 
-    def inject_latency(self, name, delay_ms, jitter_ms=0, toxicity=1.0):
-        """Injects latency into a proxy's downstream path."""
-        # Clean existing toxics first
-        self.clear_toxics(name)
-        
+    def inject_latency(self, name, delay_ms, jitter_ms=0, toxicity=1.0, clear_first=True):
+        """Injects latency into a proxy's downstream path.
+
+        Pass clear_first=False to stack this toxic on top of an existing one
+        (e.g. bandwidth + latency for a throttle profile that actually trips
+        the breaker's slow-call detector)."""
+        if clear_first:
+            self.clear_toxics(name)
+
         payload = {
             "name": "latency_toxic",
             "type": "latency",
@@ -69,10 +73,13 @@ class ToxiproxyClient:
         print(f"Injecting latency on '{name}': {delay_ms}ms (toxicity={toxicity})")
         self._request(f"/proxies/{name}/toxics", method="POST", data=payload)
 
-    def inject_bandwidth_limit(self, name, rate_kbps, toxicity=1.0):
-        """Limits bandwidth to simulate throttling."""
-        self.clear_toxics(name)
-        
+    def inject_bandwidth_limit(self, name, rate_kbps, toxicity=1.0, clear_first=True):
+        """Limits bandwidth to simulate throttling.
+
+        Pass clear_first=False to stack this toxic on top of an existing one."""
+        if clear_first:
+            self.clear_toxics(name)
+
         # Toxiproxy expects rate in KB/s
         payload = {
             "name": "bandwidth_toxic",

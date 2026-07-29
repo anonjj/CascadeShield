@@ -8,6 +8,11 @@ prune work on subsequent runs.
 
 - Repo HEAD at first review: `0f961c3`
 - First full review: `2026-07-28` (run 0)
+- Second full review: `2026-07-29` (run 1) at HEAD `21b9ae7`. Only `docs/reviews/`
+  changed since run 0 — no source moved, so every stagnant item below was checked
+  with `git log <last_reviewed>..HEAD -- <path>`, all returned 0 commits, and all
+  were skipped. Classifications and `last_reviewed` hashes are therefore unchanged
+  from run 0. Active areas were re-walked in full; findings M1–L4 all still open.
 
 ## Active areas (review in full every run)
 
@@ -28,17 +33,19 @@ Spring Boot microservices that are structural scaffolding for the mesh. Each is
 a thin controller + downstream client + exception pair with near-identical
 shape across services. Reviewed once at the hashes below.
 
-| Path | last_reviewed | Notes |
-|------|---------------|-------|
-| `services/order-service/` | `82f01d3` | Downstream node in the mesh. Boilerplate controller/service/exceptions. |
-| `services/inventory-service/` | `82f01d3` | Latency-fault target. Boilerplate. |
-| `services/payment-service/` | `82f01d3` | Crash-fault target. Boilerplate. |
-| `services/notification-service/` | `82f01d3` | Leaf node; health-checked by `runner.wait_for_healthy`. Boilerplate. |
-| `services/shared-db-service/` | `f8d0f2a` | Throttle-fault target (shared dependency). Boilerplate. |
-| `services/service-a-order/` | `e75c0ee` | **Parallel "business-logic" track (Soham), NOT wired into `infra/docker-compose.yml`.** Duplicate order impl vs `services/order-service`. See finding L1. |
-| `services/service-b-inventory/` | `e75c0ee` | Parallel track pair for `service-a-order`. Not in the mesh. See finding L1. |
-| `infra/` | `f7af13a` | docker-compose, Prometheus/Grafana provisioning. Config, not logic. |
-| `make_figures.py` | `07fb846` | One-off figure generator. Rarely changes. |
+Run-1 status column records the second-run pruning check (`git log <last_reviewed>..HEAD`).
+
+| Path | last_reviewed | Run-1 (2026-07-29) | Notes |
+|------|---------------|--------------------|-------|
+| `services/order-service/` | `82f01d3` | skipped — unchanged | Downstream node in the mesh. Boilerplate controller/service/exceptions. |
+| `services/inventory-service/` | `82f01d3` | skipped — unchanged | Latency-fault target. Boilerplate. |
+| `services/payment-service/` | `82f01d3` | skipped — unchanged | Crash-fault target. Boilerplate. |
+| `services/notification-service/` | `82f01d3` | skipped — unchanged | Leaf node; health-checked by `runner.wait_for_healthy`. Boilerplate. |
+| `services/shared-db-service/` | `f8d0f2a` | skipped — unchanged | Throttle-fault target (shared dependency). Boilerplate. |
+| `services/service-a-order/` | `e75c0ee` | skipped — unchanged | **Parallel "business-logic" track (Soham), NOT wired into `infra/docker-compose.yml`.** Duplicate order impl vs `services/order-service`. See finding L1. |
+| `services/service-b-inventory/` | `e75c0ee` | skipped — unchanged | Parallel track pair for `service-a-order`. Not in the mesh. See finding L1. |
+| `infra/` | `f7af13a` | skipped — unchanged | docker-compose, Prometheus/Grafana provisioning. Config, not logic. |
+| `make_figures.py` | `07fb846` | skipped — unchanged | One-off figure generator. Rarely changes. |
 
 ## Classification rule for later runs
 

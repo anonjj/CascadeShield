@@ -1,5 +1,17 @@
 # CascadeShield — Master Dataset Schema (Data Dictionary)
 
+> ⚠️ **ARCHIVED DATASET — NOT COMPARABLE ACROSS THE METRIC CHANGE.**
+> `data/master_dataset_v2_latency_5svc.csv` holds the **162 LATENCY runs** from the first
+> LINEAR sweep under the fixed harness. Their `blast_radius` and `real_blast_radius` were
+> computed against a **5-service denominator** (the five downstream services, and — for
+> `real_blast_radius` — a leg set that also included the gateway). After the blast-radius
+> metric change (gateway removed from the sweep as the measurement plane; denominator
+> redefined to the **4 CB-bearing downstream services**: order, inventory, payment,
+> notification), those values are on a different scale and are **NOT comparable** to any run
+> produced afterward. The two must never be pooled into one file: the CSV column names are
+> unchanged, so `runner.log_results`' stale-header guard will NOT catch a mixed append. The
+> next sweep must start a **fresh** `data/master_dataset.csv`; this archive is read-only.
+
 **Status:** Defined (Week 1). **Lock target:** end of Week 2 — no column changes after that.
 **Primary file:** `data/master_dataset_schema.csv` (header-only skeleton; experiments append rows).
 **Planning file:** `data/experiment_matrix.csv` (the 486 planned configurations).
@@ -68,7 +80,7 @@ past 486 (e.g. 486 configs × 2 environments × 3 replicates = 2,916 rows).
 
 | Column | Type | Range | Unit | Null when… |
 |--------|------|-------|------|------------|
-| `blast_radius` | float | `0.0–1.0` | fraction | never null. **Primary outcome.** Share of the topology's services that breached their error-rate SLO during the fault window. Emitted directly as a 0.0–1.0 fraction: the Java `BlastRadiusService` endpoint returns 0–100 and `runner.py`'s `get_blast_radius()` normalises to the fraction before writing to CSV — `preprocessing.py` does not rescale it again (`BLAST_RADIUS_SCALE = 1.0`). |
+| `blast_radius` | float | `0.0–1.0` | fraction | never null. **Primary outcome.** Fraction of the **four CB-bearing downstream subject services** (order, inventory, payment, notification) with an open circuit breaker during the fault window → values in `{0, 0.25, 0.5, 0.75, 1.0}`. **Denominator = 4** (changed from 5): `shared-db-service` is dropped (leaf, no outbound calls / no `@CircuitBreaker`, can never trip, only dilutes), and `gateway-service` is excluded as the *measurement plane*, not a subject — an edge breaker sees the summed chain latency and would always trip first (the "gateway CB confound"). Emitted as a 0.0–1.0 fraction: `BlastRadiusService` returns 0–100 and `runner.py`'s `get_blast_radius()` normalises before writing — `preprocessing.py` does not rescale again (`BLAST_RADIUS_SCALE = 1.0`). **Not comparable** to the archived `master_dataset_v2_latency_5svc.csv` (5-service denominator). |
 | `time_to_open` | float | `≥ 0` | seconds | CB never opened (threshold not reached / fault too mild) → **null is meaningful, not missing** |
 | `time_to_recover` | float | `≥ 0` | seconds | system did not return to baseline within the observation window → null is meaningful |
 | `error_rate` | float | `0.0–1.0` | fraction | never null. Peak error rate across the mesh during the fault. |

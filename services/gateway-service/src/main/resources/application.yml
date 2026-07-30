@@ -34,13 +34,31 @@ resilience4j:
           - com.cascadeshield.gateway.exception.DownstreamUnavailableException
         ignore-exceptions:
           - com.cascadeshield.gateway.exception.DownstreamRejectedException
+      # ---- measurement-plane -------------------------------------------------
+      # The gateway is the MEASUREMENT PLANE, not an experimental subject. An edge
+      # breaker observes the SUMMED latency of the whole downstream chain
+      # (gateway -> order -> inventory, where the 3000ms toxic sits), so with the
+      # swept CB_* config it always crosses the slow-call threshold and trips BEFORE
+      # any interior breaker can — starving the rest of the chain of traffic and
+      # collapsing blast radius onto a single node (the gateway CB confound).
+      # These values are HARDCODED (no ${CB_*}) so the gateway breaker NEVER opens
+      # and never distorts the sweep; only the five downstream services remain
+      # experimental subjects driven by the swept CB_* env vars.
+      measurement-plane:
+        register-health-indicator: true      # keep exporting CB metrics for diagnostics
+        allow-health-indicator-to-fail: false
+        minimum-number-of-calls: 1000000     # evaluation window is never reached
+        failure-rate-threshold: 100          # would need 100% failures to trip
+        slow-call-rate-threshold: 100        # would need 100% slow calls to trip
+        slow-call-duration-threshold: 60s    # nothing in-test is this slow
     instances:
+      # All three gateway breakers use measurement-plane (never open) — see above.
       orderServiceCB:
-        base-config: default
+        base-config: measurement-plane
       inventoryServiceCB:
-        base-config: default
+        base-config: measurement-plane
       paymentServiceCB:
-        base-config: default
+        base-config: measurement-plane
 
 management:
   endpoints:

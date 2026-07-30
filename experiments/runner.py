@@ -73,22 +73,28 @@ COUNT_BASED_WINDOW_MULTIPLE = 3    # fire >= this * slidingWindowSize calls
 COUNT_BASED_MIN_REQUESTS = 40      # floor: keep error-rate estimate statistically stable
 
 # ---- Real (request-level) blast radius (Task 2) ------------------------------
-# CB-bearing nodes whose real per-leg failure we observe from Resilience4j call outcomes
-# (NOT circuit-breaker OPEN/CLOSED state). Ports are published by docker-compose.
-# The GATEWAY is included: failure registers on the CALLER side, and in linear/fanout the
-# gateway's outbound breakers are where propagation shows up first -- once the gateway CB
-# opens it stops calling downstream, so the deeper services can look "healthy". A live
-# diagnostic under a latency fault confirmed 115 not_permitted rejections on the gateway vs
-# ~0 failures on the five downstream services. Omitting the gateway made real blast radius
-# read 0. shared-db-service is a leaf with no CB (scrapes as None, excluded automatically).
+# SUBJECT SET = the four CB-bearing downstream services whose real per-leg failure we
+# observe from Resilience4j call outcomes (NOT circuit-breaker OPEN/CLOSED state). This is
+# the denominator for real_blast_radius and it MATCHES BlastRadiusService.SERVICE_ACTUATOR_URLS
+# so the two blast-radius metrics range over the same nodes -> {0, 0.25, 0.5, 0.75, 1.0}.
+#
+# Deliberately EXCLUDED from the denominator:
+#   * gateway-service — it is the MEASUREMENT PLANE, not an experimental subject. An edge
+#     breaker sees the summed chain latency and trips first (the gateway CB confound); its
+#     breaker is now pinned never-open via the measurement-plane config, and including it
+#     here would have let one saturated node dominate blast radius. (Poll it separately for
+#     diagnostics if needed — see GATEWAY_DIAGNOSTIC_TARGET — but keep it out of the count.)
+#   * shared-db-service — a leaf with no outbound calls / no @CircuitBreaker, so it can
+#     never have an open breaker and only dilutes the denominator.
+# Ports are published by docker-compose.
 CB_METRIC_TARGETS = {
-    "gateway-service": "http://localhost:8080",
     "order-service": "http://localhost:8081",
     "inventory-service": "http://localhost:8082",
     "payment-service": "http://localhost:8083",
     "notification-service": "http://localhost:8084",
-    "shared-db-service": "http://localhost:8085",
 }
+# Optional diagnostics only — NEVER part of the real_blast_radius denominator.
+GATEWAY_DIAGNOSTIC_TARGET = {"gateway-service": "http://localhost:8080"}
 # A leg counts as "degraded" if its observed error rate over the fault window exceeds this.
 # OPEN QUESTION -- threshold to be signed off; see docs/proposals/blast-radius-redefinition.md
 REAL_BLAST_LEG_ERROR_THRESHOLD = 0.50

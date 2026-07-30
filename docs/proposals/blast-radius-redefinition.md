@@ -66,10 +66,12 @@ failure propagates through the mesh under a fault.**
 
 ## 3. Exact formula (Definition B)
 
-Let `S` = set of CB-bearing nodes: the **gateway** plus order, inventory, payment,
-notification (shared-db is a leaf with no CB). The gateway is included because failure
-registers on the *caller* side — see the diagnostic in §6. For node `s`, over the fault
-window `[t_before, t_after]`:
+Let `S` = the **four CB-bearing downstream subject services**: order, inventory, payment,
+notification. `shared-db` is excluded (leaf, no CB) and — as of the gateway-CB-confound
+finding — **the gateway is also excluded** (it is the measurement plane, not a subject; see
+§7, which supersedes the earlier §6 decision to include it). This matches
+`BlastRadiusService.SERVICE_ACTUATOR_URLS`, so both blast-radius metrics range over the same
+4 nodes. For node `s`, over the fault window `[t_before, t_after]`:
 
 ```
 Δsuccess(s) = successful_after(s) - successful_before(s)
@@ -149,3 +151,37 @@ Secondary questions:
   start a new file. The legacy `blast_radius` column and its meaning are untouched.
 - `ml/preprocessing.py` matches columns by name and ignores extras, so it keeps working;
   wiring `real_blast_radius` into the models is a separate, later decision.
+
+---
+
+## 7. Gateway CB confound — node set corrected to 4 downstream subjects (SUPERSEDES §6)
+
+The first 162-run LATENCY sweep produced a **degenerate** result: `blast_radius` was `0.2` in
+156/162 runs (`0.0` in the other 6) and `real_blast_radius` was `0.2` in 158/162 — no swept CB
+parameter moved the outcome.
+
+**Root cause.** `gateway-service`'s outbound breakers used `base-config: default`, which reads
+the swept `CB_*` env vars and has `slow-call-duration-threshold: 2s`. The gateway observes the
+**summed** latency of the whole chain (gateway → order → inventory, where the 3000 ms toxic
+sits), so it crosses the slow-call threshold before any interior breaker does. With
+`minimum-number-of-calls: 5` it opens after ~5 calls and fast-fails locally, **starving the rest
+of the chain of traffic**. Evidence: `leg_failure_rates` showed gateway at 0.70–0.96 while order,
+inventory, payment and notification were all *exactly* 0.0000 (present in the dict, not skipped —
+so they were exercised and every call succeeded). Blast radius saturated at one node.
+
+**Decisions (supersede §6's "include the gateway"):**
+1. **Gateway removed from the sweep.** Its three breakers now use a hardcoded
+   `measurement-plane` config (`minimum-number-of-calls: 1000000`, `failure-rate-threshold: 100`,
+   `slow-call-rate-threshold: 100`, `slow-call-duration-threshold: 60s`) so the gateway breaker
+   **never opens**. The gateway is the measurement plane, not an experimental subject; only the
+   five downstream services remain driven by the swept `CB_*` config.
+2. **Both metrics measure the same 4 nodes.** The denominator for `blast_radius`
+   (`BlastRadiusService`) and `real_blast_radius` (`runner.py` `CB_METRIC_TARGETS`) is now the
+   four CB-bearing downstream subjects: order, inventory, payment, notification. `shared-db` is
+   dropped (leaf, no CB) and the gateway is excluded from the denominator (diagnostics only).
+   Blast radius now ranges over `{0, 0.25, 0.5, 0.75, 1.0}`.
+
+**Data impact.** The 5-service sweep is archived read-only as
+`data/master_dataset_v2_latency_5svc.csv` and is **not comparable** to any post-change run. The
+column names are unchanged, so `runner.log_results`' stale-header guard would NOT catch a mixed
+append — the next sweep must start a fresh `data/master_dataset.csv`; the two are never pooled.

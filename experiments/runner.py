@@ -36,6 +36,28 @@ DATASET_HEADERS = [
 N_REPLICATES = 3
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "LOCAL")  # override to AWS on cloud runs
 
+# Sidecar log of real Resilience4j state-transition events, keyed to each CSV row
+# by experiment_id/replicate/mode. Exists because error_rate/blast_radius alone
+# cannot tell us whether an *interior* breaker (order/inventory/payment/notification's
+# own CBs on their downstream calls) actually opened: Resilience4j trips on the
+# slow-call-rate path independently of the failure-rate path, and a >2s call that
+# still returns 200 scores 0% failure rate while counting fully toward slow-call
+# rate. Only the actual STATE_TRANSITION events settle that.
+CB_TRANSITIONS_PATH = BASE_DIR / "data" / "cb_transitions.jsonl"
+CANARY_CB_TRANSITIONS_PATH = BASE_DIR / "data" / "canary_cb_transitions.jsonl"
+
+# service -> (actuator port, [circuit breaker instance names]), from each service's
+# application.yml `resilience4j.circuitbreaker.instances`. shared-db-service has no
+# breakers of its own (it's a call target, not a caller) so it's excluded.
+SERVICE_BREAKERS = {
+    "gateway":      (8080, ["orderServiceCB", "inventoryServiceCB", "paymentServiceCB"]),
+    "order":        (8081, ["inventoryServiceCB", "sharedDbCB"]),
+    "inventory":    (8082, ["paymentServiceCB", "sharedDbCB"]),
+    "payment":      (8083, ["notificationServiceCB", "sharedDbCB"]),
+    "notification": (8084, ["sharedDbCB"]),
+}
+CB_EVENT_BUFFER_SIZE = 50  # must match application.yml's event-consumer-buffer-size
+
 # Configuration Parameter Values for Sweeps (3*3*3*2 = 54 configs per fault × 3 faults × 3 replicates = 486 total runs)
 PARAM_VALUES = {
     "failureRateThreshold": [30, 50, 70],
@@ -60,6 +82,7 @@ CB_SLIDING_WINDOW_TYPE={config['slidingWindowType']}
 CB_FAILURE_RATE_THRESHOLD={config['failureRateThreshold']}
 CB_WAIT_DURATION_OPEN={config['waitDurationInOpenState']}s
 CB_PERMITTED_CALLS_HALF_OPEN={PERMITTED_CALLS_HALF_OPEN}
+CB_EVENT_BUFFER_SIZE={CB_EVENT_BUFFER_SIZE}
 """
     os.makedirs(os.path.dirname(ENV_PATH), exist_ok=True)
     with open(ENV_PATH, "w") as f:
@@ -205,6 +228,83 @@ def get_blast_radius():
         print(f"Failed to query blast radius from Gateway: {e}", file=sys.stderr)
     return None  # Sentinel: distinguishable from a real 0.0 (healthy mesh)
 
+def _fetch_breaker_events(port, breaker_name):
+    """Raw STATE_TRANSITION events currently in `breaker_name`'s actuator ring
+    buffer, oldest first. Returns [] on any failure -- this is diagnostic
+    instrumentation and must never abort a run."""
+    url = f"http://localhost:{port}/actuator/circuitbreakerevents/{breaker_name}"
+    try:
+        with urllib.request.urlopen(url, timeout=3) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except Exception as e:
+        print(f"Failed to fetch {breaker_name} CB events (port {port}): {e}", file=sys.stderr)
+        return []
+    return [e for e in data.get("circuitBreakerEvents", []) if e.get("type") == "STATE_TRANSITION"]
+
+def snapshot_breaker_event_counts():
+    """{(service, breaker): event count right now}, taken before the fault so
+    collect_new_transitions() can slice off just the events this run adds.
+
+    In practice each run's containers are force-recreated (see update_containers),
+    so every breaker's ring buffer already starts empty -- this snapshot is a
+    defensive baseline, not load-bearing, in case that recreate-per-run behavior
+    ever changes.
+    """
+    return {
+        (service, breaker): len(_fetch_breaker_events(port, breaker))
+        for service, (port, breakers) in SERVICE_BREAKERS.items()
+        for breaker in breakers
+    }
+
+def collect_new_transitions(before_counts):
+    """STATE_TRANSITION events added to any breaker's buffer since `before_counts`,
+    merged across services and ordered chronologically.
+
+    Ordering relies on creationTime sorting correctly as a plain string: every
+    service is the same JVM timezone offset and Jackson's ISO-8601 serialization
+    is fixed-width, so lexicographic order == chronological order here without
+    needing to parse Java's ZonedDateTime format.
+    """
+    transitions = []
+    for service, (port, breakers) in SERVICE_BREAKERS.items():
+        for breaker in breakers:
+            events = _fetch_breaker_events(port, breaker)
+            before = before_counts.get((service, breaker), 0)
+            for event in events[before:]:
+                transitions.append({
+                    "service": service,
+                    "breaker": breaker,
+                    "state_transition": event.get("stateTransition"),
+                    "creation_time": event.get("creationTime"),
+                })
+    transitions.sort(key=lambda t: t["creation_time"] or "")
+    return transitions
+
+def log_cb_transitions(experiment_id, topology, fault_type, config, mode, replicate,
+                        fault_injected_at, fault_cleared_at, transitions):
+    """Appends one JSON line per run recording every circuit breaker's real
+    CLOSED/OPEN/HALF_OPEN transitions -- kept as a sidecar (not master_dataset.csv
+    columns) because the transition list is variable-length per run and a CSV
+    cell can't hold an ordered, multi-service event list cleanly. Join back to
+    the CSV row via experiment_id + replicate + mode.
+    """
+    path = CANARY_CB_TRANSITIONS_PATH if mode == "canary" else CB_TRANSITIONS_PATH
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    record = {
+        "experiment_id": experiment_id,
+        "topology": topology.upper(),
+        "fault_type": fault_type.upper(),
+        "window_type": config["slidingWindowType"],
+        "environment": ENVIRONMENT,
+        "mode": mode,
+        "replicate": replicate,
+        "fault_injected_at": fault_injected_at,
+        "fault_cleared_at": fault_cleared_at,
+        "transitions": transitions,
+    }
+    with open(path, "a") as f:
+        f.write(json.dumps(record) + "\n")
+
 def make_experiment_id(topology, fault_type, config):
     """Builds a deterministic ID matching experiment_matrix.csv e.g. LIN-LAT-CNT-T50-W10-D15."""
     topo_map  = {"linear": "LIN", "fanout": "FAN", "mesh": "MSH"}
@@ -305,6 +405,12 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1)
         print("Skipping run due to unhealthy services.", file=sys.stderr)
         return False
 
+    # Snapshot each interior breaker's actuator ring buffer before the fault, so
+    # collect_new_transitions() can isolate just this run's real state transitions
+    # further down -- this is what actually answers "did order's breaker open",
+    # which error_rate/blast_radius cannot (see SERVICE_BREAKERS docstring above).
+    before_cb_counts = snapshot_breaker_event_counts()
+
     # 3. Measure pre-fault baseline throughput (healthy warm-up)
     endpoint = f"http://localhost:8080/api/v1/{topology}"
     print("Measuring pre-fault baseline...")
@@ -314,6 +420,7 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1)
         return False
 
     # 4. Inject fault into Toxiproxy
+    fault_injected_at = _now_iso()
     try:
         inject_fault(fault_type)
     except Exception as e:
@@ -384,6 +491,7 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1)
 
     # 6. Reset Toxiproxy
     toxiproxy.reset_all()
+    fault_cleared_at = _now_iso()
 
     # 7. Measure time_to_open and time_to_recover.
     #    time_to_recover is ONLY computed when a breaker was confirmed open
@@ -406,12 +514,15 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1)
         #     can't even attempt its permitted probe calls, so we send a few
         #     real requests each iteration to give it that chance.
         #  2. This still can't perfectly distinguish "HALF_OPEN, about to
-        #     re-open" from "genuinely CLOSED" using only this endpoint -- that
-        #     would need the breaker's precise state (e.g. via
-        #     /actuator/circuitbreakerevents STATE_TRANSITION events, not
-        #     wired here). To reduce (not eliminate) false-early recovery
-        #     reads, require the reading to stay at 0.0 across two consecutive
-        #     probes, one second apart, before declaring recovery.
+        #     re-open" from "genuinely CLOSED" using only the aggregate
+        #     blast-radius endpoint polled here in real time. The precise
+        #     per-breaker STATE_TRANSITION events ARE captured (see
+        #     collect_new_transitions() / cb_transitions.jsonl below), but as a
+        #     post-hoc record for analysis, not as a synchronous gate on this
+        #     loop's recovery decision. To reduce (not eliminate) false-early
+        #     recovery reads here, require the reading to stay at 0.0 across
+        #     two consecutive probes, one second apart, before declaring
+        #     recovery.
         recovery_deadline = time.time() + config["waitDurationInOpenState"] + 10
         consecutive_zero_reads = 0
         while time.time() < recovery_deadline:
@@ -443,6 +554,16 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1)
         "time_to_recover": time_to_recover,
     }
     log_results(config, fault_type, mode, topology, metrics, replicate)
+
+    # Record real per-service breaker transitions for this run regardless of what
+    # blast_radius/cb_opened concluded -- catching the case where the aggregate
+    # signal says "nothing opened" but an interior breaker tripped via the
+    # slow-call path is the entire point of this sidecar.
+    transitions = collect_new_transitions(before_cb_counts)
+    log_cb_transitions(
+        make_experiment_id(topology, fault_type, config), topology, fault_type, config,
+        mode, replicate, fault_injected_at, fault_cleared_at, transitions,
+    )
     return True
 
 def generate_combinations(mode):
@@ -498,6 +619,9 @@ def main():
     if args.mode == "canary" and CANARY_DATASET_PATH.exists():
         CANARY_DATASET_PATH.unlink()
         print(f"Cleared previous canary run data at {CANARY_DATASET_PATH}")
+    if args.mode == "canary" and CANARY_CB_TRANSITIONS_PATH.exists():
+        CANARY_CB_TRANSITIONS_PATH.unlink()
+        print(f"Cleared previous canary CB transitions at {CANARY_CB_TRANSITIONS_PATH}")
     total_runs = len(configs) * args.replicates
     print(f"Generated {len(configs)} configs × {args.replicates} replicates = {total_runs} total runs.")
 

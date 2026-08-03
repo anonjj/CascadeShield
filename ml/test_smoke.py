@@ -47,6 +47,25 @@ def test_pipeline_trains():
     assert m["tau"] == DEFAULT_TAU
 
 
+def test_regressor_scores_are_config_level():
+    """Regressor validation must stay grouped by experiment_id.
+
+    Replicates of one config are near-duplicate rows; ungrouping them silently turns the
+    holdout into a memorisation test. Pin the grouping and the effective-n reporting so a
+    future edit cannot quietly revert to a random split.
+    """
+    m = _bundle()["metrics"]
+    r = m["regressor"]
+    assert r["grouped_by"] == "experiment_id"
+    assert r["n_configs"] == m["n_configs"]
+    assert r["n_configs"] <= m["n_rows"], "effective n must be configs, not rows"
+    for key in ("cv_r2_grouped", "test_r2_grouped", "test_mae_grouped"):
+        assert key in r, f"missing grouped metric {key}"
+    for stale in ("cv_r2", "test_r2", "test_mae"):
+        assert stale not in r, (
+            f"ungrouped key {stale!r} reappeared -- regressor scores must be config-level")
+
+
 def test_recommend_across_full_vocabulary():
     """recommend() works for every topology x fault_type.
 

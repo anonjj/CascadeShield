@@ -30,7 +30,9 @@ import joblib
 import numpy as np
 import pandas as pd
 from sklearn.metrics import classification_report, confusion_matrix, mean_absolute_error, r2_score
-from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test_split
+from sklearn.model_selection import (
+    GroupKFold, GroupShuffleSplit, StratifiedKFold, cross_val_score, train_test_split,
+)
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor, export_text
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -89,17 +91,31 @@ def train(dataset_path: Path, tau: float):
                                       random_state=RANDOM_STATE).fit(X, y_label)
 
     # ---- regressor: blast_radius -------------------------------------------
-    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE)
-    # stratify the regressor's CV by the safe/unsafe label to keep folds comparable
+    # GROUPED by experiment_id. The sweep runs ~3 replicates per config under one
+    # experiment_id, and replicates of a config are near-identical rows: 25 of 26 configs
+    # in the current dataset have a single distinct blast_radius across all their
+    # replicates. Under a random split those duplicates straddle train and test, so the
+    # tree can memorise a config from its own replicate and score perfectly on it --
+    # that is what produced the old test_r2=1.0 / test_mae=0.0. Grouping forces every
+    # replicate of a config into the same fold, making this an honest test of
+    # generalisation to an UNSEEN CONFIG, which is the only thing recommend() ever does.
+    # Effective sample size is therefore the number of distinct configs, not rows.
+    groups = df["experiment_id"]
+    n_groups = int(groups.nunique())
+    n_splits = min(5, n_groups)
+    gkf = GroupKFold(n_splits=n_splits)
     best_dr, best_r2 = CANDIDATE_DEPTHS[0], -np.inf
     for d in CANDIDATE_DEPTHS:
         scores = cross_val_score(
             DecisionTreeRegressor(max_depth=d, random_state=RANDOM_STATE),
-            X, y_blast, cv=cv.split(X, y_label), scoring="r2")
+            X, y_blast, cv=gkf.split(X, y_blast, groups=groups), scoring="r2")
         if scores.mean() > best_r2:
             best_dr, best_r2 = d, scores.mean()
-    Xtr2, Xte2, btr, bte = train_test_split(
-        X, y_blast, test_size=0.25, random_state=RANDOM_STATE, stratify=y_label)
+    # single grouped holdout: no config appears on both sides
+    gss = GroupShuffleSplit(n_splits=1, test_size=0.25, random_state=RANDOM_STATE)
+    tr_idx, te_idx = next(gss.split(X, y_blast, groups=groups))
+    Xtr2, Xte2 = X.iloc[tr_idx], X.iloc[te_idx]
+    btr, bte = y_blast.iloc[tr_idx], y_blast.iloc[te_idx]
     reg = DecisionTreeRegressor(max_depth=best_dr, random_state=RANDOM_STATE).fit(Xtr2, btr)
     reg_mae = mean_absolute_error(bte, reg.predict(Xte2))
     reg_r2 = r2_score(bte, reg.predict(Xte2))
@@ -116,10 +132,20 @@ def train(dataset_path: Path, tau: float):
             "classes": list(clf.classes_),
         },
         "regressor": {
-            "max_depth": best_dr, "cv_r2": round(float(best_r2), 4),
-            "test_r2": round(float(reg_r2), 4), "test_mae": round(float(reg_mae), 4),
+            # All regressor scores are CONFIG-LEVEL: grouped by experiment_id so no
+            # config is split across train/test. n_configs is the effective sample size;
+            # n_rows overstates it by the replicate factor and must not be quoted as n.
+            "max_depth": best_dr,
+            "grouped_by": "experiment_id",
+            "n_configs": n_groups,
+            "cv_folds": n_splits,
+            "cv_r2_grouped": round(float(best_r2), 4),
+            "test_r2_grouped": round(float(reg_r2), 4),
+            "test_mae_grouped": round(float(reg_mae), 4),
+            "n_test_configs": int(groups.iloc[te_idx].nunique()),
         },
         "n_rows": int(len(df)),
+        "n_configs": n_groups,
         "class_balance": {k: int(v) for k, v in pd.Series(y_label).value_counts().items()},
     }
     return df, X, clf_full, reg_full, metrics
@@ -239,12 +265,16 @@ def main(argv=None) -> int:
 
     c = metrics["classifier"]
     r = metrics["regressor"]
-    print("[decision_tree] trained on", metrics["n_rows"], "rows  (tau =", metrics["tau"], ")")
+    print("[decision_tree] trained on", metrics["n_rows"], "rows /",
+          metrics["n_configs"], "distinct configs  (tau =", metrics["tau"], ")")
     print(f"  classifier  depth={c['max_depth']}  cv_f1_macro={c['cv_f1_macro']}"
           f"  train_acc={c['train_accuracy']}  test_acc={c['test_accuracy']}"
           f"  (overfit gap {c['overfit_gap']})")
-    print(f"  regressor   depth={r['max_depth']}  cv_r2={r['cv_r2']}"
-          f"  test_r2={r['test_r2']}  test_mae={r['test_mae']}")
+    print(f"  regressor   depth={r['max_depth']}  cv_r2={r['cv_r2_grouped']}"
+          f"  test_r2={r['test_r2_grouped']}  test_mae={r['test_mae_grouped']}")
+    print(f"              ^ config-level, grouped by {r['grouped_by']}"
+          f" ({r['cv_folds']}-fold over n={r['n_configs']} configs,"
+          f" holdout {r['n_test_configs']} configs) -- effective n is CONFIGS, not rows")
     print("  class balance:", metrics["class_balance"])
     print("  top features:", ", ".join(f"{row.feature}({row.importance:.2f})"
                                         for row in fi.head(4).itertuples()))

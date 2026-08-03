@@ -109,3 +109,32 @@ this in the Week 2 metrics-exposure check.
 measured — see the `*** THIS DATA IS SIMULATED ***` notice in that script. It exists so the ML
 pipeline can be developed and demonstrated before the real sweep lands; swap it for real
 `runner.py` output (`python ml/train_all.py --no-generate`) once that sweep runs.
+
+## Sidecar: `data/cb_transitions.jsonl` (real runs only — not part of the ML schema)
+
+`error_rate` / `blast_radius` cannot tell you whether an *interior* breaker (order,
+inventory, payment, notification's own CBs on their downstream calls) actually opened —
+Resilience4j trips on the slow-call-rate path independently of the failure-rate path, and
+a call that takes longer than `slow-call-duration-threshold` (2s) but still returns 200
+scores 0% failure rate while counting fully toward slow-call rate. Only the real
+Resilience4j `STATE_TRANSITION` events settle that.
+
+`runner.py` snapshots each breaker's `/actuator/circuitbreakerevents/{name}` ring buffer
+before the fault and diffs it after the run, writing one JSON line per run to
+`data/cb_transitions.jsonl` (`data/canary_cb_transitions.jsonl` in canary mode):
+
+```json
+{"experiment_id": "...", "topology": "LINEAR", "fault_type": "THROTTLE",
+ "window_type": "COUNT_BASED", "environment": "LOCAL", "mode": "full", "replicate": 1,
+ "fault_injected_at": "...", "fault_cleared_at": "...",
+ "transitions": [
+   {"service": "order", "breaker": "sharedDbCB", "state_transition": "CLOSED_TO_OPEN", "creation_time": "..."},
+   ...
+ ]}
+```
+
+Join to `master_dataset.csv` via (`experiment_id`, `replicate`, `mode`). `transitions` is
+`[]` when no interior breaker opened during the run — that's a real, informative result,
+not a missing record. Kept as a separate sidecar rather than new CSV columns because the
+transition list is variable-length and ordered; not part of `preprocessing.py`'s schema
+contract or fed to either model.

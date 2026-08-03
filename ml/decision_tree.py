@@ -146,7 +146,22 @@ def decision_path_text(tree_model, x_row: pd.DataFrame, feature_names) -> list[s
 
 
 def recommend(bundle: dict, topology: str, fault_type: str, top_k: int = 3) -> dict:
-    """Search the 54-config CB grid for the safest config in the given context."""
+    """Search the 54-config CB grid for the safest config in the given context.
+
+    top_k is the TOTAL number of configs surfaced, not the number of alternatives.
+    The best config is returned at the top level (``recommended_config``) and the
+    remaining ``top_k - 1`` follow in ``alternatives``, so a caller receives exactly
+    top_k configs: the default top_k=3 yields 1 recommended + 2 alternatives. This
+    is the contract the HTTP API advertises ("how many configs to return", see
+    lambda_handler's --top-k) and it matches the ``.head(top_k)`` convention used by
+    the sibling recommender in train_latency_models.py. Hence the ``candidates[1:top_k]``
+    slice below is deliberate -- do not "fix" it to ``[1:top_k+1]``, which would return
+    top_k + 1 configs and break the advertised count.
+
+    Degenerate inputs: top_k <= 1 yields an empty ``alternatives`` list; the best
+    config is always present regardless, so at least one config is always returned.
+    top_k larger than the grid is clamped by the slice to the 54 available configs.
+    """
     clf, reg = bundle["classifier"], bundle["regressor"]
     safe_label = "safe"
     candidates = []

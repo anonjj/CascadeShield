@@ -36,8 +36,8 @@ from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor, export_t
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 from preprocessing import (  # noqa: E402
-    DEFAULT_TAU, ENCODED_FEATURE_NAMES, build_outcome_frame, config_grid,
-    encode_features, featurize_config, load_dataset, make_labels,
+    DEFAULT_TAU, ENCODED_FEATURE_NAMES, blast_radius_fraction, build_outcome_frame,
+    config_grid, encode_features, featurize_config, load_dataset, make_labels,
 )
 
 DATA_DIR = SCRIPT_DIR.parent / "data"
@@ -65,7 +65,11 @@ def train(dataset_path: Path, tau: float):
     df = load_dataset(dataset_path)
     X = encode_features(df)
     y_label = make_labels(df, tau)
-    y_blast = df["blast_radius"].astype(float)
+    # Route the regressor target through the same scaling seam the classifier uses
+    # (make_labels -> blast_radius_fraction), rather than reading the raw column. Both
+    # models then share one definition of "blast radius as a fraction", so a future change
+    # to BLAST_RADIUS_SCALE moves them together instead of silently splitting them.
+    y_blast = blast_radius_fraction(df)
 
     # ---- classifier: safe / unsafe -----------------------------------------
     depth_c, cv_c = _best_depth(

@@ -76,7 +76,7 @@ python closed_loop_demo.py --topology SHARED_DEP_MESH --fault LATENCY   # adapti
   `threshold`, `window_size`, `wait_duration`). Provenance columns are never features, so the
   model can't learn LOCAL-vs-AWS shortcuts.
 - **Two trees, both `max_depth ≤ 6`** (the interpretability cap that ruled out deep learning):
-  a **classifier** (`safe`/`unsafe` at `blast_radius ≤ τ`, default `τ=0.5`) and a **regressor**
+  a **classifier** (`safe`/`unsafe` at `blast_radius ≤ τ`, default `τ=0.1`) and a **regressor**
   (predicts `blast_radius`, used to rank configs).
 - **Validation:** depth chosen by **5-fold cross-validation**; train-vs-test accuracy logged
   as the overfitting check.

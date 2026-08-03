@@ -16,6 +16,16 @@
 **Primary file:** `data/master_dataset_schema.csv` (header-only skeleton; experiments append rows).
 **Planning file:** `data/experiment_matrix.csv` (the 486 planned configurations).
 
+> 🔄 **SWEEP IN PROGRESS — current `master_dataset.csv` is a partial rebuild.**
+> After the blast-radius metric change the dataset was reseeded from empty, and collection is
+> still underway: **80 rows, `LINEAR` / `LATENCY` only** — one cell of the planned 486-config
+> matrix. Because that cell has not yet produced a run with zero tripped subjects, every row
+> currently labels `unsafe` and the classifier target is **single-class, so the Decision Tree
+> classifier is not trainable yet**. This is sweep incompleteness, not a threshold problem —
+> τ is set from the measurement scale (see *How the two models use these columns*) and does
+> not need adjusting. The regressor and Isolation Forest paths are unaffected. Expect two
+> classes once the sweep reaches configs that contain the fault.
+
 ## Row identity
 
 A single row = **one execution** of one configuration in one environment.
@@ -98,10 +108,15 @@ past 486 (e.g. 486 configs × 2 environments × 3 replicates = 2,916 rows).
 - **Decision Tree recommender** — features = the 6 independent variables; target = a label derived
   from `blast_radius` (`safe` if `blast_radius ≤ τ`, else `unsafe`). Given a desired fault/topology, it
   recommends a CB config. Interpretability is the reason it was chosen over deep learning.
-  - **τ = 0.1** (`DEFAULT_TAU` in `preprocessing.py`). `blast_radius` is already a 0.0–1.0
-    fraction (no rescale in this branch), so `τ = 0.1` means *any meaningful propagation
-    counts as unsafe* — the earlier `τ = 0.5` would have collapsed most rows into a single
-    "all safe" class (untrainable). Tunable; see `ml/preprocessing.py`.
+  - **τ = 0.1** (`DEFAULT_TAU` in `preprocessing.py`). The value follows from the
+    **measurement scale**, not from any particular sweep's class balance. With a denominator
+    of 4 CB-bearing subjects, `blast_radius` is quantised to quarters — `{0, 0.25, 0.5, 0.75,
+    1.0}` — so its smallest non-zero value is `0.25`. Any τ in `(0, 0.25)` therefore draws the
+    identical boundary, and `τ = 0.1` states the intended contract: **zero blast = safe, any
+    subject tripped = unsafe**. `τ = 0.5` would *not* be a rescaling of that rule but a
+    materially weaker one — "up to half the mesh may trip and still count as safe". If the
+    subject denominator changes, re-check that τ still sits below one quantisation step.
+    Tunable; see `ml/preprocessing.py`.
 - **Isolation Forest anomaly detector** — fit on the outcome columns to flag config/outcome
   combinations that behave unexpectedly (e.g. a "safe-looking" config that produced a large
   blast radius). Feature set (see `ml/preprocessing.py → build_outcome_frame`):

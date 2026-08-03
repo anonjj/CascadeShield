@@ -83,12 +83,15 @@ IF_NUMERIC_FEATURES = ["blast_radius", "error_rate", "throughput_loss"]
 IF_FLAG_FEATURES = ["cb_opened", "recovered"]
 IF_FEATURE_NAMES = IF_NUMERIC_FEATURES + IF_FLAG_FEATURES
 
-# blast_radius > tau => "unsafe". This integration branch labels the REAL 486-row sweep,
-# whose blast_radius (after the /100 rescale above) is the discrete set {0.0, 0.2, 0.4} with
-# many rows genuinely at 0.0. tau=0.1 means "zero blast = safe, any propagation = unsafe" and
-# reproduces the real-data 325 safe / 161 unsafe split. (The synthetic branch used tau=0.5 for
-# its own continuous, zero-floored distribution; that value does NOT apply to the real data
-# here.) Tunable; documented in README.
+# blast_radius > tau => "unsafe". Justified by the measurement scale, not by any particular
+# sweep's row counts: blast_radius is the fraction of the FOUR CB-bearing downstream subjects
+# that tripped, so it is quantised to quarters -- {0.0, 0.25, 0.5, 0.75, 1.0}. The smallest
+# non-zero value is therefore 0.25, and any tau in (0, 0.25) draws the same line. tau=0.1 sits
+# in that interval and encodes the intended contract exactly: zero blast = safe, ANY subject
+# tripped = unsafe. (tau=0.5 would instead mean "up to half the mesh may trip and still count
+# as safe", a different and much weaker claim -- not a rescaling of this one.) If the subject
+# denominator ever changes, re-check that tau still falls below one quantisation step.
+# Tunable; documented in README.
 DEFAULT_TAU = 0.1
 
 

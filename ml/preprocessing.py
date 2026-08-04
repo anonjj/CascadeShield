@@ -50,13 +50,13 @@ THRESHOLDS = [30, 50, 70]
 WINDOW_SIZES = [5, 10, 20]      # matches the real sweep (was the planned [10, 50, 100])
 WAIT_DURATIONS = [5, 15, 30]    # matches the real sweep (was the planned [5, 10, 30])
 
-# blast_radius is already a 0.0-1.0 fraction in this branch: runner.py's
-# get_blast_radius() normalises the Java endpoint's 0-100 range at the source
-# (raw / 100.0) before writing to the CSV, and generate_synthetic_data.py emits
-# the same 0.0-1.0 scale directly -- so no further rescale happens here. (main's
-# preprocessing.py still divides by 100 because main's own runner.py writes the
-# raw 0-100 value; this constant stays 1.0 to match THIS branch's convention,
-# not main's, or every value would be silently divided by 100 twice.)
+# The pre-fix percent-scaled sweep is archived (data/master_dataset_v1_prefix.csv) and is
+# NEVER trained on. Everything this branch trains on comes from the hand-resolved runner.py,
+# which normalises blast_radius to 0.0-1.0 at the source (get_blast_radius: raw/100), and from
+# generate_synthetic_data.py, which emits 0.0-1.0 directly -- so no rescale happens here.
+# Keeping this at 1.0 (instead of a scale that must be flipped once the data is re-swept) means
+# pre-fix and post-fix runs never share a scale, which removes the stateful-constant drift
+# footgun entirely. A drift guard still warns if a value ever exceeds 1.0.
 BLAST_RADIUS_SCALE = 1.0
 
 FEATURE_COLUMNS = ["topology", "fault_type", "window_type",
@@ -83,19 +83,16 @@ IF_NUMERIC_FEATURES = ["blast_radius", "error_rate", "throughput_loss"]
 IF_FLAG_FEATURES = ["cb_opened", "recovered"]
 IF_FEATURE_NAMES = IF_NUMERIC_FEATURES + IF_FLAG_FEATURES
 
-# blast_radius > tau => "unsafe". main's DEFAULT_TAU=0.1 is calibrated for its
-# discrete real-data distribution (values cluster at {0.0, 0.2, 0.4}, with many
-# rows genuinely at 0.0 -- "zero blast = safe" is a meaningful, common case
-# there). THIS branch's synthetic generator produces a continuous distribution
-# with a hard floor around 0.03-0.06 (see generate_synthetic_data.py's
-# simulate_outcomes: `np.clip(latent + noise, 0.03, 0.99)`) -- almost no row is
-# ever near true zero. Applying main's tau=0.1 here collapsed the label to 19
-# safe / 2897 unsafe (near-constant, cv_f1_macro dropped to 0.45) -- the same
-# degenerate-split failure mode this whole harness-fix effort exists to catch.
-# tau=0.5 is this branch's own calibrated value against its own distribution
-# (743 safe / 2173 unsafe, cv_f1_macro=0.86) and is kept for that reason, not
-# reverted to main's. Tunable; documented in README.
-DEFAULT_TAU = 0.5
+# blast_radius > tau => "unsafe". Justified by the measurement scale, not by any particular
+# sweep's row counts: blast_radius is the fraction of the FOUR CB-bearing downstream subjects
+# that tripped, so it is quantised to quarters -- {0.0, 0.25, 0.5, 0.75, 1.0}. The smallest
+# non-zero value is therefore 0.25, and any tau in (0, 0.25) draws the same line. tau=0.1 sits
+# in that interval and encodes the intended contract exactly: zero blast = safe, ANY subject
+# tripped = unsafe. (tau=0.5 would instead mean "up to half the mesh may trip and still count
+# as safe", a different and much weaker claim -- not a rescaling of this one.) If the subject
+# denominator ever changes, re-check that tau still falls below one quantisation step.
+# Tunable; documented in README.
+DEFAULT_TAU = 0.1
 
 
 def load_dataset(path: str | Path) -> pd.DataFrame:

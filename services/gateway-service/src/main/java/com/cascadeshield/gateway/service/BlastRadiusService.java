@@ -19,13 +19,18 @@ public class BlastRadiusService {
 
     private static final Logger log = LoggerFactory.getLogger(BlastRadiusService.class);
 
-    // Direct container-name URLs — bypasses Toxiproxy to read true CB state
+    // Direct container-name URLs — bypasses Toxiproxy to read true CB state.
+    // Subject set = the four CB-bearing downstream services. shared-db-service is a leaf
+    // with no outbound calls and zero @CircuitBreaker annotations, so it can never have an
+    // open breaker and would only dilute the denominator; it is excluded. The gateway is
+    // also excluded here (it is the measurement plane, not an experimental subject) — this
+    // matches runner.py's CB_METRIC_TARGETS so both metrics range over the same 4 nodes.
+    // Blast radius therefore takes values in {0, 0.25, 0.5, 0.75, 1.0} (x100 here).
     private static final List<String> SERVICE_ACTUATOR_URLS = List.of(
         "http://order-service:8081",
         "http://inventory-service:8082",
         "http://payment-service:8083",
-        "http://notification-service:8084",
-        "http://shared-db-service:8085"
+        "http://notification-service:8084"
     );
 
     private final RestTemplate restTemplate;

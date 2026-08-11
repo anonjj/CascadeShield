@@ -150,6 +150,27 @@ this phase feeds `blast_radius`/`error_rate`/etc.
 | `warmup_requests` | int | `≥ 200` | never null on a `precondition_ok=True` row; blank on a `precondition_ok=False` row (aborted before warmup ran). Proves the warmup dose actually ran rather than merely asserting it. |
 | `warmup_duration_s` | float | `≥ 10.0` | never null on a `precondition_ok=True` row; blank on a `precondition_ok=False` row. Wall-clock seconds the discard phase actually took (may exceed 10s if the request pacing made the 200-request floor the binding constraint). |
 
+### Run-order randomization columns
+
+Sequential execution of a long sweep on one host confounds treatment (config) with
+thermal/memory drift over the sweep's wall-clock duration — later configs would
+systematically run on a warmer/more-fragmented host, biasing exactly the comparison the
+sweep exists to make. `runner.py`'s `main()` builds the full `(config, replicate)` run list
+up front and shuffles it with `build_shuffled_run_list()` before executing anything, using a
+dedicated `random.Random(seed)` instance (never the global `random` module, so nothing else
+in the process can perturb the sequence). The seed defaults to a fresh value drawn from OS
+entropy each invocation (`--seed` overrides it, e.g. to reproduce a specific order for
+debugging) and is printed to stdout as well as persisted here.
+
+| Column | Type | Range | Notes |
+|--------|------|-------|-------|
+| `run_order_seed` | int | — | never null. Same value on every row from one sweep invocation. Feed to `--seed` to reproduce the exact execution order. |
+| `run_index` | int | `1..total_runs` | never null. The run's position in the **shuffled execution order**, not its position in the config/replicate grid — do not assume `run_index` correlates with `threshold`/`window_size`/etc.; that's the point. |
+
+Unlike `warmup_requests`/`precondition_ok`/etc., these two are **never blank** — a run's
+position in the sequence is known the moment it starts, independent of whether it goes on to
+pass its precondition check, warm up, or measure anything.
+
 ---
 
 ## How the two models use these columns

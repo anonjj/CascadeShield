@@ -132,6 +132,24 @@ recreate blindly.
 > before this fix (no `precondition_ok` column at all — synthetic data, archived pre-fix
 > sweeps) are untouched by this filter; there is nothing in them to drop.
 
+### JIT warmup columns
+
+A cold Spring Boot JVM (interpreted bytecode, C1/C2 JIT not yet compiled the hot path) can
+add 100ms+ latency to individual requests — noise on the same order as, or larger than,
+some of what's measured here, and real contamination of a DV (`time_to_open`,
+`time_to_recover`) whose true effects are single-digit seconds. `runner.py` now runs a
+discard-phase warmup against the run's endpoint immediately after the breaker-reset
+precondition passes and *before* the baseline throughput measurement — so that measurement
+isn't itself contaminated — until **both** 200 requests have completed **and** 10 seconds
+have elapsed (`WARMUP_MIN_REQUESTS` / `WARMUP_MIN_DURATION_S` in `runner.py`; "whichever is
+longer" means neither floor may be skipped). Responses are read and discarded; nothing from
+this phase feeds `blast_radius`/`error_rate`/etc.
+
+| Column | Type | Range | Notes |
+|--------|------|-------|-------|
+| `warmup_requests` | int | `≥ 200` | never null on a `precondition_ok=True` row; blank on a `precondition_ok=False` row (aborted before warmup ran). Proves the warmup dose actually ran rather than merely asserting it. |
+| `warmup_duration_s` | float | `≥ 10.0` | never null on a `precondition_ok=True` row; blank on a `precondition_ok=False` row. Wall-clock seconds the discard phase actually took (may exceed 10s if the request pacing made the 200-request floor the binding constraint). |
+
 ---
 
 ## How the two models use these columns

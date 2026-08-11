@@ -4,6 +4,7 @@ import time
 import argparse
 import subprocess
 import csv
+import random
 import urllib.request
 import json
 import threading
@@ -61,6 +62,14 @@ DATASET_HEADERS = [
     # real effects are single-digit seconds.
     "warmup_requests",
     "warmup_duration_s",
+    # Run-order randomization: sequential execution of a long sweep on one host confounds
+    # treatment (config) with thermal/memory drift over the sweep's wall-clock duration --
+    # later configs would systematically run on a warmer/more-fragmented host. main() builds
+    # the full run list up front and shuffles it with random.Random(run_order_seed), so
+    # execution order is decorrelated from config order. Never null: every row, including
+    # PRECONDITION_FAIL/READINESS_TIMEOUT aborts, has a definite position in the sequence.
+    "run_order_seed",
+    "run_index",
 ]
 
 # How many replicates per config (min 3 for variance estimation)
@@ -707,14 +716,17 @@ def get_dataset_path(mode):
 
 def log_results(config, fault_type, mode, topology, metrics, replicate):
     """Appends experiment run results to master_dataset.csv (full mode) or
-    canary_runs.csv (canary mode) -- 26-col schema, same DATASET_HEADERS either way.
+    canary_runs.csv (canary mode) -- 28-col schema, same DATASET_HEADERS either way.
 
     metrics only needs to carry the keys a given call actually has: a
     PRECONDITION_FAIL row (aborted before fault injection, before warmup even
     runs) passes just the precondition_* / readiness_wait_s / cb_state_pre /
-    buffered_calls_pre keys, and every outcome column below (blast_radius,
-    error_rate, warmup_requests, ...) is written blank rather than
-    KeyError-ing or fabricating a 0.0."""
+    buffered_calls_pre / run_order_seed / run_index keys, and every outcome
+    column below (blast_radius, error_rate, warmup_requests, ...) is written
+    blank rather than KeyError-ing or fabricating a 0.0. run_order_seed and
+    run_index are the two exceptions expected on every row regardless of
+    outcome -- a run's position in the shuffled execution order is known the
+    moment it starts, independent of what happens during it."""
     dataset_path = get_dataset_path(mode)
     os.makedirs(os.path.dirname(dataset_path), exist_ok=True)
     file_exists = os.path.exists(dataset_path)
@@ -768,11 +780,19 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
             metrics.get("buffered_calls_pre", ""),
             metrics.get("warmup_requests", ""),
             f"{metrics['warmup_duration_s']:.3f}" if metrics.get('warmup_duration_s') is not None else "",
+            metrics.get("run_order_seed", ""),
+            metrics.get("run_index", ""),
         ])
     print(f"Saved run metrics to {dataset_path}")
 
-def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1):
-    """Orchestrates a single configuration and fault run."""
+def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
+                        run_order_seed=None, run_index=None):
+    """Orchestrates a single configuration and fault run.
+
+    run_order_seed/run_index describe this run's place in the sweep's shuffled
+    execution order (see main()) -- attached to every log_results call in this
+    function, including both abort paths, so a run's position is recoverable
+    even when it never got far enough to produce an outcome."""
     print("\n" + "="*60)
     print(f"STARTING EXPERIMENT: Mode={mode}, Topology={topology}, Fault={fault_type}, Replicate={replicate}")
     print(f"Config: {config}")
@@ -794,6 +814,8 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1)
             "precondition_ok": False,
             "precondition_fail_reason": "READINESS_TIMEOUT",
             "readiness_wait_s": readiness_wait_s,
+            "run_order_seed": run_order_seed,
+            "run_index": run_index,
         }, replicate)
         return False
 
@@ -814,6 +836,8 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1)
             "readiness_wait_s": readiness_wait_s,
             "cb_state_pre": _serialize_cb_map(precondition["cb_state"]),
             "buffered_calls_pre": _serialize_cb_map(precondition["buffered_calls"]),
+            "run_order_seed": run_order_seed,
+            "run_index": run_index,
         }, replicate)
         return False
 
@@ -993,6 +1017,8 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1)
         "buffered_calls_pre": _serialize_cb_map(precondition["buffered_calls"]),
         "warmup_requests": warmup_requests,
         "warmup_duration_s": warmup_duration_s,
+        "run_order_seed": run_order_seed,
+        "run_index": run_index,
     }
     log_results(config, fault_type, mode, topology, metrics, replicate)
 
@@ -1037,13 +1063,36 @@ def generate_combinations(mode):
                         })
     return configs
 
+def build_shuffled_run_list(configs, replicates, seed=None):
+    """Builds the full (config_index, config, replicate) run list and shuffles it
+    with a dedicated random.Random instance (not the global random module, so
+    nothing else in this process can perturb the sequence) -- sequential execution
+    of a long sweep on one host confounds treatment (config) with thermal/memory
+    drift over the sweep's wall-clock duration, so execution order must be
+    decorrelated from config order.
+
+    Returns (run_order_seed, run_list). If seed is None, a fresh seed is drawn from
+    OS entropy (random.SystemRandom -- unpredictable and independent of any prior
+    random.seed() call elsewhere) so each invocation gets a genuinely different
+    order by default; the caller persists run_order_seed to every dataset row so
+    the resulting order is reconstructable after the fact.
+    """
+    run_order_seed = seed if seed is not None else random.SystemRandom().randint(0, 2**31 - 1)
+    run_list = [(i, config, rep) for i, config in enumerate(configs) for rep in range(1, replicates + 1)]
+    random.Random(run_order_seed).shuffle(run_list)
+    return run_order_seed, run_list
+
 def main():
     parser = argparse.ArgumentParser(description="CascadeShield Parameter Sweep Automation Runner")
     parser.add_argument("--mode", choices=["canary", "full"], default="canary", help="canary (5 configs × 3 replicates = 15 runs) or full (54 configs × 3 replicates = 162 runs per fault type; 486 total across 3 faults)")
     parser.add_argument("--fault", choices=["latency", "crash", "throttle"], default="latency", help="Fault type to inject")
     parser.add_argument("--topology", choices=["linear", "fanout", "mesh"], default="linear", help="Service mesh topology pattern")
     parser.add_argument("--replicates", type=int, default=N_REPLICATES, help=f"Number of replicates per config (default: {N_REPLICATES})")
-    
+    parser.add_argument("--seed", type=int, default=None,
+                         help="Seed for the run-order shuffle (default: a fresh random seed each "
+                              "invocation, printed and persisted to run_order_seed). Pass an explicit "
+                              "value to reproduce a specific execution order.")
+
     args = parser.parse_args()
     
     print(f"Starting CascadeShield Runner in '{args.mode}' mode targeting '{args.topology}' topology with '{args.fault}' fault.")
@@ -1066,10 +1115,19 @@ def main():
     total_runs = len(configs) * args.replicates
     print(f"Generated {len(configs)} configs × {args.replicates} replicates = {total_runs} total runs.")
 
+    # Randomize run order (see build_shuffled_run_list): sequential execution of a long
+    # sweep on one host confounds treatment (config) with thermal/memory drift over the
+    # sweep's wall-clock duration -- later configs would systematically run on a
+    # warmer/more-fragmented host, biasing exactly the comparison the sweep exists to
+    # make. run_index below is the run's position in this shuffled sequence, not its
+    # position in configs.
+    run_order_seed, run_list = build_shuffled_run_list(configs, args.replicates, args.seed)
+    print(f"Run order shuffled with seed {run_order_seed} ({len(run_list)} runs). "
+          f"Pass --seed {run_order_seed} to reproduce this exact order.")
+
     started_at = _now_iso()
     success_runs = 0
     failed_runs = 0
-    run_number = 0
     write_status({
         "mode": args.mode, "fault_type": args.fault, "topology": args.topology,
         "replicates": args.replicates, "total_configs": len(configs), "total_runs": total_runs,
@@ -1078,29 +1136,29 @@ def main():
         "phase": "running", "started_at": started_at, "updated_at": started_at,
     })
 
-    for i, config in enumerate(configs):
-        for rep in range(1, args.replicates + 1):
-            run_number += 1
-            print(f"\nProgress: Run {run_number} of {total_runs} (config {i+1}/{len(configs)}, replicate {rep}/{args.replicates})")
-            write_status({
-                "mode": args.mode, "fault_type": args.fault, "topology": args.topology,
-                "replicates": args.replicates, "total_configs": len(configs), "total_runs": total_runs,
-                "run_number": run_number, "config_index": i, "current_config": config, "replicate": rep,
-                "success_runs": success_runs, "failed_runs": failed_runs,
-                "phase": "running", "started_at": started_at, "updated_at": _now_iso(),
-            })
-            success = run_experiment_run(config, args.fault, args.mode, args.topology, replicate=rep)
-            if success:
-                success_runs += 1
-            else:
-                failed_runs += 1
-            write_status({
-                "mode": args.mode, "fault_type": args.fault, "topology": args.topology,
-                "replicates": args.replicates, "total_configs": len(configs), "total_runs": total_runs,
-                "run_number": run_number, "config_index": i, "current_config": config, "replicate": rep,
-                "success_runs": success_runs, "failed_runs": failed_runs,
-                "phase": "running", "started_at": started_at, "updated_at": _now_iso(),
-            })
+    for run_index, (i, config, rep) in enumerate(run_list, start=1):
+        run_number = run_index  # execution sequence position, not config/replicate order
+        print(f"\nProgress: Run {run_number} of {total_runs} (config {i+1}/{len(configs)}, replicate {rep}/{args.replicates})")
+        write_status({
+            "mode": args.mode, "fault_type": args.fault, "topology": args.topology,
+            "replicates": args.replicates, "total_configs": len(configs), "total_runs": total_runs,
+            "run_number": run_number, "config_index": i, "current_config": config, "replicate": rep,
+            "success_runs": success_runs, "failed_runs": failed_runs,
+            "phase": "running", "started_at": started_at, "updated_at": _now_iso(),
+        })
+        success = run_experiment_run(config, args.fault, args.mode, args.topology, replicate=rep,
+                                      run_order_seed=run_order_seed, run_index=run_index)
+        if success:
+            success_runs += 1
+        else:
+            failed_runs += 1
+        write_status({
+            "mode": args.mode, "fault_type": args.fault, "topology": args.topology,
+            "replicates": args.replicates, "total_configs": len(configs), "total_runs": total_runs,
+            "run_number": run_number, "config_index": i, "current_config": config, "replicate": rep,
+            "success_runs": success_runs, "failed_runs": failed_runs,
+            "phase": "running", "started_at": started_at, "updated_at": _now_iso(),
+        })
 
     print("\n" + "="*60)
     print(f"SWEEP COMPLETED: {success_runs}/{total_runs} runs executed successfully.")

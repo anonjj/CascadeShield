@@ -84,7 +84,10 @@ past 486 (e.g. 486 configs × 2 environments × 3 replicates = 2,916 rows).
 > **17-column real file.** The live `master_dataset.csv` carries two operational columns
 > — `permitted_calls_half_open` and `mode` — beyond the original 15-column skeleton.
 > `preprocessing.py` recognises them as provenance (excluded from features) so the file
-> validates cleanly against the schema contract.
+> validates cleanly against the schema contract. Additional columns have since been
+> appended for `real_blast_radius` / `leg_failure_rates` and the precondition gate below
+> — `preprocessing.py`'s `load_dataset()` only checks that required columns are *present*,
+> so extras always ride along without breaking the contract.
 
 ### Dependent variables — measured outcomes → **targets / Isolation Forest inputs**
 
@@ -100,6 +103,27 @@ past 486 (e.g. 486 configs × 2 environments × 3 replicates = 2,916 rows).
 > (the breaker never tripped, or the system never recovered), not random missingness. Do **not**
 > mean-impute them. Either carry a companion boolean (`cb_opened`, `recovered`) or use an explicit
 > sentinel — decide this in feature engineering before model training, not after.
+
+### Breaker-state-reset precondition columns
+
+The highest-priority harness bug found so far: circuit breaker state was observed carrying
+over between replicates of an **identical** config — one `LIN-LAT-CNT-T30-W20-D5` replicate
+tripped in 0.303s with three legs at exactly `0.0000` failure rate, against 6.256s/6.138s for
+its identical siblings, consistent with a breaker that started the run already
+OPEN/near-tripped rather than one that tripped fresh off real failures inside the run's own
+window. `update_containers()` already force-recreates every container before every run, which
+*should* reset Resilience4j's in-memory registry — these columns make that reset explicit
+(`POST /actuator/circuitbreakers/{name}` → `transitionToClosedState()`) and record the
+verification against ground truth (`GET /actuator/circuitbreakers`) instead of trusting the
+recreate blindly.
+
+| Column | Type | Range | Notes |
+|--------|------|-------|-------|
+| `precondition_ok` | bool | `True`/`False` | never null. `False` means the run was aborted **before fault injection** — every outcome column above (`blast_radius`, `error_rate`, ...) is blank on that row, not `0.0`. Exclude these rows from training/analysis; they measure nothing. |
+| `precondition_fail_reason` | string | e.g. `READINESS_TIMEOUT`, `order:inventoryServiceCB=state:OPEN`, `order:inventoryServiceCB=buffered:10` | `""` when `precondition_ok=True`. `state:X` = breaker didn't reset to CLOSED; `buffered:N` = breaker read CLOSED but still carried buffered calls from the prior run's window (the direct signal that force-recreate did not actually reset that service's JVM); `UNREACHABLE` = actuator endpoint didn't respond; `READINESS_TIMEOUT` = one or more of the six services never reported `/actuator/health` UP. |
+| `readiness_wait_s` | float | `≥ 0` | never null. Wall-clock seconds spent polling all six services (including `shared-db-service`, which has no breaker of its own but sits in every call chain) before proceeding or hitting the readiness deadline. |
+| `cb_state_pre` | string | `"service:breaker=STATE;..."` | Per-breaker state from `GET /actuator/circuitbreakers`, read immediately after the reset attempt, for all five CB-bearing services. Ground truth, not an inference from health or from the recreate having merely been attempted. |
+| `buffered_calls_pre` | string | `"service:breaker=N;..."` | Per-breaker `bufferedCalls` from the same read. `0` on a genuinely fresh container; non-zero is the direct test of whether `update_containers()`'s force-recreate is doing what its docstring assumes. |
 
 ---
 

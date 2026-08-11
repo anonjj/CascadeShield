@@ -36,6 +36,25 @@ DATASET_HEADERS = [
     # Raw per-leg failure rates behind real_blast_radius ("svc:rate;svc:rate", each 0-1), so a
     # different TAU_LEG can be applied post-hoc from the CSV without re-running the sweep.
     "leg_failure_rates",
+    # Breaker-state-reset precondition (highest-priority harness bug found: CB state observed
+    # carrying over between replicates of an IDENTICAL config -- e.g. one replicate tripping in
+    # 0.303s against 6.2s+ for its siblings, consistent with a breaker that started this run
+    # already OPEN rather than one that tripped fresh). precondition_ok=False rows have every
+    # outcome column above left BLANK -- the run was aborted before fault injection, so they
+    # measured nothing and MUST be excluded from training/analysis, not read as "0.0" / "safe".
+    "precondition_ok",
+    "precondition_fail_reason",
+    # Wall-clock seconds spent polling all six services' /actuator/health before the run
+    # proceeded (or the readiness deadline was hit). Recorded even on timeout.
+    "readiness_wait_s",
+    # Per-breaker state read from GET /actuator/circuitbreakers right after the pre-run
+    # reset, serialized "service:breaker=STATE;...". Ground truth for "did the reset work",
+    # not an inference from health or container-recreate having merely been *attempted*.
+    "cb_state_pre",
+    # Per-breaker bufferedCalls from the same read, serialized "service:breaker=N;...". On a
+    # genuinely fresh container this is 0 for every breaker; non-zero is the direct signal
+    # that update_containers()'s force-recreate did NOT actually reset that service's JVM.
+    "buffered_calls_pre",
 ]
 
 # How many replicates per config (min 3 for variance estimation)
@@ -63,6 +82,15 @@ SERVICE_BREAKERS = {
     "notification": (8084, ["sharedDbCB"]),
 }
 CB_EVENT_BUFFER_SIZE = 50  # must match application.yml's event-consumer-buffer-size
+
+# All six services in the call chain, for the readiness gate. shared-db-service has no
+# circuit breaker of its own (see SERVICE_BREAKERS above) but every other service calls
+# into it, so an unhealthy/still-starting shared-db silently corrupts every other
+# service's measurements even though it never appears in SERVICE_BREAKERS.
+ALL_SERVICE_PORTS = {
+    "gateway": 8080, "order": 8081, "inventory": 8082,
+    "payment": 8083, "notification": 8084, "shared-db": 8085,
+}
 
 # Configuration Parameter Values for Sweeps (3*3*3*2 = 54 configs per fault × 3 faults × 3 replicates = 486 total runs)
 PARAM_VALUES = {
@@ -156,38 +184,40 @@ def update_containers():
         return False
     return True
 
-def wait_for_healthy(timeout=60):
-    """Polls gateway and notification-service until both report UP.
+def wait_for_readiness(timeout=90):
+    """Polls /actuator/health on all SIX services until every one reports UP, or
+    a hard deadline is hit. Supersedes the old "just check gateway + notification
+    and infer the rest" shortcut -- that inference is exactly the kind of
+    unverified assumption the breaker-reset precondition below exists to stop
+    making; shared-db-service in particular has no circuit breaker of its own
+    but sits in every call chain, so a still-starting shared-db silently
+    corrupts every other service's measurements.
 
-    notification-service is checked explicitly because --no-deps in
-    update_containers() bypasses depends_on conditions, so Docker will not
-    wait for shared-db-service before starting notification-service. If
-    notification-service is UP, shared-db-service is also ready.
+    Returns (all_healthy, elapsed_s). elapsed_s is recorded on timeout too --
+    a run that barely made the deadline and one that never did are both
+    evidence worth keeping in the dataset, not just a pass/fail bit.
     """
-    endpoints = [
-        ("http://localhost:8080/actuator/health", "gateway-service"),
-        ("http://localhost:8084/actuator/health", "notification-service"),
-    ]
-    healthy = {url: False for url, _ in endpoints}
     start_time = time.time()
+    healthy = {name: False for name in ALL_SERVICE_PORTS}
     while time.time() - start_time < timeout:
-        for url, name in endpoints:
-            if healthy[url]:
+        for name, port in ALL_SERVICE_PORTS.items():
+            if healthy[name]:
                 continue
             try:
-                with urllib.request.urlopen(url, timeout=2) as response:
+                with urllib.request.urlopen(f"http://localhost:{port}/actuator/health", timeout=2) as response:
                     if response.status == 200:
                         data = json.loads(response.read().decode("utf-8"))
                         if data.get("status") == "UP":
-                            print(f"{name} is healthy!")
-                            healthy[url] = True
+                            print(f"{name}-service is healthy!")
+                            healthy[name] = True
             except Exception:
                 pass
         if all(healthy.values()):
-            return True
+            return True, round(time.time() - start_time, 3)
         time.sleep(2)
-    print("Timeout waiting for services to become healthy.", file=sys.stderr)
-    return False
+    not_ready = [name for name, ok in healthy.items() if not ok]
+    print(f"Timeout waiting for services to become healthy: {not_ready} never reported UP.", file=sys.stderr)
+    return False, round(time.time() - start_time, 3)
 
 def inject_fault(fault_type):
     """Injects the appropriate fault profile into Toxiproxy."""
@@ -312,6 +342,120 @@ def get_blast_radius():
     except Exception as e:
         print(f"Failed to query blast radius from Gateway: {e}", file=sys.stderr)
     return None  # Sentinel: distinguishable from a real 0.0 (healthy mesh)
+
+# ---- Breaker-state-reset precondition -----------------------------------------
+# update_containers() already force-recreates every container before every run, which
+# SHOULD reset Resilience4j's in-memory CircuitBreakerRegistry (a fresh JVM has no
+# accumulated state) -- but that has been observed NOT to hold: a replicate can start
+# with a breaker already OPEN/near-tripped from the prior run, tripping in ~0.3s
+# instead of the ~6s its identical siblings take on a genuine cold start. The functions
+# below make the reset explicit (rather than trusting force-recreate blindly) and then
+# verify it against ground truth before any fault is injected, so a run that can't be
+# trusted is aborted instead of silently written as if it started clean.
+#
+# Verified against the actual resilience4j-spring-boot3 2.2.0 jar this project depends
+# on (decompiled CircuitBreakerEndpoint.class) rather than assumed from memory:
+#   GET  /actuator/circuitbreakers            -> {"circuitBreakers": {name: {"state":
+#        "CLOSED"|"OPEN"|..., "bufferedCalls": int, ...}}}   (@ReadOperation)
+#   POST /actuator/circuitbreakers/{name}     body {"updateState": "CLOSE"}  ->
+#        calls CircuitBreaker.transitionToClosedState()      (@WriteOperation)
+# Deliberately NOT using /actuator/health for the read: management.health.circuitbreakers
+# .enabled is opt-in, and if it were ever turned off, health would report a bare "UP" with
+# no breaker detail and this assertion would pass vacuously -- the exact failure mode this
+# precondition exists to prevent. /actuator/circuitbreakers needs no such opt-in and is
+# already in every service's management.endpoints.web.exposure.include.
+
+def _get_circuit_breakers(port):
+    """GET /actuator/circuitbreakers: {breaker_name: {"state": ..., "bufferedCalls": ...}}.
+    Returns {} on any failure -- callers must treat that as "could not verify" (fail
+    closed), never as "no breakers configured"."""
+    url = f"http://localhost:{port}/actuator/circuitbreakers"
+    try:
+        with urllib.request.urlopen(url, timeout=3) as response:
+            data = json.loads(response.read().decode("utf-8"))
+            return data.get("circuitBreakers", {})
+    except Exception as e:
+        print(f"Failed to read circuit breakers (port {port}): {e}", file=sys.stderr)
+        return {}
+
+def _transition_breaker_to_closed(port, breaker_name):
+    """POST /actuator/circuitbreakers/{name} {"updateState": "CLOSE"} -- forces an
+    immediate, explicit reset to CLOSED, independent of (and a belt-and-suspenders
+    complement to) the per-run container force-recreate in update_containers().
+    Best-effort: the real gate is check_breaker_precondition() re-reading ground
+    truth afterward, not this call succeeding."""
+    url = f"http://localhost:{port}/actuator/circuitbreakers/{breaker_name}"
+    body = json.dumps({"updateState": "CLOSE"}).encode("utf-8")
+    req = urllib.request.Request(url, data=body, method="POST",
+                                  headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=3) as response:
+            return response.status == 200
+    except Exception as e:
+        print(f"Failed to reset {breaker_name} to CLOSED (port {port}): {e}", file=sys.stderr)
+        return False
+
+def reset_all_breakers():
+    """Best-effort: force every known breaker (SERVICE_BREAKERS) to CLOSED via the
+    actuator write endpoint before check_breaker_precondition() asserts the result."""
+    for service, (port, breakers) in SERVICE_BREAKERS.items():
+        for breaker in breakers:
+            _transition_breaker_to_closed(port, breaker)
+
+def _serialize_cb_map(nested):
+    """{service: {breaker: value}} -> "service:breaker=value;service:breaker=value",
+    matching the "svc:rate;svc:rate" convention already used for leg_failure_rates."""
+    return ";".join(
+        f"{service}:{breaker}={value}"
+        for service, breakers in nested.items()
+        for breaker, value in breakers.items()
+    )
+
+def check_breaker_precondition():
+    """Reset-then-verify: reads every known breaker's ACTUAL state and bufferedCalls
+    straight from /actuator/circuitbreakers and asserts both are clean. Fails closed --
+    an unreachable service counts as a failure, not a pass.
+
+    Two independent checks, because they catch different failures:
+      * state != CLOSED       -- the reset didn't take, or something re-tripped it
+        between the reset call and this read.
+      * bufferedCalls != 0    -- on a genuinely fresh container this is always 0.
+        Non-zero is the direct test of whether force-recreate is doing what
+        update_containers()'s docstring assumes: a breaker can already read CLOSED
+        again (Resilience4j resets bufferedCalls per sliding-window slot, not just on
+        state transitions) while still carrying calls from the PRIOR run's window --
+        state alone would miss that carryover.
+    """
+    cb_state = {}
+    buffered_calls = {}
+    fail_reasons = []
+
+    for service, (port, breakers) in SERVICE_BREAKERS.items():
+        details = _get_circuit_breakers(port)
+        cb_state[service] = {}
+        buffered_calls[service] = {}
+        for breaker in breakers:
+            info = details.get(breaker)
+            if info is None:
+                cb_state[service][breaker] = "UNREACHABLE"
+                buffered_calls[service][breaker] = "UNREACHABLE"
+                fail_reasons.append(f"{service}:{breaker}=UNREACHABLE")
+                continue
+            state = info.get("state", "UNKNOWN")
+            buffered = info.get("bufferedCalls", -1)
+            cb_state[service][breaker] = state
+            buffered_calls[service][breaker] = buffered
+            if state != "CLOSED":
+                fail_reasons.append(f"{service}:{breaker}=state:{state}")
+            if buffered != 0:
+                fail_reasons.append(f"{service}:{breaker}=buffered:{buffered}")
+
+    return {
+        "ok": not fail_reasons,
+        "fail_reason": "; ".join(fail_reasons),
+        "cb_state": cb_state,
+        "buffered_calls": buffered_calls,
+    }
 
 def _fetch_breaker_events(port, breaker_name):
     """Raw STATE_TRANSITION events currently in `breaker_name`'s actuator ring
@@ -509,7 +653,13 @@ def get_dataset_path(mode):
 
 def log_results(config, fault_type, mode, topology, metrics, replicate):
     """Appends experiment run results to master_dataset.csv (full mode) or
-    canary_runs.csv (canary mode) -- 18-col schema, same DATASET_HEADERS either way."""
+    canary_runs.csv (canary mode) -- 24-col schema, same DATASET_HEADERS either way.
+
+    metrics only needs to carry the keys a given call actually has: a
+    PRECONDITION_FAIL row (aborted before fault injection) passes just the
+    precondition_* / readiness_wait_s / cb_state_pre / buffered_calls_pre keys,
+    and every outcome column below (blast_radius, error_rate, ...) is written
+    blank rather than KeyError-ing or fabricating a 0.0."""
     dataset_path = get_dataset_path(mode)
     os.makedirs(os.path.dirname(dataset_path), exist_ok=True)
     file_exists = os.path.exists(dataset_path)
@@ -552,10 +702,15 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
             f"{metrics.get('blast_radius', ''):.4f}" if metrics.get('blast_radius') is not None else "",
             time_to_open if time_to_open is not None else "",   # "" = CB never opened (meaningful null)
             time_to_recover if time_to_recover is not None else "",  # "" = system did not recover (meaningful null)
-            f"{metrics['error_rate']:.4f}",
-            f"{metrics['throughput_loss']:.4f}",
+            f"{metrics['error_rate']:.4f}" if metrics.get('error_rate') is not None else "",
+            f"{metrics['throughput_loss']:.4f}" if metrics.get('throughput_loss') is not None else "",
             f"{metrics['real_blast_radius']:.4f}" if metrics.get('real_blast_radius') is not None else "",  # "" = no leg observable (measurement gap)
             ";".join(f"{svc}:{rate:.4f}" for svc, rate in (metrics.get('leg_failure_rates') or {}).items()),  # raw per-leg rates; "" = none observed
+            metrics.get("precondition_ok", ""),
+            metrics.get("precondition_fail_reason", ""),
+            f"{metrics['readiness_wait_s']:.3f}" if metrics.get('readiness_wait_s') is not None else "",
+            metrics.get("cb_state_pre", ""),
+            metrics.get("buffered_calls_pre", ""),
         ])
     print(f"Saved run metrics to {dataset_path}")
 
@@ -572,9 +727,37 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1)
         print("Skipping run due to Docker compose failure.", file=sys.stderr)
         return False
 
-    # 2. Verify containers started up
-    if not wait_for_healthy():
-        print("Skipping run due to unhealthy services.", file=sys.stderr)
+    # 2. Verify all six containers came up -- including shared-db-service, which has
+    #    no breaker of its own but sits in every call chain (see wait_for_readiness).
+    all_ready, readiness_wait_s = wait_for_readiness()
+    if not all_ready:
+        print("Skipping run: not all six services became healthy within the readiness deadline.",
+              file=sys.stderr)
+        log_results(config, fault_type, mode, topology, {
+            "precondition_ok": False,
+            "precondition_fail_reason": "READINESS_TIMEOUT",
+            "readiness_wait_s": readiness_wait_s,
+        }, replicate)
+        return False
+
+    # 2b. Breaker-state-reset precondition (see the "Breaker-state-reset precondition"
+    #    block above get_blast_radius() for the full rationale). update_containers()
+    #    already force-recreates every container every run, which SHOULD reset
+    #    Resilience4j's in-memory registry to CLOSED -- this makes that explicit via
+    #    the actuator instead of trusting it blindly, then verifies the result before
+    #    any fault is injected. A run that fails this check measures nothing real and
+    #    is aborted rather than silently recorded as if it started clean.
+    reset_all_breakers()
+    precondition = check_breaker_precondition()
+    if not precondition["ok"]:
+        print(f"PRECONDITION_FAIL: {precondition['fail_reason']}", file=sys.stderr)
+        log_results(config, fault_type, mode, topology, {
+            "precondition_ok": False,
+            "precondition_fail_reason": precondition["fail_reason"],
+            "readiness_wait_s": readiness_wait_s,
+            "cb_state_pre": _serialize_cb_map(precondition["cb_state"]),
+            "buffered_calls_pre": _serialize_cb_map(precondition["buffered_calls"]),
+        }, replicate)
         return False
 
     # Snapshot each interior breaker's actuator ring buffer before the fault, so
@@ -741,6 +924,11 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1)
         "avg_latency_ms": avg_latency,
         "time_to_open": time_to_open,
         "time_to_recover": time_to_recover,
+        "precondition_ok": True,
+        "precondition_fail_reason": "",
+        "readiness_wait_s": readiness_wait_s,
+        "cb_state_pre": _serialize_cb_map(precondition["cb_state"]),
+        "buffered_calls_pre": _serialize_cb_map(precondition["buffered_calls"]),
     }
     log_results(config, fault_type, mode, topology, metrics, replicate)
 

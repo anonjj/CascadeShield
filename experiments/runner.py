@@ -76,6 +76,14 @@ DATASET_HEADERS = [
 N_REPLICATES = 3
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "LOCAL")  # override to AWS on cloud runs
 
+# No-fault control condition (fault_type=NONE): without it, a config reading blast_radius=0
+# under a real fault is not distinguishable from a config that would read 0 regardless of
+# whether anything actually happened -- "safe" is only a meaningful claim relative to a
+# baseline false-trip rate (phi), which requires actually running the mesh with no fault
+# injected. Enforced as a hard floor, not a suggestion: undersampling the control condition
+# defeats the entire point of collecting it.
+MIN_NONE_FAULT_REPLICATES = 10
+
 # Sidecar log of real Resilience4j state-transition events, keyed to each CSV row
 # by experiment_id/replicate/mode. Exists because error_rate/blast_radius alone
 # cannot tell us whether an *interior* breaker (order/inventory/payment/notification's
@@ -263,7 +271,13 @@ def inject_fault(fault_type):
     elif fault_type == "throttle":
         # Limit database proxy bandwidth to 1 KB/s (simulates DB connection/resource limits)
         toxiproxy.inject_bandwidth_limit("shared-db-service-proxy", rate_kbps=1, toxicity=1.0)
-        
+
+    elif fault_type == "none":
+        # Deliberate no-op: this is a control replicate. toxiproxy.reset_all() above already
+        # guarantees every proxy is clean, so the "fault window" is a pure healthy-baseline
+        # window -- exactly the point. Not an error case; do not fall through to the else.
+        pass
+
     else:
         print(f"No fault injected. Type '{fault_type}' is unknown.", file=sys.stderr)
 
@@ -685,7 +699,7 @@ def compute_real_blast_radius(before, after, tau=REAL_BLAST_LEG_ERROR_THRESHOLD)
 def make_experiment_id(topology, fault_type, config):
     """Builds a deterministic ID matching experiment_matrix.csv e.g. LIN-LAT-CNT-T50-W10-D15."""
     topo_map  = {"linear": "LIN", "fanout": "FAN", "mesh": "MSH"}
-    fault_map = {"latency": "LAT", "crash": "CRS", "throttle": "THR"}
+    fault_map = {"latency": "LAT", "crash": "CRS", "throttle": "THR", "none": "NON"}
     wtype_map = {"COUNT_BASED": "CNT", "TIME_BASED": "TIM"}
     topo  = topo_map.get(topology, topology[:3].upper())
     fault = fault_map.get(fault_type, fault_type[:3].upper())
@@ -1085,7 +1099,9 @@ def build_shuffled_run_list(configs, replicates, seed=None):
 def main():
     parser = argparse.ArgumentParser(description="CascadeShield Parameter Sweep Automation Runner")
     parser.add_argument("--mode", choices=["canary", "full"], default="canary", help="canary (5 configs × 3 replicates = 15 runs) or full (54 configs × 3 replicates = 162 runs per fault type; 486 total across 3 faults)")
-    parser.add_argument("--fault", choices=["latency", "crash", "throttle"], default="latency", help="Fault type to inject")
+    parser.add_argument("--fault", choices=["latency", "crash", "throttle", "none"], default="latency",
+                         help="Fault type to inject. 'none' is the no-fault control condition -- "
+                              f"requires --replicates >= {MIN_NONE_FAULT_REPLICATES} (see MIN_NONE_FAULT_REPLICATES).")
     parser.add_argument("--topology", choices=["linear", "fanout", "mesh"], default="linear", help="Service mesh topology pattern")
     parser.add_argument("--replicates", type=int, default=N_REPLICATES, help=f"Number of replicates per config (default: {N_REPLICATES})")
     parser.add_argument("--seed", type=int, default=None,
@@ -1094,7 +1110,18 @@ def main():
                               "value to reproduce a specific execution order.")
 
     args = parser.parse_args()
-    
+
+    # Enforced, not advisory: a no-fault sweep run below the floor produces a control
+    # sample too thin to establish phi (the baseline false-trip rate), which is the entire
+    # reason to collect it -- silently under-sampling here would defeat the point rather
+    # than just being a smaller version of it.
+    if args.fault == "none" and args.replicates < MIN_NONE_FAULT_REPLICATES:
+        print(f"--fault none requires --replicates >= {MIN_NONE_FAULT_REPLICATES} "
+              f"(got {args.replicates}). Every config needs enough no-fault replicates to "
+              "establish a baseline false-trip rate -- a thinner control sample defeats the "
+              "purpose of collecting it.", file=sys.stderr)
+        sys.exit(1)
+
     print(f"Starting CascadeShield Runner in '{args.mode}' mode targeting '{args.topology}' topology with '{args.fault}' fault.")
     
     # Verify Toxiproxy is reachable

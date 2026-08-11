@@ -14,7 +14,8 @@
 
 **Status:** Defined (Week 1). **Lock target:** end of Week 2 — no column changes after that.
 **Primary file:** `data/master_dataset_schema.csv` (header-only skeleton; experiments append rows).
-**Planning file:** `data/experiment_matrix.csv` (the 486 planned configurations).
+**Planning file:** `data/experiment_matrix.csv` (486 fault-bearing configurations —
+`LATENCY`/`CRASH`/`THROTTLE` — plus 162 `NONE` no-fault control configurations, 648 total).
 
 > 🔄 **SWEEP IN PROGRESS — current `master_dataset.csv` is a partial rebuild.**
 > After the blast-radius metric change the dataset was reseeded from empty, and collection is
@@ -51,7 +52,7 @@ past 486 (e.g. 486 configs × 2 environments × 3 replicates = 2,916 rows).
 | Column | Type | Valid values | Unit | ML encoding |
 |--------|------|--------------|------|-------------|
 | `topology` | categorical | `LINEAR` (planned: `FAN_OUT`, `SHARED_DEP_MESH`) | — | one-hot |
-| `fault_type` | categorical | `LATENCY`, `CRASH`, `THROTTLE` | — | one-hot |
+| `fault_type` | categorical | `LATENCY`, `CRASH`, `THROTTLE`, `NONE` | — | one-hot (`NONE` excluded — see note below) |
 | `window_type` | categorical (binary) | `COUNT_BASED`, `TIME_BASED` | — | binary (0/1) — **the primary novelty variable** |
 | `threshold` | int | `{30, 50, 70}` (range 1–100) | percent | numeric |
 | `window_size` | int | `{5, 10, 20}` (range 1–1000) | **calls if COUNT_BASED, seconds if TIME_BASED** | numeric (see note) |
@@ -65,6 +66,20 @@ past 486 (e.g. 486 configs × 2 environments × 3 replicates = 2,916 rows).
 > `ml/preprocessing.py`'s constants (not from `experiment_matrix.csv`) so it stays
 > schema-identical to the real grid. **`data/master_dataset.csv` is currently
 > synthetic placeholder data** — real measured data replaces it once a live sweep runs.
+
+> **`fault_type=NONE` — the no-fault control condition.** Without it, a config reading
+> `blast_radius=0` under a real fault is not distinguishable from a config that would read 0
+> regardless of whether anything actually happened — "safe" is only a meaningful claim
+> relative to a baseline false-trip rate (**phi**), which requires actually running the mesh
+> with no fault injected. `runner.py --fault none` runs this control condition (`inject_fault`
+> is a deliberate no-op; Toxiproxy stays clean for the whole window) and **enforces
+> `--replicates >= 10`** for every config when selected (`MIN_NONE_FAULT_REPLICATES` in
+> `runner.py`) — under-sampling the control defeats the reason to collect it. `NONE` is
+> deliberately **not** in `ml/preprocessing.py`'s `FAULT_TYPES`: it isn't a fault the
+> recommender should learn to react to, and one-hot-encoding it would silently produce an
+> all-zero row indistinguishable from an unrecognised category. `load_dataset()` drops
+> `fault_type=NONE` rows before returning (same pattern as the `precondition_ok=False`
+> filter above) — compute phi directly from the raw CSV instead of through that function.
 
 > **`window_size` unit warning.** Its meaning *changes with `window_type`*: a value of `50` means
 > "50 calls" under COUNT_BASED but "50 seconds" under TIME_BASED. The raw number is therefore not

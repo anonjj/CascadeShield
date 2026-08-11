@@ -125,7 +125,7 @@ def results():
     # to get correctly-scaled data before publishing these charts.
     fig1_median = render_heatmap(dl.blast_pivot(filtered, "median"), "Median blast radius (0–1 fraction)")
     fig1_mean = render_heatmap(dl.blast_pivot(filtered, "mean"), "Mean blast radius (0–1 fraction)")
-    fig2 = render_heatmap(dl.trip_rate_pivot(filtered), "Breaker trip rate (fraction of runs > 0)", cmap="Blues")
+    fig2 = render_heatmap(dl.trip_rate_pivot(filtered), "Breaker trip rate (time_to_open non-null)", cmap="Blues")
     fig3 = render_distribution(dl.count_based_blast(filtered)) if not dl.count_based_blast(filtered).empty else None
     summary_table = dl.compute_summary_stats(filtered).round(4).to_html(index=False, classes="summary-table")
 

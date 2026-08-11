@@ -76,9 +76,13 @@ python closed_loop_demo.py --topology SHARED_DEP_MESH --fault LATENCY   # adapti
   `threshold`, `window_size`, `wait_duration`). Provenance columns are never features, so the
   model can't learn LOCAL-vs-AWS shortcuts.
 - **Two trees, both `max_depth ≤ 6`** (the interpretability cap that ruled out deep learning):
-  a **classifier** (`safe`/`unsafe` at `blast_radius ≤ τ`, default `τ=0.5`) and a **regressor**
+  a **classifier** (`safe`/`unsafe` at `blast_radius ≤ τ`, default `τ=0.1`) and a **regressor**
   (predicts `blast_radius`, used to rank configs).
-- **Validation:** depth chosen by **5-fold cross-validation**; train-vs-test accuracy logged
+- **Validation:** depth chosen by **5-fold cross-validation**. The regressor's CV and holdout
+  are **grouped by `experiment_id`** (`GroupKFold` / `GroupShuffleSplit`), so all replicates of
+  a config stay in one fold and the score measures generalisation to an *unseen config*.
+  Regressor scores are therefore **config-level**, and its effective **n is the number of
+  distinct configs, not the row count** (`n_configs` in the metrics dict). Train-vs-test accuracy logged
   as the overfitting check.
 - **Interpretability:** full rule dump in `models/decision_tree_rules.txt`; every
   recommendation ships the **decision path** that produced it; `data/feature_importance.csv`

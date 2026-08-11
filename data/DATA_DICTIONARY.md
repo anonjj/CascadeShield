@@ -125,6 +125,13 @@ recreate blindly.
 | `cb_state_pre` | string | `"service:breaker=STATE;..."` | Per-breaker state from `GET /actuator/circuitbreakers`, read immediately after the reset attempt, for all five CB-bearing services. Ground truth, not an inference from health or from the recreate having merely been attempted. |
 | `buffered_calls_pre` | string | `"service:breaker=N;..."` | Per-breaker `bufferedCalls` from the same read. `0` on a genuinely fresh container; non-zero is the direct test of whether `update_containers()`'s force-recreate is doing what its docstring assumes. |
 
+> **`precondition_ok=False` rows are filtered before training, not just documented.**
+> `ml/preprocessing.py`'s `load_dataset()` drops them automatically (with a logged warning
+> naming the file and count) whenever the `precondition_ok` column is present, so a blank
+> `blast_radius` never silently reaches the encoders as a fabricated value. Datasets from
+> before this fix (no `precondition_ok` column at all — synthetic data, archived pre-fix
+> sweeps) are untouched by this filter; there is nothing in them to drop.
+
 ---
 
 ## How the two models use these columns

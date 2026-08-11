@@ -96,11 +96,32 @@ DEFAULT_TAU = 0.1
 
 
 def load_dataset(path: str | Path) -> pd.DataFrame:
-    """Load master_dataset.csv and assert the 17-column contract holds."""
+    """Load master_dataset.csv and assert the 17-column contract holds.
+
+    Rows with precondition_ok == False are dropped before returning: those runs were
+    aborted by experiments/runner.py's breaker-state-reset precondition BEFORE fault
+    injection (state carried over from the prior replicate, or the mesh never became
+    healthy), so every outcome column (blast_radius, error_rate, ...) is blank on
+    them. Feeding blank rows to the encoders would silently corrupt training, not
+    warn like check_data_quality's all-null-column check does. Datasets predating the
+    precondition_ok column (no such column present -- synthetic data, archived
+    pre-fix sweeps) are unaffected: there is nothing to filter, every row stays.
+    """
     df = pd.read_csv(path)
     missing = [c for c in SCHEMA_COLUMNS if c not in df.columns]
     if missing:
         raise ValueError(f"{path}: dataset missing required columns: {missing}")
+    if "precondition_ok" in df.columns:
+        before = len(df)
+        df = df[df["precondition_ok"] != False].reset_index(drop=True)  # noqa: E712
+        dropped = before - len(df)
+        if dropped:
+            logger.warning(
+                "%s: dropped %d/%d rows with precondition_ok=False (aborted before fault "
+                "injection by runner.py's breaker-state-reset precondition -- see "
+                "precondition_fail_reason for why).",
+                path, dropped, before,
+            )
     check_data_quality(df, source=str(path))
     return df
 

@@ -106,6 +106,14 @@ def load_dataset(path: str | Path) -> pd.DataFrame:
     warn like check_data_quality's all-null-column check does. Datasets predating the
     precondition_ok column (no such column present -- synthetic data, archived
     pre-fix sweeps) are unaffected: there is nothing to filter, every row stays.
+
+    Rows with fault_type == "NONE" are also dropped: these are the no-fault control
+    replicates runner.py collects to establish phi (the baseline false-trip rate) --
+    real, valid measurements, but "NONE" is deliberately NOT in FAULT_TYPES, so
+    encode_features() would one-hot them as all-zero across every fault_type=X column,
+    indistinguishable from an unrecognised category rather than a deliberate absence of
+    fault. Compute phi directly from the raw CSV (fault_type == "NONE" rows) instead of
+    through this function.
     """
     df = pd.read_csv(path)
     missing = [c for c in SCHEMA_COLUMNS if c not in df.columns]
@@ -120,6 +128,17 @@ def load_dataset(path: str | Path) -> pd.DataFrame:
                 "%s: dropped %d/%d rows with precondition_ok=False (aborted before fault "
                 "injection by runner.py's breaker-state-reset precondition -- see "
                 "precondition_fail_reason for why).",
+                path, dropped, before,
+            )
+    if "fault_type" in df.columns:
+        before = len(df)
+        df = df[df["fault_type"] != "NONE"].reset_index(drop=True)
+        dropped = before - len(df)
+        if dropped:
+            logger.warning(
+                "%s: dropped %d/%d rows with fault_type=NONE (no-fault control replicates -- "
+                "not part of FAULT_TYPES, would one-hot-encode as all-zero; compute phi from "
+                "these rows directly in the raw CSV instead).",
                 path, dropped, before,
             )
     check_data_quality(df, source=str(path))

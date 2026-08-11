@@ -55,6 +55,12 @@ DATASET_HEADERS = [
     # genuinely fresh container this is 0 for every breaker; non-zero is the direct signal
     # that update_containers()'s force-recreate did NOT actually reset that service's JVM.
     "buffered_calls_pre",
+    # JIT warmup (discard phase, run before baseline/fault load -- see the "JIT warmup"
+    # comment block near LOAD_RATE_RPS). Proves the warmup dose actually ran rather than
+    # just asserting it: a cold JVM's 100ms+ per-request artifacts are noise on a DV whose
+    # real effects are single-digit seconds.
+    "warmup_requests",
+    "warmup_duration_s",
 ]
 
 # How many replicates per config (min 3 for variance estimation)
@@ -121,6 +127,19 @@ LOAD_CONCURRENCY = 5
 TIME_BASED_MARGIN_S = 10           # safety margin on top of window + wait duration
 COUNT_BASED_WINDOW_MULTIPLE = 3    # fire >= this * slidingWindowSize calls
 COUNT_BASED_MIN_REQUESTS = 40      # floor: keep error-rate estimate statistically stable
+
+# ---- JIT warmup (discard phase) ------------------------------------------------
+# A cold Spring Boot JVM (interpreted bytecode, C1/C2 JIT not yet compiled the hot
+# path) can add 100ms+ latency to individual requests -- noise on the same order as,
+# or larger than, some of what's measured, and real contamination of a DV
+# (time_to_open, time_to_recover) whose true effects are single-digit seconds. Run
+# BEFORE the baseline throughput measurement, so that measurement isn't itself
+# contaminated by JIT warmup. Results are discarded; only the dose actually
+# delivered (warmup_requests, warmup_duration_s) is kept, so the dataset can prove
+# the warmup ran rather than merely assert it. "Whichever is longer" means BOTH
+# floors must be met, not either one alone.
+WARMUP_MIN_REQUESTS = 200
+WARMUP_MIN_DURATION_S = 10.0
 
 # ---- Real (request-level) blast radius (Task 2) ------------------------------
 # SUBJECT SET = the four CB-bearing downstream services whose real per-leg failure we
@@ -319,6 +338,41 @@ def generate_load(endpoint_url, requests_count=50, concurrency=5, interval_s=0.0
 
     print(f"Load Results - Successes: {success_count}, Failures: {failure_count}, Avg Latency: {avg_latency:.2f}ms, Throughput: {throughput:.2f} TPS, Error Rate: {error_rate:.2f}%")
     return throughput, error_rate, avg_latency
+
+def warmup_phase(endpoint_url, min_requests=WARMUP_MIN_REQUESTS, min_duration_s=WARMUP_MIN_DURATION_S,
+                  interval_s=1.0 / LOAD_RATE_RPS, concurrency=LOAD_CONCURRENCY):
+    """Discard-phase requests to steady state, run before any measurement or fault
+    injection (see the "JIT warmup" comment block above LOAD_RATE_RPS for why).
+    Responses are read and thrown away -- this exists to warm the JIT, not to
+    measure anything -- but the actual dose delivered (count, elapsed time) is
+    returned so the caller can log it rather than just assert the phase ran.
+
+    Runs until BOTH min_requests have completed AND min_duration_s has elapsed --
+    "200 requests or 10s, whichever is longer" means neither floor may be skipped,
+    not that meeting either alone is sufficient.
+    """
+    print(f"Warming up JIT: discarding responses from {endpoint_url} for >= {min_requests} "
+          f"requests and >= {min_duration_s:.0f}s (whichever is longer)...")
+    start = time.time()
+    requests_sent = 0
+
+    def send_and_discard():
+        try:
+            with urllib.request.urlopen(endpoint_url, timeout=5) as res:
+                res.read()
+        except Exception:
+            pass  # discard phase -- failures here are not measured or logged as errors
+
+    with ThreadPoolExecutor(max_workers=concurrency) as executor:
+        while requests_sent < min_requests or (time.time() - start) < min_duration_s:
+            executor.submit(send_and_discard)
+            requests_sent += 1
+            time.sleep(interval_s)
+    # executor.__exit__ blocks until every in-flight request completes, so the
+    # elapsed time below reflects genuine JVM activity, not just dispatch time.
+    elapsed = round(time.time() - start, 3)
+    print(f"Warmup complete: {requests_sent} requests over {elapsed:.1f}s.")
+    return requests_sent, elapsed
 
 def get_blast_radius():
     """Queries the Gateway's custom aggregator endpoint for the current blast radius.
@@ -653,13 +707,14 @@ def get_dataset_path(mode):
 
 def log_results(config, fault_type, mode, topology, metrics, replicate):
     """Appends experiment run results to master_dataset.csv (full mode) or
-    canary_runs.csv (canary mode) -- 24-col schema, same DATASET_HEADERS either way.
+    canary_runs.csv (canary mode) -- 26-col schema, same DATASET_HEADERS either way.
 
     metrics only needs to carry the keys a given call actually has: a
-    PRECONDITION_FAIL row (aborted before fault injection) passes just the
-    precondition_* / readiness_wait_s / cb_state_pre / buffered_calls_pre keys,
-    and every outcome column below (blast_radius, error_rate, ...) is written
-    blank rather than KeyError-ing or fabricating a 0.0."""
+    PRECONDITION_FAIL row (aborted before fault injection, before warmup even
+    runs) passes just the precondition_* / readiness_wait_s / cb_state_pre /
+    buffered_calls_pre keys, and every outcome column below (blast_radius,
+    error_rate, warmup_requests, ...) is written blank rather than
+    KeyError-ing or fabricating a 0.0."""
     dataset_path = get_dataset_path(mode)
     os.makedirs(os.path.dirname(dataset_path), exist_ok=True)
     file_exists = os.path.exists(dataset_path)
@@ -711,6 +766,8 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
             f"{metrics['readiness_wait_s']:.3f}" if metrics.get('readiness_wait_s') is not None else "",
             metrics.get("cb_state_pre", ""),
             metrics.get("buffered_calls_pre", ""),
+            metrics.get("warmup_requests", ""),
+            f"{metrics['warmup_duration_s']:.3f}" if metrics.get('warmup_duration_s') is not None else "",
         ])
     print(f"Saved run metrics to {dataset_path}")
 
@@ -766,8 +823,13 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1)
     # which error_rate/blast_radius cannot (see SERVICE_BREAKERS docstring above).
     before_cb_counts = snapshot_breaker_event_counts()
 
-    # 3. Measure pre-fault baseline throughput (healthy warm-up)
+    # 2c. JIT warmup (discard phase) -- BEFORE the baseline measurement below, so
+    #    that measurement isn't itself contaminated by cold-JVM artifacts. See the
+    #    "JIT warmup" comment block near LOAD_RATE_RPS for the full rationale.
     endpoint = f"http://localhost:8080/api/v1/{topology}"
+    warmup_requests, warmup_duration_s = warmup_phase(endpoint)
+
+    # 3. Measure pre-fault baseline throughput (against an already-warm JVM)
     print("Measuring pre-fault baseline...")
     baseline_throughput, _, _ = generate_load(endpoint, requests_count=20, concurrency=3)
     if baseline_throughput <= 0:
@@ -929,6 +991,8 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1)
         "readiness_wait_s": readiness_wait_s,
         "cb_state_pre": _serialize_cb_map(precondition["cb_state"]),
         "buffered_calls_pre": _serialize_cb_map(precondition["buffered_calls"]),
+        "warmup_requests": warmup_requests,
+        "warmup_duration_s": warmup_duration_s,
     }
     log_results(config, fault_type, mode, topology, metrics, replicate)
 

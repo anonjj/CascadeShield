@@ -20,7 +20,7 @@ STATUS_PATH = Path(__file__).resolve().parent.parent / "data" / "run_status.json
 FILTERABLE_COLUMNS = ["fault_type", "window_type", "topology", "environment", "mode"]
 
 # Must exceed the worst-case gap between runner.py's status writes -- a single
-# run's health-wait budget alone is 60s (see experiments/runner.py wait_for_healthy),
+# run's readiness-wait budget alone is 90s (see experiments/runner.py wait_for_readiness),
 # and full-run wall time is realistically 60-150s+. A shorter threshold would
 # flag every normal run as "stalled".
 STALE_THRESHOLD_SECONDS = 300

@@ -27,6 +27,12 @@ resilience4j:
         automatic-transition-from-open-to-half-open-enabled: true
         slow-call-duration-threshold: 2s
         slow-call-rate-threshold: ${CB_FAILURE_RATE_THRESHOLD:50}
+        # Ring-buffer size for /actuator/circuitbreakerevents (per breaker instance).
+        # runner.py polls this to record real CLOSED/OPEN/HALF_OPEN transitions --
+        # error_rate/blast_radius alone can't distinguish "breaker stayed closed"
+        # from "breaker tripped on the slow-call path" (a >2s call returning 200
+        # scores 0% failure rate but 100% slow-call rate).
+        event-consumer-buffer-size: ${CB_EVENT_BUFFER_SIZE:50}
         record-exceptions:
           - com.cascadeshield.inventory.exception.DownstreamUnavailableException
         ignore-exceptions:

@@ -145,6 +145,17 @@ TIME_BASED_MARGIN_S = 10           # safety margin on top of window + wait durat
 COUNT_BASED_WINDOW_MULTIPLE = 3    # fire >= this * slidingWindowSize calls
 COUNT_BASED_MIN_REQUESTS = 40      # floor: keep error-rate estimate statistically stable
 
+# experiments/gatling/src/test/scala/cascadeshield/CascadeShieldSimulation.scala (branch
+# feat/gatling-simulation, not yet merged onto main) reads its injection parameters from
+# env vars -- GATEWAY_URL, GATLING_TPS, GATLING_DURATION_S, GATLING_TOPOLOGY, GATLING_PROFILE
+# -- so compute_load_plan() below can emit them without any code change on that side. Its
+# "sustained" profile is `rampUsersPerSec(1).to(tps).during(10.seconds)` followed by
+# `constantUsersPerSec(tps).during(durationS.seconds)`; the 10s ramp is HARDCODED in the
+# Scala, not env-var-driven. GATLING_RAMP_S documents that value so the emitted profile
+# stays honest about it -- there is no automatic check that they stay in sync if the Scala
+# ramp duration ever changes.
+GATLING_RAMP_S = 10
+
 # ---- JIT warmup (discard phase) ------------------------------------------------
 # A cold Spring Boot JVM (interpreted bytecode, C1/C2 JIT not yet compiled the hot
 # path) can add 100ms+ latency to individual requests -- noise on the same order as,
@@ -281,14 +292,29 @@ def inject_fault(fault_type):
     else:
         print(f"No fault injected. Type '{fault_type}' is unknown.", file=sys.stderr)
 
-def compute_load_plan(config):
+def compute_load_plan(config, target_rps=LOAD_RATE_RPS, topology=None):
     """Sizes the offered load per window type so both COUNT_BASED and TIME_BASED windows
     get a fair chance to fill, trip, sit OPEN, and transition to HALF_OPEN.
 
+    target_rps is the target arrival rate (lambda) -- previously hardcoded to
+    LOAD_RATE_RPS inside this function, now an explicit parameter so a caller can vary
+    the offered rate without touching the sizing logic itself. Defaults to LOAD_RATE_RPS,
+    so the existing call site in run_experiment_run() is unaffected unless it opts in.
+
     See the "Load fairness (Task 1)" comment block near the top of this module for the
-    rationale. Returns dict(requests_count, interval_s, concurrency, duration_s).
+    window-fill rationale. Returns dict(requests_count, interval_s, concurrency,
+    duration_s, target_rps, gatling_profile).
+
+    gatling_profile translates this same sizing into CascadeShieldSimulation.scala's
+    env-var contract (see GATLING_RAMP_S above) -- GATLING_TPS=target_rps,
+    GATLING_DURATION_S=duration_s, GATLING_PROFILE="sustained" (this function only ever
+    reasons about sustained load; "bursty" is a distinct profile the Scala sim defines
+    for a separate sub-study, not something this sizing logic produces). topology is
+    accepted here purely to complete that profile for a caller that has it in scope
+    (run_experiment_run does); compute_load_plan does not use it in any calculation.
+    This is emitted data only -- this module does not invoke Gatling itself.
     """
-    interval_s = 1.0 / LOAD_RATE_RPS
+    interval_s = 1.0 / target_rps
     window = int(config["slidingWindowSize"])
     wait = int(config["waitDurationInOpenState"])
 
@@ -296,14 +322,23 @@ def compute_load_plan(config):
         # Sustain load long enough for the trailing time-window (seconds) to fill, the
         # breaker to sit OPEN for wait_duration, and an automatic HALF_OPEN probe to fire.
         duration_s = window + wait + TIME_BASED_MARGIN_S
-        requests_count = max(int(duration_s * LOAD_RATE_RPS), CB_MINIMUM_CALLS + 1)
+        requests_count = max(int(duration_s * target_rps), CB_MINIMUM_CALLS + 1)
     else:  # COUNT_BASED -- window is measured in calls
         requests_count = max(window * COUNT_BASED_WINDOW_MULTIPLE,
                              CB_MINIMUM_CALLS * 3, COUNT_BASED_MIN_REQUESTS)
         duration_s = requests_count * interval_s
 
+    gatling_profile = {
+        "tps": target_rps,
+        "ramp_s": GATLING_RAMP_S,
+        "duration_s": duration_s,
+        "profile": "sustained",
+        "topology": topology,
+    }
+
     return {"requests_count": requests_count, "interval_s": interval_s,
-            "concurrency": LOAD_CONCURRENCY, "duration_s": duration_s}
+            "concurrency": LOAD_CONCURRENCY, "duration_s": duration_s,
+            "target_rps": target_rps, "gatling_profile": gatling_profile}
 
 
 def generate_load(endpoint_url, requests_count=50, concurrency=5, interval_s=0.05):
@@ -886,9 +921,9 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
     # 5. Size the fault load per window type so TIME_BASED windows can actually fill
     #    (Task 1). Snapshot per-leg CB call counters just before the fault window so the
     #    real (request-level) blast radius is a clean delta over the window (Task 2).
-    plan = compute_load_plan(config)
+    plan = compute_load_plan(config, topology=topology)
     print(f"Load plan ({config['slidingWindowType']}): {plan['requests_count']} requests "
-          f"over ~{plan['duration_s']:.0f}s @ {LOAD_RATE_RPS} req/s")
+          f"over ~{plan['duration_s']:.0f}s @ {plan['target_rps']} req/s")
     cb_calls_before = snapshot_cb_calls()
 
     # Sample blast radius mid-load via a thread so the CB is still OPEN (not recovering)

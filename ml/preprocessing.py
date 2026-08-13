@@ -114,6 +114,16 @@ def load_dataset(path: str | Path) -> pd.DataFrame:
     indistinguishable from an unrecognised category rather than a deliberate absence of
     fault. Compute phi directly from the raw CSV (fault_type == "NONE" rows) instead of
     through this function.
+
+    Rows with lambda_deviation_flag == True are also dropped: runner.py's achieved-vs-
+    requested arrival-rate check (see DATA_DICTIONARY.md's "Achieved arrival-rate
+    columns") flags a run when the load actually offered to the mesh missed its target
+    by more than 15%. Training on those rows would silently compare configs at their
+    *nominal* rate label while some of them were actually exercised at a materially
+    different rate -- the same kind of unmeasured confound precondition_ok=False guards
+    against. Blank/NaN (couldn't measure lambda_achieved at all) and explicit False
+    (measured, within tolerance) rows are both KEPT -- only a confirmed True deviation
+    is grounds to drop, since absence of a measurement is not evidence of no deviation.
     """
     df = pd.read_csv(path)
     missing = [c for c in SCHEMA_COLUMNS if c not in df.columns]
@@ -139,6 +149,23 @@ def load_dataset(path: str | Path) -> pd.DataFrame:
                 "%s: dropped %d/%d rows with fault_type=NONE (no-fault control replicates -- "
                 "not part of FAULT_TYPES, would one-hot-encode as all-zero; compute phi from "
                 "these rows directly in the raw CSV instead).",
+                path, dropped, before,
+            )
+    if "lambda_deviation_flag" in df.columns:
+        before = len(df)
+        # str()-normalise first: pandas may read this column as object dtype holding
+        # real Python True/False plus NaN for blanks (a fresh CSV) or as plain text
+        # ("True"/"False"/"") if it round-tripped through another tool first -- either
+        # way, exactly the literal "True" (case-insensitive) means a confirmed
+        # deviation. NaN/""/"False" are all kept.
+        flagged = df["lambda_deviation_flag"].astype(str).str.strip().str.lower() == "true"
+        df = df[~flagged].reset_index(drop=True)
+        dropped = before - len(df)
+        if dropped:
+            logger.warning(
+                "%s: dropped %d/%d rows with lambda_deviation_flag=True (achieved arrival "
+                "rate missed the requested target by more than 15%% -- these runs were not "
+                "exercised at their nominal rate label).",
                 path, dropped, before,
             )
     check_data_quality(df, source=str(path))

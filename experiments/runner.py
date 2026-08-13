@@ -1287,6 +1287,19 @@ def build_shuffled_run_list(configs, replicates, seed=None):
     random.Random(run_order_seed).shuffle(run_list)
     return run_order_seed, run_list
 
+
+def apply_run_limit(run_list, limit):
+    """Truncate an already-shuffled run_list to its first `limit` entries.
+
+    Applied AFTER build_shuffled_run_list's shuffle, not before -- slicing an
+    unshuffled list would always run the same handful of early configs (a
+    biased sample), while slicing post-shuffle keeps --limit N a genuine
+    random N-run subset of the full sweep, useful for a smoke test that
+    should look like a real (if tiny) run rather than a hand-picked one.
+    limit=None is not a valid input here; main() only calls this when the
+    user passed --limit, so there is nothing to truncate to otherwise."""
+    return run_list[:limit]
+
 def main():
     parser = argparse.ArgumentParser(description="CascadeShield Parameter Sweep Automation Runner")
     parser.add_argument("--mode", choices=["canary", "full"], default="canary", help="canary (5 configs × 3 replicates = 15 runs) or full (54 configs × 3 replicates = 162 runs per fault type; 486 total across 3 faults)")
@@ -1299,6 +1312,10 @@ def main():
                          help="Seed for the run-order shuffle (default: a fresh random seed each "
                               "invocation, printed and persisted to run_order_seed). Pass an explicit "
                               "value to reproduce a specific execution order.")
+    parser.add_argument("--limit", type=int, default=None,
+                         help="Cap the (already shuffled) run list to the first N runs -- e.g. "
+                              "--limit 1 for a single-run smoke test instead of a full sweep. "
+                              "Applied after shuffling, so it does not bias which config runs.")
 
     args = parser.parse_args()
 
@@ -1342,6 +1359,12 @@ def main():
     run_order_seed, run_list = build_shuffled_run_list(configs, args.replicates, args.seed)
     print(f"Run order shuffled with seed {run_order_seed} ({len(run_list)} runs). "
           f"Pass --seed {run_order_seed} to reproduce this exact order.")
+
+    if args.limit is not None:
+        run_list = apply_run_limit(run_list, args.limit)
+        total_runs = len(run_list)
+        print(f"--limit {args.limit}: truncated to {total_runs} run(s) (post-shuffle, so this "
+              f"does not bias which config gets run).")
 
     started_at = _now_iso()
     success_runs = 0

@@ -103,6 +103,18 @@ DATASET_HEADERS = [
     # a precondition_ok=False row, and blank for TIME_BASED when lambda_achieved
     # itself is blank (see compute_effective_horizon).
     "effective_horizon",
+    # Quarantine marker, written by analysis/quarantine.py -- NOT by a run. Empty means the
+    # row is analysable; anything else is a "+"-joined list of exclusion codes (see
+    # data/DATA_DICTIONARY.md). Rows are marked rather than deleted so a reviewer can see
+    # what was dropped and why. A live run always writes it empty, and it is deliberately
+    # LAST: it is assigned post-hoc, so keeping it at the end means a re-quarantine never
+    # shifts a column the harness wrote.
+    #
+    # Distinct from precondition_ok above, which they are easy to conflate: precondition_ok
+    # marks a run that never happened (aborted before fault injection, every outcome column
+    # blank), while excluded_reason marks a run that happened and produced numbers that
+    # turned out not to be trustworthy. Analyses must drop both.
+    "excluded_reason",
 ]
 
 # How many replicates per config (min 3 for variance estimation)
@@ -942,6 +954,7 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
             f"{metrics['lambda_cv']:.4f}" if metrics.get('lambda_cv') is not None else "",
             metrics.get("lambda_deviation_flag") if metrics.get("lambda_deviation_flag") is not None else "",
             f"{metrics['effective_horizon']:.4f}" if metrics.get('effective_horizon') is not None else "",
+            "",  # excluded_reason -- always empty at write time; only analysis/quarantine.py fills it
         ])
     print(f"Saved run metrics to {dataset_path}")
 

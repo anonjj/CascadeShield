@@ -1,5 +1,51 @@
 # CascadeShield — Master Dataset Schema (Data Dictionary)
 
+> 🔒 **FROZEN Day 1 (Mon 10 Aug 2026) against the §1.4 metrics contract in
+> `docs/paper/hypotheses.md`.** This file is the contract, not a description of it. Every
+> column added from here on requires an entry **in the same commit** that adds the column.
+> No column changes without a `docs/paper/decision-log.md` entry.
+
+## The metrics contract (frozen)
+
+| Class | Columns | Rule |
+|---|---|---|
+| **Primary DVs** | `time_to_open`, `time_to_recover` | Every reported mean carries a bootstrap CI. |
+| **Secondary DVs** | `leg_failure_rates` (continuous severity), `blast_radius` / `real_blast_radius` (quartized), `throughput_loss`, p95/p99 client latency *(pending)* | $B_{\text{real}}$ is reported **as a function of $\tau_{\text{leg}}$**, never at one pinned threshold — see `analysis/tau_sweep.py` and decision D-001. |
+| **Control DVs** *(mandatory)* | $\phi$ false-trip rate (from `fault_type = NONE` rows ✅), missed-detection rate, `flap_count` *(pending, Jay)* | Without $\phi$ no configuration in this paper may be described as safe. |
+| **Provenance** | `experiment_id`, `environment`, `mode`, `replicate`, `run_timestamp`, `permitted_calls_half_open`, `run_index` ✅, `run_order_seed` ✅, image digests *(pending, Jay)* | Never model features. |
+| **Validity** | `excluded_reason` ✅, `precondition_ok` / `precondition_fail_reason` / `readiness_wait_s` / `cb_state_pre` / `buffered_calls_pre` ✅, `warmup_requests` / `warmup_duration_s` ✅ | Rows are marked, never deleted. `precondition_ok = False` means the run never happened; `excluded_reason` means it happened but is untrustworthy. Analyses drop both. |
+| **λ factor** | `lambda_target`, `lambda_achieved`, `lambda_cv`, `lambda_deviation_flag`, `effective_horizon` ✅ (PRs #16–#18) | H1 and H2 are claims *about* $\lambda$, so results are reported against `lambda_achieved` and never `lambda_target`. `analysis/canary_readout.py` refuses to report H1/H2 at all if `lambda_achieved` is absent, and takes its off-target verdict from `lambda_deviation_flag` rather than recomputing it — the harness sees per-request dispatch timestamps this layer cannot. |
+
+> **`effective_horizon` is continuous — do not group on it directly.** It is derived from
+> `lambda_achieved`, so no two runs share a value and any group-by puts each run in a bucket
+> of one. H1 contrasts are grouped on the horizon each run was *designed* at
+> (`effective_horizon_nominal`, from `data/canary_matrix.csv`), with the achieved mean
+> reported alongside — a cell designed at H = 100 that delivered 60 is a finding, not a
+> rounding detail. See `h1_matched_horizon()` in `analysis/canary_readout.py`.
+
+Standing rules:
+
+1. Nulls in `time_to_open` / `time_to_recover` are **outcomes**, not missing data — never
+   mean-imputed. Under H2 the null *is* the measurement.
+2. Effective sample size is the number of **configurations**, not rows. Pooled CIs use the
+   cluster bootstrap in `analysis/common.py`.
+3. Every $p$-value is reported with an effect size. No bare $p$-values.
+4. The four dataset files below are **never pooled**. Their metric regimes differ; the column
+   names do not, so `runner.log_results`' header guard will not catch a mixed append.
+
+## Dataset files and what each is good for
+
+| File | Rows | Timing | `blast_radius` | Usable for |
+|---|---:|---|---|---|
+| `master_dataset.csv` | 80 | ✅ | 4-subject denominator | Everything. 79 rows analysable after quarantine. |
+| `master_dataset_v2_latency_5svc.csv` | 162 | ✅ | 5-subject, **disjoint from leg node set** | H3 timing (160 rows after quarantine). Not containment. |
+| `master_dataset_v3_gateway_not_rebuilt.csv` | 92 | ✅ | ❌ **constant offset, 95.7% of rows** | Timing only. `blast_radius` / `real_blast_radius` must not be used as outcomes. |
+| `master_dataset_v1_prefix.csv` | 486 | ❌ **100% null** | raw 0–100 percent, 5-subject | **Nothing.** No timing was ever collected. Provenance only — never source a claim to it. |
+
+See `docs/paper/leak-audit.md` for how each verdict was reached.
+
+---
+
 > ⚠️ **ARCHIVED DATASET — NOT COMPARABLE ACROSS THE METRIC CHANGE.**
 > `data/master_dataset_v2_latency_5svc.csv` holds the **162 LATENCY runs** from the first
 > LINEAR sweep under the fixed harness. Their `blast_radius` and `real_blast_radius` were
@@ -64,8 +110,10 @@ past 486 (e.g. 486 configs × 2 environments × 3 replicates = 2,916 rows).
 > `wait_duration {5,10,30}`) and is kept only as historical documentation.
 > `ml/generate_synthetic_data.py` builds its config grid directly from
 > `ml/preprocessing.py`'s constants (not from `experiment_matrix.csv`) so it stays
-> schema-identical to the real grid. **`data/master_dataset.csv` is currently
-> synthetic placeholder data** — real measured data replaces it once a live sweep runs.
+> schema-identical to the real grid. **`data/master_dataset.csv` holds real measured
+> runs** — 80 rows over 26 LINEAR/LATENCY configurations, collected 1 Aug 2026. The earlier
+> synthetic placeholder is gone; do not reintroduce `generate_synthetic_data.py` output into
+> this file.
 
 > **`fault_type=NONE` — the no-fault control condition.** Without it, a config reading
 > `blast_radius=0` under a real fault is not distinguishable from a config that would read 0
@@ -106,13 +154,26 @@ past 486 (e.g. 486 configs × 2 environments × 3 replicates = 2,916 rows).
 | `replicate` | int | `1..R` (R ≥ 3 recommended) | Repeat index. Enables mean ± variance per config instead of a single noisy run. |
 | `run_timestamp` | string (ISO 8601) | `2026-06-21T14:32:05Z` | Provenance. Never used as a model feature. |
 
-> **17-column real file.** The live `master_dataset.csv` carries two operational columns
-> — `permitted_calls_half_open` and `mode` — beyond the original 15-column skeleton.
-> `preprocessing.py` recognises them as provenance (excluded from features) so the file
-> validates cleanly against the schema contract. Additional columns have since been
-> appended for `real_blast_radius` / `leg_failure_rates` and the precondition gate below
-> — `preprocessing.py`'s `load_dataset()` only checks that required columns are *present*,
-> so extras always ride along without breaking the contract.
+> **29-column schema.** Beyond the original 15-column skeleton the schema now carries:
+> `permitted_calls_half_open` and `mode` (operational); `real_blast_radius` and
+> `leg_failure_rates` (the request-level containment metric and the raw vector behind it);
+> the precondition-gate and warmup block (`precondition_ok`, `precondition_fail_reason`,
+> `readiness_wait_s`, `cb_state_pre`, `buffered_calls_pre`, `warmup_requests`,
+> `warmup_duration_s`); run-order randomization (`run_order_seed`, `run_index`); and
+> `excluded_reason` (quarantine, always last).
+> `preprocessing.py` recognises the operational ones as provenance and excludes them from
+> features, and its `load_dataset()` only checks that required columns are *present*, so
+> extras ride along without breaking the contract.
+>
+> `data/master_dataset_schema.csv` is the header-only skeleton and tracks
+> `runner.DATASET_HEADERS` exactly — if they disagree, `log_results` refuses to append.
+> **The live `master_dataset.csv` (80 rows) predates the precondition and run-order columns
+> and therefore no longer matches**; that is intended, since the next sweep starts a fresh
+> file. Do not "fix" it by padding columns onto historical rows.
+>
+> Still outstanding for the Day-2 canary: `lambda_target`, `lambda_achieved`, `lambda_cv`,
+> `effective_horizon`, plus `flap_count` and the pinned image digest set. Each needs a
+> dictionary entry in the commit that adds it.
 
 ### Dependent variables — measured outcomes → **targets / Isolation Forest inputs**
 
@@ -123,6 +184,29 @@ past 486 (e.g. 486 configs × 2 environments × 3 replicates = 2,916 rows).
 | `time_to_recover` | float | `≥ 0` | seconds | system did not return to baseline within the observation window → null is meaningful |
 | `error_rate` | float | `0.0–1.0` | fraction | never null. Peak error rate across the mesh during the fault. |
 | `throughput_loss` | float | `0.0–1.0` | fraction | never null. Fractional drop in successful TPS vs the pre-fault baseline. |
+
+### Validity / quarantine
+
+| Column | Type | Valid values | Notes |
+|--------|------|--------------|-------|
+| `excluded_reason` | string | `""` (analysable) or a `+`-joined list of the codes below | **Written only by `analysis/quarantine.py`, never by a run** — `runner.py` always emits it empty. Rows are marked rather than deleted so a reviewer can see exactly what was excluded and why; a silently dropped row is indistinguishable from one never collected. Every analysis in `analysis/` drops these rows by default (`common.load(..., apply_exclusions=True)`); pass `apply_exclusions=False` to count them. |
+
+Exclusion codes:
+
+| Code | Meaning | Detected by |
+|---|---|---|
+| `STATE_LEAK_EARLY_OPEN` | Breaker entered the run already OPEN. `time_to_open` under half its cell median and ≥ 1 s early, against a MAD-based scale pooled within window type. | `analysis/leak_audit.py` S1, SEVERE tier |
+| `STATE_LEAK_BLAST` | More subjects reported OPEN than there are legs with any observed failure — a breaker cannot sit OPEN while its own leg records zero failed-or-rejected calls. | `analysis/leak_audit.py` S2 |
+| `RECOVERY_TIMEOUT_HANG` | `time_to_recover` above the 120 s protocol cap. The archive's worst case is 7540.5 s (2.1 h) where every other row tops out at 65.7 s. | `analysis/quarantine.py` |
+
+Deliberately **not** excluded, and why:
+
+- **`RECURRENT_MODE` hits.** A displacement that reproduces across ≥ 3 configurations is a
+  property of the instrument, not contamination. TIME_BASED `time_to_open` is bimodal (−2.70 s,
+  four configurations); excluding those rows would delete a finding that bears on H1.
+- **Whole datasets whose S2 rate exceeds 50%.** That is a constant offset in the metric, not
+  per-run contamination. The *column* is marked unusable and the rows are kept — see the file
+  table at the top.
 
 > **Meaningful nulls.** `time_to_open` / `time_to_recover` are null *because of a real outcome*
 > (the breaker never tripped, or the system never recovered), not random missingness. Do **not**
@@ -273,10 +357,24 @@ Each measured column maps 1:1 to a Prometheus metric scraped during the run (Jay
 `blast_radius` metric in particular **must** fire and be scrapable before any full sweep — confirm
 this in the Week 2 metrics-exposure check.
 
-**Current state:** `data/master_dataset.csv` is synthetic (`ml/generate_synthetic_data.py`), not
-measured — see the `*** THIS DATA IS SIMULATED ***` notice in that script. It exists so the ML
-pipeline can be developed and demonstrated before the real sweep lands; swap it for real
-`runner.py` output (`python ml/train_all.py --no-generate`) once that sweep runs.
+**Current state:** `data/master_dataset.csv` is **real measured `runner.py` output** — 80 rows,
+26 LINEAR/LATENCY configurations, collected 1 Aug 2026, one row quarantined. Train against it
+with `python ml/train_all.py --no-generate`; `ml/generate_synthetic_data.py` is now only for
+pipeline smoke tests and its output must never be written to this file.
+
+**Regenerating every number in the paper.** No figure or statistic is produced by hand:
+
+| Script | Produces |
+|---|---|
+| `analysis/leak_audit.py` | `out/leak_audit.json`, `out/leak_audit_rows.csv` — contamination prevalence per dataset |
+| `analysis/quarantine.py --apply` | populates `excluded_reason`; `out/quarantine.json` |
+| `analysis/tau_sweep.py` | `out/tau_sweep.json`, `out/tau_sweep.csv`, `figures/fig7_tau_sweep.{png,pdf}` — H4 |
+| `analysis/canary_readout.py` | `out/canary_readout.json`, `figures/fig4*.{png,pdf}` — H1, H2, $\phi$, and the Day-2 gate |
+| `experiments/canary_matrix.py` | `data/canary_matrix.csv` — the Day-2 run list with seeded order |
+
+`analysis/common.py` holds the shared loaders and the bootstrap / effect-size helpers. It is the
+only place that knows each archive's metric regime, which is what stops two files with identical
+column names being pooled by accident.
 
 ## Sidecar: `data/cb_transitions.jsonl` (real runs only — not part of the ML schema)
 
@@ -306,3 +404,4 @@ Join to `master_dataset.csv` via (`experiment_id`, `replicate`, `mode`). `transi
 not a missing record. Kept as a separate sidecar rather than new CSV columns because the
 transition list is variable-length and ordered; not part of `preprocessing.py`'s schema
 contract or fed to either model.
+

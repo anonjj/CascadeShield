@@ -1,0 +1,300 @@
+{
+  "signatures": {
+    "S1_early_open": {
+      "rule": "gap >= 1.0s AND (t_open < 0.5x sibling median [SEVERE] OR robust z <= -3.0 [MODERATE])",
+      "scale": "MAD-based sigma over per-cell residuals, pooled within window_type",
+      "requires": ">= 3 non-null time_to_open per (experiment_id, environment)"
+    },
+    "S2_impossible_blast": {
+      "rule": "round(blast_frac * denominator) > count(leg failure rate > 0)",
+      "exact_only_when": "leg node set == blast subject set",
+      "reclassified_as_constant_offset_above_share": 0.5
+    }
+  },
+  "per_dataset": [
+    {
+      "dataset": "v1_prefix",
+      "path": "data\\master_dataset_v1_prefix.csv",
+      "n_rows": 486,
+      "n_configs": 162,
+      "timing_columns_populated": false,
+      "leg_column_present": false,
+      "blast_denominator": 5,
+      "leg_node_set": null,
+      "cross_metric_check_is_exact": false,
+      "S1_early_open": {
+        "n_flagged": 0,
+        "n_severe": 0,
+        "n_moderate": 0,
+        "share": 0.0,
+        "applicable": false,
+        "n_rows_scoreable": 0,
+        "n_reclassified_recurrent": 0,
+        "robust_sigma_s_by_window_type": {
+          "COUNT_BASED": null,
+          "TIME_BASED": null
+        }
+      },
+      "recurrent_modes": [],
+      "S2_impossible_blast": {
+        "n_flagged": 0,
+        "share": 0.0,
+        "verdict": "NOT_APPLICABLE",
+        "applicable": false
+      },
+      "n_rows_flagged_by_either": 0,
+      "late_open_outliers": {
+        "n": 0,
+        "rows": []
+      },
+      "note": "Pre-timing-collector archive. time_to_open/time_to_recover are 100% null (the collector was a TODO stub), so this file cannot support H3 at all."
+    },
+    {
+      "dataset": "v2_latency_5svc",
+      "path": "data\\master_dataset_v2_latency_5svc.csv",
+      "n_rows": 162,
+      "n_configs": 54,
+      "timing_columns_populated": true,
+      "leg_column_present": true,
+      "blast_denominator": 5,
+      "leg_node_set": "gateway+4",
+      "cross_metric_check_is_exact": false,
+      "S1_early_open": {
+        "n_flagged": 3,
+        "n_severe": 1,
+        "n_moderate": 2,
+        "share": 0.018518518518518517,
+        "applicable": true,
+        "n_rows_scoreable": 147,
+        "n_reclassified_recurrent": 0,
+        "robust_sigma_s_by_window_type": {
+          "COUNT_BASED": 0.03261720000000003,
+          "TIME_BASED": 0.0533736000000007
+        }
+      },
+      "recurrent_modes": [],
+      "S2_impossible_blast": {
+        "n_flagged": 0,
+        "share": 0.0,
+        "verdict": "INDETERMINATE",
+        "applicable": true
+      },
+      "n_rows_flagged_by_either": 3,
+      "late_open_outliers": {
+        "n": 8,
+        "rows": [
+          {
+            "experiment_id": "LIN-LAT-TIM-T30-W5-D30",
+            "replicate": 1,
+            "time_to_open": 6.251
+          },
+          {
+            "experiment_id": "LIN-LAT-CNT-T30-W20-D5",
+            "replicate": 3,
+            "time_to_open": 7.469
+          },
+          {
+            "experiment_id": "LIN-LAT-TIM-T30-W20-D30",
+            "replicate": 3,
+            "time_to_open": 32.658
+          },
+          {
+            "experiment_id": "LIN-LAT-TIM-T50-W5-D15",
+            "replicate": 2,
+            "time_to_open": 17.585
+          },
+          {
+            "experiment_id": "LIN-LAT-TIM-T50-W5-D30",
+            "replicate": 3,
+            "time_to_open": 6.511
+          },
+          {
+            "experiment_id": "LIN-LAT-TIM-T50-W10-D5",
+            "replicate": 3,
+            "time_to_open": 15.9
+          },
+          {
+            "experiment_id": "LIN-LAT-TIM-T50-W10-D15",
+            "replicate": 1,
+            "time_to_open": 17.656
+          },
+          {
+            "experiment_id": "LIN-LAT-TIM-T70-W5-D5",
+            "replicate": 2,
+            "time_to_open": 6.383
+          }
+        ]
+      },
+      "note": "First sweep with timing. Legacy blast_radius and the leg vector range over DISJOINT node sets -- cross-metric checks on this file are heuristic only."
+    },
+    {
+      "dataset": "v3_gateway_not_rebuilt",
+      "path": "data\\master_dataset_v3_gateway_not_rebuilt.csv",
+      "n_rows": 92,
+      "n_configs": 32,
+      "timing_columns_populated": true,
+      "leg_column_present": true,
+      "blast_denominator": 5,
+      "leg_node_set": "4",
+      "cross_metric_check_is_exact": false,
+      "S1_early_open": {
+        "n_flagged": 1,
+        "n_severe": 0,
+        "n_moderate": 1,
+        "share": 0.010869565217391304,
+        "applicable": true,
+        "n_rows_scoreable": 78,
+        "n_reclassified_recurrent": 0,
+        "robust_sigma_s_by_window_type": {
+          "COUNT_BASED": 0.03187590000000011,
+          "TIME_BASED": 0.03558240000000003
+        }
+      },
+      "recurrent_modes": [],
+      "S2_impossible_blast": {
+        "n_flagged": 88,
+        "share": 0.9565217391304348,
+        "verdict": "CONSTANT_OFFSET",
+        "applicable": true
+      },
+      "n_rows_flagged_by_either": 88,
+      "late_open_outliers": {
+        "n": 4,
+        "rows": [
+          {
+            "experiment_id": "LIN-LAT-TIM-T30-W5-D5",
+            "replicate": 2,
+            "time_to_open": 6.323
+          },
+          {
+            "experiment_id": "LIN-LAT-TIM-T50-W5-D15",
+            "replicate": 2,
+            "time_to_open": 6.265
+          },
+          {
+            "experiment_id": "LIN-LAT-TIM-T50-W10-D30",
+            "replicate": 3,
+            "time_to_open": 32.812
+          },
+          {
+            "experiment_id": "LIN-LAT-CNT-T50-W20-D5",
+            "replicate": 3,
+            "time_to_open": 7.765
+          }
+        ]
+      },
+      "note": "Gateway container was not rebuilt for this batch; treat as a transitional archive, not a result set."
+    },
+    {
+      "dataset": "current",
+      "path": "data\\master_dataset.csv",
+      "n_rows": 80,
+      "n_configs": 26,
+      "timing_columns_populated": true,
+      "leg_column_present": true,
+      "blast_denominator": 4,
+      "leg_node_set": "4",
+      "cross_metric_check_is_exact": true,
+      "S1_early_open": {
+        "n_flagged": 1,
+        "n_severe": 1,
+        "n_moderate": 0,
+        "share": 0.0125,
+        "applicable": true,
+        "n_rows_scoreable": 77,
+        "n_reclassified_recurrent": 5,
+        "robust_sigma_s_by_window_type": {
+          "COUNT_BASED": 0.04818449999999996,
+          "TIME_BASED": 0.06226920000000104
+        }
+      },
+      "recurrent_modes": [
+        {
+          "n_rows": 5,
+          "n_configs": 4,
+          "configs": [
+            "LIN-LAT-TIM-T30-W5-D15",
+            "LIN-LAT-TIM-T30-W5-D30",
+            "LIN-LAT-TIM-T30-W5-D5",
+            "LIN-LAT-TIM-T50-W5-D30"
+          ],
+          "residual_s_mean": -2.7044,
+          "residual_s_min": -2.824,
+          "residual_s_max": -2.565,
+          "window_types": [
+            "TIME_BASED"
+          ]
+        }
+      ],
+      "S2_impossible_blast": {
+        "n_flagged": 1,
+        "share": 0.0125,
+        "verdict": "STATE_LEAK",
+        "applicable": true
+      },
+      "n_rows_flagged_by_either": 1,
+      "late_open_outliers": {
+        "n": 2,
+        "rows": [
+          {
+            "experiment_id": "LIN-LAT-TIM-T50-W5-D5",
+            "replicate": 3,
+            "time_to_open": 6.323
+          },
+          {
+            "experiment_id": "LIN-LAT-TIM-T50-W5-D15",
+            "replicate": 2,
+            "time_to_open": 6.315
+          }
+        ]
+      },
+      "note": "Post-metric-change rebuild. blast_radius and the leg vector finally range over the SAME four CB-bearing subjects, so cross-metric checks are exact."
+    }
+  ],
+  "global_recurrent_modes": [
+    {
+      "residual_s_mean": -2.5866666666666664,
+      "n_rows": 3,
+      "n_configs": 3,
+      "datasets": [
+        "v2_latency_5svc",
+        "v3_gateway_not_rebuilt"
+      ],
+      "still_labelled_leak_per_file": [
+        {
+          "dataset": "v3_gateway_not_rebuilt",
+          "experiment_id": "LIN-LAT-TIM-T30-W5-D30",
+          "replicate": 3,
+          "severity": "MODERATE"
+        },
+        {
+          "dataset": "v2_latency_5svc",
+          "experiment_id": "LIN-LAT-TIM-T70-W5-D15",
+          "replicate": 1,
+          "severity": "MODERATE"
+        },
+        {
+          "dataset": "v2_latency_5svc",
+          "experiment_id": "LIN-LAT-TIM-T30-W5-D15",
+          "replicate": 1,
+          "severity": "MODERATE"
+        }
+      ]
+    }
+  ],
+  "verdict": {
+    "datasets_with_timing": [
+      "v2_latency_5svc",
+      "v3_gateway_not_rebuilt",
+      "current"
+    ],
+    "n_timed_rows": 334,
+    "flagged_per_file": 5,
+    "explained_by_global_recurrence": 3,
+    "leak_rows_after_global_screen": 2,
+    "severe_rows_in_timed_data": 2,
+    "prevalence_after_global_screen": 0.005988023952095809,
+    "h3_recompute_required": true,
+    "h3_numbers_move": false
+  }
+}

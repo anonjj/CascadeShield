@@ -47,7 +47,16 @@ ALPHA = 0.05
 # crossover lambda* is the first lambda where TIME_BASED clears the upper bar.
 TRIP_RELIABLE = 0.80
 TRIP_FAILING = 0.20
-LAMBDA_TOLERANCE = 0.15   # |achieved - target| / target above this flags the run
+# |achieved - target| / target above this flags a run. Read from the harness rather than
+# redeclared, so the analysis layer cannot quietly disagree with the runner about what
+# counts as off-target -- both were independently written as 0.15 and that is exactly the
+# kind of duplicate constant that drifts apart at the worst possible moment.
+try:
+    import sys as _sys
+    _sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent.parent / "experiments"))
+    from runner import LAMBDA_DEVIATION_THRESHOLD as LAMBDA_TOLERANCE
+except Exception:      # runner imports Toxiproxy at module scope; fall back if unavailable
+    LAMBDA_TOLERANCE = 0.15
 
 
 # ------------------------------------------------------------------------------ loading
@@ -75,8 +84,19 @@ def check_lambda_fidelity(df):
                            "because the independent variable is unmeasured. This is Jay's "
                            "Day-2 instrumentation task and it is a hard blocker, not a caveat."}
     rel = (df["lambda_achieved"] - df["lambda_target"]).abs() / df["lambda_target"]
-    off = rel > LAMBDA_TOLERANCE
+    # Prefer the harness's own verdict where it exists. runner.py computes the deviation
+    # from per-request dispatch timestamps it can see and this layer cannot, so recomputing
+    # from the two rounded CSV columns is strictly the weaker measurement -- fall back to it
+    # only for older files written before lambda_deviation_flag existed.
+    if "lambda_deviation_flag" in df.columns and df["lambda_deviation_flag"].notna().any():
+        off = df["lambda_deviation_flag"].astype(str).str.strip().str.lower().isin(["true", "1"])
+        flag_source = "runner.lambda_deviation_flag"
+    else:
+        off = rel > LAMBDA_TOLERANCE
+        flag_source = "recomputed from lambda_achieved vs lambda_target"
     return {
+        "deviation_flag_source": flag_source,
+        "deviation_threshold": LAMBDA_TOLERANCE,
         "available": True,
         "n_runs": int(len(df)),
         "n_off_target": int(off.sum()),
@@ -198,12 +218,22 @@ def h1_matched_horizon(df, horizon_col="effective_horizon"):
                           "the base arm -- at nominal window size COUNT and TIME sit on "
                           "different horizons and the contrast is the invalid one the paper "
                           "argues against."}
-    matched = df[(df["arm"] == "matched_horizon") & df["time_to_open"].notna()]
-    if horizon_col not in matched.columns:
-        horizon_col = "effective_horizon_nominal"
+    matched = df[(df["arm"] == "matched_horizon") & df["time_to_open"].notna()].copy()
+
+    # Group by the horizon the runs were DESIGNED at, not the one they achieved. Jay's
+    # effective_horizon is derived from lambda_achieved, so it is continuous -- grouping on
+    # it directly puts every run in a bucket of one and the contrast silently evaporates.
+    # The achieved value is still reported per bucket, because a design horizon of 100 that
+    # actually delivered 60 is a finding, not a rounding detail.
+    if "effective_horizon_nominal" in matched.columns:
+        matched["_bucket"] = matched["effective_horizon_nominal"].astype(float)
+    elif horizon_col in matched.columns:
+        matched["_bucket"] = matched[horizon_col].astype(float).round()
+    else:
+        return {"testable": False, "reason": "no horizon column to group on"}
 
     results, pvals = [], {}
-    for h, g in matched.groupby(horizon_col):
+    for h, g in matched.groupby("_bucket"):
         count = g[g["window_type"] == "COUNT_BASED"]["time_to_open"].dropna()
         time = g[g["window_type"] == "TIME_BASED"]["time_to_open"].dropna()
         if len(count) < 3 or len(time) < 3:
@@ -216,6 +246,8 @@ def h1_matched_horizon(df, horizon_col="effective_horizon"):
         diff = float(count.mean() - time.mean())
         entry = {
             "horizon": float(h),
+            "horizon_achieved_mean": (float(g[horizon_col].mean())
+                                      if horizon_col in g.columns else None),
             "n_count": int(len(count)), "n_time": int(len(time)),
             "mean_count": bootstrap_ci(count), "mean_time": bootstrap_ci(time),
             "sd_count": float(count.std(ddof=1)), "sd_time": float(time.std(ddof=1)),

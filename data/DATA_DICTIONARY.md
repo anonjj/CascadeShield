@@ -14,7 +14,14 @@
 | **Control DVs** *(mandatory)* | $\phi$ false-trip rate (from `fault_type = NONE` rows ✅), missed-detection rate, `flap_count` *(pending, Jay)* | Without $\phi$ no configuration in this paper may be described as safe. |
 | **Provenance** | `experiment_id`, `environment`, `mode`, `replicate`, `run_timestamp`, `permitted_calls_half_open`, `run_index` ✅, `run_order_seed` ✅, image digests *(pending, Jay)* | Never model features. |
 | **Validity** | `excluded_reason` ✅, `precondition_ok` / `precondition_fail_reason` / `readiness_wait_s` / `cb_state_pre` / `buffered_calls_pre` ✅, `warmup_requests` / `warmup_duration_s` ✅ | Rows are marked, never deleted. `precondition_ok = False` means the run never happened; `excluded_reason` means it happened but is untrustworthy. Analyses drop both. |
-| **λ factor** *(Day 2, BLOCKING)* | `lambda_target`, `lambda_achieved`, `lambda_cv`, `effective_horizon` — **none exist yet** | H1 and H2 are claims *about* $\lambda$. Without `lambda_achieved` the independent variable is unmeasured and neither can be claimed; `analysis/canary_readout.py` refuses to report rather than silently substituting `lambda_target`. |
+| **λ factor** | `lambda_target`, `lambda_achieved`, `lambda_cv`, `lambda_deviation_flag`, `effective_horizon` ✅ (PRs #16–#18) | H1 and H2 are claims *about* $\lambda$, so results are reported against `lambda_achieved` and never `lambda_target`. `analysis/canary_readout.py` refuses to report H1/H2 at all if `lambda_achieved` is absent, and takes its off-target verdict from `lambda_deviation_flag` rather than recomputing it — the harness sees per-request dispatch timestamps this layer cannot. |
+
+> **`effective_horizon` is continuous — do not group on it directly.** It is derived from
+> `lambda_achieved`, so no two runs share a value and any group-by puts each run in a bucket
+> of one. H1 contrasts are grouped on the horizon each run was *designed* at
+> (`effective_horizon_nominal`, from `data/canary_matrix.csv`), with the achieved mean
+> reported alongside — a cell designed at H = 100 that delivered 60 is a finding, not a
+> rounding detail. See `h1_matched_horizon()` in `analysis/canary_readout.py`.
 
 Standing rules:
 
@@ -262,6 +269,52 @@ debugging) and is printed to stdout as well as persisted here.
 Unlike `warmup_requests`/`precondition_ok`/etc., these two are **never blank** — a run's
 position in the sequence is known the moment it starts, independent of whether it goes on to
 pass its precondition check, warm up, or measure anything.
+
+### Achieved arrival-rate columns
+
+`compute_load_plan()` sizes an offered rate (`target_rps`, i.e. λ) for the fault window, and
+`generate_load()` paces its dispatch loop to hit it — but pacing is a request, not a
+guarantee. Under a saturated thread pool (or a backend gone slow/hanging under the injected
+fault itself), each `send_request` call queues behind the previous one, so the rate that
+actually reaches the gateway can drift from what was requested. A config that "looks safe"
+only because its offered load silently fell short of the nominal rate would be a false
+negative that a nominal-rate-only comparison across configs could never catch — this is
+measured, not assumed, precisely to close that gap.
+
+`lambda_achieved` and `lambda_cv` are computed in `generate_load()` from each dispatched
+request's actual send timestamp (post-queueing), not from the requested `interval_s`
+schedule: `lambda_achieved = (n-1) / span` over the sorted dispatch timestamps, and
+`lambda_cv` is the coefficient of variation (`stdev / mean`) across the inter-dispatch
+intervals between them — a high CV flags a bursty/uneven offered rate even when its mean
+happens to land on target.
+
+| Column | Type | Range | Notes |
+|--------|------|-------|-------|
+| `lambda_target` | float | `> 0` | the requested rate for this run's fault-window load (`plan["target_rps"]`, defaults to `LOAD_RATE_RPS`). Blank on a `precondition_ok=False` row. |
+| `lambda_achieved` | float | `≥ 0` | the measured rate, from real dispatch timestamps over the fault-window `generate_load()` call. Blank when fewer than `LAMBDA_MIN_REQUESTS_FOR_RATE` (3) requests were dispatched, or on a `precondition_ok=False` row. |
+| `lambda_cv` | float | `≥ 0` | coefficient of variation across inter-dispatch intervals in that same window. `0` = perfectly even pacing; larger values mean burstier/uneven dispatch. Blank under the same conditions as `lambda_achieved`. |
+| `lambda_deviation_flag` | bool | `True`/`False` | `True` when `abs(lambda_achieved - lambda_target) / lambda_target > LAMBDA_DEVIATION_THRESHOLD` (0.15, i.e. 15%). Blank (not `False`) when `lambda_achieved` couldn't be measured — absence of a measurement is not evidence of no deviation. **Rows with this flag `True` should be treated with the same suspicion as `precondition_ok=False` rows when comparing configs at their nominal rate** — the load that config actually received didn't match what the sweep asked for. |
+
+### Effective horizon column
+
+`window_size` means different things depending on `window_type`: for `COUNT_BASED` it's a
+call count (the ring buffer is `window_size` calls deep), but for `TIME_BASED` it's a
+duration in seconds — the window is whatever calls landed in the trailing `window_size`
+seconds. `CB_MINIMUM_CALLS` (the harness's pinned `minimumNumberOfCalls`, see the CB config
+columns above) is evaluated in the **call-count** unit either way, so a `TIME_BASED` window's
+actual call count depends on the *achieved* arrival rate during the run, not the requested
+one — the same rate `lambda_achieved` measures.
+
+`effective_horizon` (H) makes that call count explicit rather than leaving it implicit and
+config-dependent: `H = window_size` for `COUNT_BASED` (already denominated in calls); `H =
+lambda_achieved × window_size` for `TIME_BASED` (rate × duration = calls actually observed).
+A `TIME_BASED` run with `H < CB_MINIMUM_CALLS` never had enough calls in its trailing window
+to evaluate the breaker at all during the fault window — a harness/load artifact that is
+otherwise indistinguishable from a genuine "safe" (never tripped) outcome in `blast_radius`.
+
+| Column | Type | Range | Notes |
+|--------|------|-------|-------|
+| `effective_horizon` | float | `≥ 0` | calls available to the sliding window during the fault window (see formula above). Blank on a `precondition_ok=False` row. For `TIME_BASED`, also blank whenever `lambda_achieved` is blank (can't derive an achieved-rate-based horizon without a measured rate). **Compare against `CB_MINIMUM_CALLS` (5) before trusting a `TIME_BASED` "safe" reading** — `H < CB_MINIMUM_CALLS` means the breaker's evaluation window never actually filled. |
 
 ---
 

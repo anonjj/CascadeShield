@@ -5,6 +5,7 @@ import argparse
 import subprocess
 import csv
 import random
+import statistics
 import urllib.request
 import json
 import threading
@@ -70,6 +71,38 @@ DATASET_HEADERS = [
     # PRECONDITION_FAIL/READINESS_TIMEOUT aborts, has a definite position in the sequence.
     "run_order_seed",
     "run_index",
+    # Achieved-vs-requested arrival rate (lambda), measured at the gateway over the
+    # fault window's generate_load() call, not the paced interval_s schedule the
+    # dispatcher was asked to hit. A saturated thread pool (or a slow/crashing
+    # backend under fault) queues each request behind the last, so the *offered*
+    # rate can silently diverge from the *requested* one -- exactly the confound
+    # that would make a config look "safe" only because it never actually received
+    # the load a config elsewhere in the sweep did. lambda_target is the requested
+    # rate (plan["target_rps"]); lambda_achieved is measured from actual per-request
+    # dispatch timestamps (count / span); lambda_cv is the coefficient of variation
+    # across those requests' inter-dispatch intervals -- a high CV means the offered
+    # rate was bursty/uneven even if its mean matched target. All three are blank on
+    # aborted runs (never measured a real window) and blank if too few requests were
+    # dispatched to compute a rate (see LAMBDA_MIN_REQUESTS_FOR_RATE below).
+    "lambda_target",
+    "lambda_achieved",
+    "lambda_cv",
+    # True when lambda_achieved deviates from lambda_target by more than
+    # LAMBDA_DEVIATION_THRESHOLD -- nominal-vs-achieved rate divergence would
+    # quietly destroy any hypothesis compared across configs at their nominal rate.
+    # Blank (not False) when lambda_achieved itself couldn't be measured.
+    "lambda_deviation_flag",
+    # Effective horizon H: calls actually available to the sliding window during the
+    # fault window, in the same "number of calls" unit CB_MINIMUM_CALLS is evaluated
+    # against. H = window_size for COUNT_BASED (already denominated in calls);
+    # H = lambda_achieved * window_size for TIME_BASED (denominated in seconds, so
+    # the achieved -- not requested -- rate determines how many calls actually
+    # landed in the trailing window). H < CB_MINIMUM_CALLS means the breaker never
+    # had enough calls to evaluate at all during this run, a harness artifact
+    # indistinguishable from a genuine "safe" outcome without this column. Blank on
+    # a precondition_ok=False row, and blank for TIME_BASED when lambda_achieved
+    # itself is blank (see compute_effective_horizon).
+    "effective_horizon",
     # Quarantine marker, written by analysis/quarantine.py -- NOT by a run. Empty means the
     # row is analysable; anything else is a "+"-joined list of exclusion codes (see
     # data/DATA_DICTIONARY.md). Rows are marked rather than deleted so a reviewer can see
@@ -156,6 +189,28 @@ LOAD_CONCURRENCY = 5
 TIME_BASED_MARGIN_S = 10           # safety margin on top of window + wait duration
 COUNT_BASED_WINDOW_MULTIPLE = 3    # fire >= this * slidingWindowSize calls
 COUNT_BASED_MIN_REQUESTS = 40      # floor: keep error-rate estimate statistically stable
+
+# Achieved-vs-requested arrival rate (see the "lambda_target/lambda_achieved" comment
+# block in DATASET_HEADERS). Flag a run when the measured rate misses the requested
+# one by more than this fraction -- 15% is a coarse tripwire, not a precision bound.
+LAMBDA_DEVIATION_THRESHOLD = 0.15
+# Below this many dispatched requests, span/interval-based rate and CV estimates are
+# too noisy to trust (e.g. a 2-request window has exactly one interval -- a CV of
+# either 0.0 or undefined depending on luck, not a real measurement). generate_load's
+# baseline call (20 requests) clears this; only exists as a documented floor, not
+# because any current call site is expected to fall under it.
+LAMBDA_MIN_REQUESTS_FOR_RATE = 3
+
+# experiments/gatling/src/test/scala/cascadeshield/CascadeShieldSimulation.scala (branch
+# feat/gatling-simulation, not yet merged onto main) reads its injection parameters from
+# env vars -- GATEWAY_URL, GATLING_TPS, GATLING_DURATION_S, GATLING_TOPOLOGY, GATLING_PROFILE
+# -- so compute_load_plan() below can emit them without any code change on that side. Its
+# "sustained" profile is `rampUsersPerSec(1).to(tps).during(10.seconds)` followed by
+# `constantUsersPerSec(tps).during(durationS.seconds)`; the 10s ramp is HARDCODED in the
+# Scala, not env-var-driven. GATLING_RAMP_S documents that value so the emitted profile
+# stays honest about it -- there is no automatic check that they stay in sync if the Scala
+# ramp duration ever changes.
+GATLING_RAMP_S = 10
 
 # ---- JIT warmup (discard phase) ------------------------------------------------
 # A cold Spring Boot JVM (interpreted bytecode, C1/C2 JIT not yet compiled the hot
@@ -293,14 +348,29 @@ def inject_fault(fault_type):
     else:
         print(f"No fault injected. Type '{fault_type}' is unknown.", file=sys.stderr)
 
-def compute_load_plan(config):
+def compute_load_plan(config, target_rps=LOAD_RATE_RPS, topology=None):
     """Sizes the offered load per window type so both COUNT_BASED and TIME_BASED windows
     get a fair chance to fill, trip, sit OPEN, and transition to HALF_OPEN.
 
+    target_rps is the target arrival rate (lambda) -- previously hardcoded to
+    LOAD_RATE_RPS inside this function, now an explicit parameter so a caller can vary
+    the offered rate without touching the sizing logic itself. Defaults to LOAD_RATE_RPS,
+    so the existing call site in run_experiment_run() is unaffected unless it opts in.
+
     See the "Load fairness (Task 1)" comment block near the top of this module for the
-    rationale. Returns dict(requests_count, interval_s, concurrency, duration_s).
+    window-fill rationale. Returns dict(requests_count, interval_s, concurrency,
+    duration_s, target_rps, gatling_profile).
+
+    gatling_profile translates this same sizing into CascadeShieldSimulation.scala's
+    env-var contract (see GATLING_RAMP_S above) -- GATLING_TPS=target_rps,
+    GATLING_DURATION_S=duration_s, GATLING_PROFILE="sustained" (this function only ever
+    reasons about sustained load; "bursty" is a distinct profile the Scala sim defines
+    for a separate sub-study, not something this sizing logic produces). topology is
+    accepted here purely to complete that profile for a caller that has it in scope
+    (run_experiment_run does); compute_load_plan does not use it in any calculation.
+    This is emitted data only -- this module does not invoke Gatling itself.
     """
-    interval_s = 1.0 / LOAD_RATE_RPS
+    interval_s = 1.0 / target_rps
     window = int(config["slidingWindowSize"])
     wait = int(config["waitDurationInOpenState"])
 
@@ -308,14 +378,56 @@ def compute_load_plan(config):
         # Sustain load long enough for the trailing time-window (seconds) to fill, the
         # breaker to sit OPEN for wait_duration, and an automatic HALF_OPEN probe to fire.
         duration_s = window + wait + TIME_BASED_MARGIN_S
-        requests_count = max(int(duration_s * LOAD_RATE_RPS), CB_MINIMUM_CALLS + 1)
+        requests_count = max(int(duration_s * target_rps), CB_MINIMUM_CALLS + 1)
     else:  # COUNT_BASED -- window is measured in calls
         requests_count = max(window * COUNT_BASED_WINDOW_MULTIPLE,
                              CB_MINIMUM_CALLS * 3, COUNT_BASED_MIN_REQUESTS)
         duration_s = requests_count * interval_s
 
+    gatling_profile = {
+        "tps": target_rps,
+        "ramp_s": GATLING_RAMP_S,
+        "duration_s": duration_s,
+        "profile": "sustained",
+        "topology": topology,
+    }
+
     return {"requests_count": requests_count, "interval_s": interval_s,
-            "concurrency": LOAD_CONCURRENCY, "duration_s": duration_s}
+            "concurrency": LOAD_CONCURRENCY, "duration_s": duration_s,
+            "target_rps": target_rps, "gatling_profile": gatling_profile}
+
+
+def compute_lambda_deviation_flag(lambda_achieved, lambda_target, threshold=LAMBDA_DEVIATION_THRESHOLD):
+    """True when the achieved arrival rate misses the target by more than `threshold`
+    (a fraction, e.g. 0.15 = 15%). Returns None -- not False -- when lambda_achieved
+    is None, since "couldn't measure it" is not the same claim as "no deviation"."""
+    if lambda_achieved is None:
+        return None
+    return abs(lambda_achieved - lambda_target) / lambda_target > threshold
+
+
+def compute_effective_horizon(window_type, window_size, lambda_achieved):
+    """Effective horizon H: how many calls the sliding window actually had a chance
+    to observe during the fault window, in the same "number of calls" unit
+    minimumNumberOfCalls (CB_MINIMUM_CALLS) is evaluated against.
+
+    COUNT_BASED windows are already denominated in calls, so H = W (window_size)
+    directly -- every call that lands is one slot in the window, independent of
+    how fast or slow they arrived. TIME_BASED windows are denominated in seconds,
+    so a window's actual call count depends on the ACHIEVED arrival rate, not the
+    requested one: H = lambda_achieved * T (window_size, seconds). A TIME_BASED
+    run with H < CB_MINIMUM_CALLS never had enough calls in its trailing window
+    to evaluate the breaker at all, regardless of failure rate -- an artifact
+    this column makes visible instead of silently confounding with a real "safe"
+    outcome. Returns None when window_type is TIME_BASED and lambda_achieved is
+    None (can't compute an achieved-rate-based horizon without a measured rate)."""
+    if window_type == "COUNT_BASED":
+        return float(window_size)
+    if window_type == "TIME_BASED":
+        if lambda_achieved is None:
+            return None
+        return lambda_achieved * window_size
+    return None
 
 
 def generate_load(endpoint_url, requests_count=50, concurrency=5, interval_s=0.05):
@@ -323,13 +435,24 @@ def generate_load(endpoint_url, requests_count=50, concurrency=5, interval_s=0.0
 
     requests_count requests are dispatched spaced by interval_s (steady offered rate),
     so the same function drives both the short baseline warm-up and the longer,
-    duration-sized fault load (via compute_load_plan)."""
+    duration-sized fault load (via compute_load_plan).
+
+    Also measures the ACHIEVED arrival rate, not just the requested one: interval_s
+    is what the dispatch loop below asks for, but a saturated thread pool (worker
+    still busy on a slow/hanging request under fault) queues send_request behind the
+    last one, so what actually reaches the gateway can drift from what was asked
+    for. lambda_achieved is computed from each request's real dispatch timestamp
+    (count / span, not requests_count / interval_s), and lambda_cv is the
+    coefficient of variation across those requests' inter-dispatch intervals -- high
+    CV means the offered rate was bursty/uneven even when its mean lands on target.
+    Both are None when fewer than LAMBDA_MIN_REQUESTS_FOR_RATE requests were sent."""
     print(f"Generating load: {requests_count} requests to {endpoint_url} "
           f"@ ~{1.0/interval_s:.0f} req/s (~{requests_count*interval_s:.1f}s dispatch)...")
 
     success_count = 0
     failure_count = 0
     latencies = []
+    dispatch_timestamps = []
     lock = threading.Lock()
 
     t0 = time.time()
@@ -337,7 +460,7 @@ def generate_load(endpoint_url, requests_count=50, concurrency=5, interval_s=0.0
 
     def send_request():
         nonlocal success_count, failure_count, last_completion
-        start = time.time()
+        start = time.time()  # actual dispatch instant, post any thread-pool queueing
         success = False
         try:
             req = urllib.request.Request(endpoint_url)
@@ -355,6 +478,7 @@ def generate_load(endpoint_url, requests_count=50, concurrency=5, interval_s=0.0
             else:
                 failure_count += 1
             latencies.append(latency)
+            dispatch_timestamps.append(start)
             last_completion = time.time()  # true last-completion timestamp
 
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
@@ -371,8 +495,25 @@ def generate_load(endpoint_url, requests_count=50, concurrency=5, interval_s=0.0
     throughput = success_count / execution_time
     error_rate = (failure_count / requests_count) * 100 if requests_count else 0
 
+    dispatch_timestamps.sort()
+    n_dispatched = len(dispatch_timestamps)
+    lambda_achieved = None
+    lambda_cv = None
+    if n_dispatched >= LAMBDA_MIN_REQUESTS_FOR_RATE:
+        span = dispatch_timestamps[-1] - dispatch_timestamps[0]
+        if span > 0:
+            lambda_achieved = (n_dispatched - 1) / span
+        intervals = [dispatch_timestamps[i + 1] - dispatch_timestamps[i]
+                     for i in range(n_dispatched - 1)]
+        mean_interval = statistics.mean(intervals)
+        if mean_interval > 0:
+            lambda_cv = statistics.stdev(intervals) / mean_interval
+
     print(f"Load Results - Successes: {success_count}, Failures: {failure_count}, Avg Latency: {avg_latency:.2f}ms, Throughput: {throughput:.2f} TPS, Error Rate: {error_rate:.2f}%")
-    return throughput, error_rate, avg_latency
+    if lambda_achieved is not None:
+        print(f"Arrival rate - achieved: {lambda_achieved:.2f} req/s (requested ~{1.0/interval_s:.2f} req/s), CV: {lambda_cv:.3f}" if lambda_cv is not None else
+              f"Arrival rate - achieved: {lambda_achieved:.2f} req/s (requested ~{1.0/interval_s:.2f} req/s)")
+    return throughput, error_rate, avg_latency, lambda_achieved, lambda_cv
 
 def warmup_phase(endpoint_url, min_requests=WARMUP_MIN_REQUESTS, min_duration_s=WARMUP_MIN_DURATION_S,
                   interval_s=1.0 / LOAD_RATE_RPS, concurrency=LOAD_CONCURRENCY):
@@ -742,7 +883,7 @@ def get_dataset_path(mode):
 
 def log_results(config, fault_type, mode, topology, metrics, replicate):
     """Appends experiment run results to master_dataset.csv (full mode) or
-    canary_runs.csv (canary mode) -- 28-col schema, same DATASET_HEADERS either way.
+    canary_runs.csv (canary mode) -- 33-col schema, same DATASET_HEADERS either way.
 
     metrics only needs to carry the keys a given call actually has: a
     PRECONDITION_FAIL row (aborted before fault injection, before warmup even
@@ -808,6 +949,11 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
             f"{metrics['warmup_duration_s']:.3f}" if metrics.get('warmup_duration_s') is not None else "",
             metrics.get("run_order_seed", ""),
             metrics.get("run_index", ""),
+            f"{metrics['lambda_target']:.4f}" if metrics.get('lambda_target') is not None else "",
+            f"{metrics['lambda_achieved']:.4f}" if metrics.get('lambda_achieved') is not None else "",
+            f"{metrics['lambda_cv']:.4f}" if metrics.get('lambda_cv') is not None else "",
+            metrics.get("lambda_deviation_flag") if metrics.get("lambda_deviation_flag") is not None else "",
+            f"{metrics['effective_horizon']:.4f}" if metrics.get('effective_horizon') is not None else "",
             "",  # excluded_reason -- always empty at write time; only analysis/quarantine.py fills it
         ])
     print(f"Saved run metrics to {dataset_path}")
@@ -882,7 +1028,7 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
 
     # 3. Measure pre-fault baseline throughput (against an already-warm JVM)
     print("Measuring pre-fault baseline...")
-    baseline_throughput, _, _ = generate_load(endpoint, requests_count=20, concurrency=3)
+    baseline_throughput, _, _, _, _ = generate_load(endpoint, requests_count=20, concurrency=3)
     if baseline_throughput <= 0:
         print("Baseline throughput is zero — mesh unhealthy pre-fault, skipping run.", file=sys.stderr)
         return False
@@ -899,9 +1045,9 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
     # 5. Size the fault load per window type so TIME_BASED windows can actually fill
     #    (Task 1). Snapshot per-leg CB call counters just before the fault window so the
     #    real (request-level) blast radius is a clean delta over the window (Task 2).
-    plan = compute_load_plan(config)
+    plan = compute_load_plan(config, topology=topology)
     print(f"Load plan ({config['slidingWindowType']}): {plan['requests_count']} requests "
-          f"over ~{plan['duration_s']:.0f}s @ {LOAD_RATE_RPS} req/s")
+          f"over ~{plan['duration_s']:.0f}s @ {plan['target_rps']} req/s")
     cb_calls_before = snapshot_cb_calls()
 
     # Sample blast radius mid-load via a thread so the CB is still OPEN (not recovering)
@@ -944,10 +1090,37 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
     sampler = threading.Thread(target=_sample_blast_radius, daemon=True)
     sampler.start()
     load_start = time.time()   # reference for time_to_open (cb_open_at - load_start)
-    throughput, error_rate, avg_latency = generate_load(
+    throughput, error_rate, avg_latency, lambda_achieved, lambda_cv = generate_load(
         endpoint, requests_count=plan["requests_count"],
         concurrency=plan["concurrency"], interval_s=plan["interval_s"])
     sampler.join(timeout=sample_deadline_s + 5)
+
+    # Nominal-vs-achieved rate divergence check (see the "lambda_target/lambda_achieved"
+    # comment block in DATASET_HEADERS). lambda_target is this run's requested rate;
+    # lambda_deviation_flag stays None (not False) when lambda_achieved couldn't be
+    # measured at all, rather than fabricating a "no deviation" reading.
+    lambda_target = plan["target_rps"]
+    lambda_deviation_flag = compute_lambda_deviation_flag(lambda_achieved, lambda_target)
+    if lambda_deviation_flag:
+        print(
+            f"WARNING: achieved arrival rate {lambda_achieved:.2f} req/s deviates "
+            f"> {LAMBDA_DEVIATION_THRESHOLD*100:.0f}% from target {lambda_target} req/s "
+            "-- offered load did not match the requested rate for this run.",
+            file=sys.stderr,
+        )
+
+    # Effective horizon H: calls actually available to the sliding window (see
+    # compute_effective_horizon docstring). Diagnoses TIME_BASED windows that never
+    # filled -- distinct from, and a likely cause of, a spuriously "safe" reading.
+    effective_horizon = compute_effective_horizon(
+        config["slidingWindowType"], config["slidingWindowSize"], lambda_achieved)
+    if effective_horizon is not None and effective_horizon < CB_MINIMUM_CALLS:
+        print(
+            f"WARNING: effective horizon {effective_horizon:.2f} calls < "
+            f"CB_MINIMUM_CALLS ({CB_MINIMUM_CALLS}) -- the sliding window likely never "
+            "filled enough to evaluate the breaker during this run.",
+            file=sys.stderr,
+        )
 
     # Snapshot per-leg CB counters again at the end of the fault window (Task 2).
     cb_calls_after = snapshot_cb_calls()
@@ -1046,6 +1219,11 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
         "warmup_duration_s": warmup_duration_s,
         "run_order_seed": run_order_seed,
         "run_index": run_index,
+        "lambda_target": lambda_target,
+        "lambda_achieved": lambda_achieved,
+        "lambda_cv": lambda_cv,
+        "lambda_deviation_flag": lambda_deviation_flag,
+        "effective_horizon": effective_horizon,
     }
     log_results(config, fault_type, mode, topology, metrics, replicate)
 

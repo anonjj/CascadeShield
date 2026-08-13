@@ -80,6 +80,16 @@ past 486 (e.g. 486 configs × 2 environments × 3 replicates = 2,916 rows).
 > all-zero row indistinguishable from an unrecognised category. `load_dataset()` drops
 > `fault_type=NONE` rows before returning (same pattern as the `precondition_ok=False`
 > filter above) — compute phi directly from the raw CSV instead of through that function.
+> `experiments/compute_phi.py [path/to/dataset.csv]` does exactly that: it reads the raw
+> CSV directly (stdlib only, same convention as `validate_gate.py`), keeps only valid
+> `fault_type=NONE` rows (`precondition_ok=True` — an aborted run measured nothing and
+> would silently deflate phi if counted as "no trip"), and reports phi overall, per
+> topology, and per swept config (flagging any config with `blast_radius > 0` — a
+> confirmed false trip under no fault at all — and any config sampled below
+> `MIN_NONE_FAULT_REPLICATES`). Unlike `validate_gate.py`, this is a report, not a
+> pass/fail gate: there is no established "acceptable" phi threshold yet, so it always
+> exits 0 on a successful read (2 if the dataset file is missing, 1 if it has no usable
+> `fault_type=NONE` rows).
 
 > **`window_size` unit warning.** Its meaning *changes with `window_type`*: a value of `50` means
 > "50 calls" under COUNT_BASED but "50 seconds" under TIME_BASED. The raw number is therefore not

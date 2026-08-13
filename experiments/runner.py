@@ -4,6 +4,7 @@ import time
 import argparse
 import subprocess
 import csv
+import random
 import urllib.request
 import json
 import threading
@@ -36,16 +37,95 @@ DATASET_HEADERS = [
     # Raw per-leg failure rates behind real_blast_radius ("svc:rate;svc:rate", each 0-1), so a
     # different TAU_LEG can be applied post-hoc from the CSV without re-running the sweep.
     "leg_failure_rates",
+    # Breaker-state-reset precondition (highest-priority harness bug found: CB state observed
+    # carrying over between replicates of an IDENTICAL config -- e.g. one replicate tripping in
+    # 0.303s against 6.2s+ for its siblings, consistent with a breaker that started this run
+    # already OPEN rather than one that tripped fresh). precondition_ok=False rows have every
+    # outcome column above left BLANK -- the run was aborted before fault injection, so they
+    # measured nothing and MUST be excluded from training/analysis, not read as "0.0" / "safe".
+    "precondition_ok",
+    "precondition_fail_reason",
+    # Wall-clock seconds spent polling all six services' /actuator/health before the run
+    # proceeded (or the readiness deadline was hit). Recorded even on timeout.
+    "readiness_wait_s",
+    # Per-breaker state read from GET /actuator/circuitbreakers right after the pre-run
+    # reset, serialized "service:breaker=STATE;...". Ground truth for "did the reset work",
+    # not an inference from health or container-recreate having merely been *attempted*.
+    "cb_state_pre",
+    # Per-breaker bufferedCalls from the same read, serialized "service:breaker=N;...". On a
+    # genuinely fresh container this is 0 for every breaker; non-zero is the direct signal
+    # that update_containers()'s force-recreate did NOT actually reset that service's JVM.
+    "buffered_calls_pre",
+    # JIT warmup (discard phase, run before baseline/fault load -- see the "JIT warmup"
+    # comment block near LOAD_RATE_RPS). Proves the warmup dose actually ran rather than
+    # just asserting it: a cold JVM's 100ms+ per-request artifacts are noise on a DV whose
+    # real effects are single-digit seconds.
+    "warmup_requests",
+    "warmup_duration_s",
+    # Run-order randomization: sequential execution of a long sweep on one host confounds
+    # treatment (config) with thermal/memory drift over the sweep's wall-clock duration --
+    # later configs would systematically run on a warmer/more-fragmented host. main() builds
+    # the full run list up front and shuffles it with random.Random(run_order_seed), so
+    # execution order is decorrelated from config order. Never null: every row, including
+    # PRECONDITION_FAIL/READINESS_TIMEOUT aborts, has a definite position in the sequence.
+    "run_order_seed",
+    "run_index",
     # Quarantine marker, written by analysis/quarantine.py -- NOT by a run. Empty means the
-    # row is analysable; anything else is a "+"-joined list of exclusion codes. Rows are
-    # marked rather than deleted so a reviewer can see what was dropped and why; see
-    # data/DATA_DICTIONARY.md for the code list. A live run always writes it empty.
+    # row is analysable; anything else is a "+"-joined list of exclusion codes (see
+    # data/DATA_DICTIONARY.md). Rows are marked rather than deleted so a reviewer can see
+    # what was dropped and why. A live run always writes it empty, and it is deliberately
+    # LAST: it is assigned post-hoc, so keeping it at the end means a re-quarantine never
+    # shifts a column the harness wrote.
+    #
+    # Distinct from precondition_ok above, which they are easy to conflate: precondition_ok
+    # marks a run that never happened (aborted before fault injection, every outcome column
+    # blank), while excluded_reason marks a run that happened and produced numbers that
+    # turned out not to be trustworthy. Analyses must drop both.
     "excluded_reason",
 ]
 
 # How many replicates per config (min 3 for variance estimation)
 N_REPLICATES = 3
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "LOCAL")  # override to AWS on cloud runs
+
+# No-fault control condition (fault_type=NONE): without it, a config reading blast_radius=0
+# under a real fault is not distinguishable from a config that would read 0 regardless of
+# whether anything actually happened -- "safe" is only a meaningful claim relative to a
+# baseline false-trip rate (phi), which requires actually running the mesh with no fault
+# injected. Enforced as a hard floor, not a suggestion: undersampling the control condition
+# defeats the entire point of collecting it.
+MIN_NONE_FAULT_REPLICATES = 10
+
+# Sidecar log of real Resilience4j state-transition events, keyed to each CSV row
+# by experiment_id/replicate/mode. Exists because error_rate/blast_radius alone
+# cannot tell us whether an *interior* breaker (order/inventory/payment/notification's
+# own CBs on their downstream calls) actually opened: Resilience4j trips on the
+# slow-call-rate path independently of the failure-rate path, and a >2s call that
+# still returns 200 scores 0% failure rate while counting fully toward slow-call
+# rate. Only the actual STATE_TRANSITION events settle that.
+CB_TRANSITIONS_PATH = BASE_DIR / "data" / "cb_transitions.jsonl"
+CANARY_CB_TRANSITIONS_PATH = BASE_DIR / "data" / "canary_cb_transitions.jsonl"
+
+# service -> (actuator port, [circuit breaker instance names]), from each service's
+# application.yml `resilience4j.circuitbreaker.instances`. shared-db-service has no
+# breakers of its own (it's a call target, not a caller) so it's excluded.
+SERVICE_BREAKERS = {
+    "gateway":      (8080, ["orderServiceCB", "inventoryServiceCB", "paymentServiceCB"]),
+    "order":        (8081, ["inventoryServiceCB", "sharedDbCB"]),
+    "inventory":    (8082, ["paymentServiceCB", "sharedDbCB"]),
+    "payment":      (8083, ["notificationServiceCB", "sharedDbCB"]),
+    "notification": (8084, ["sharedDbCB"]),
+}
+CB_EVENT_BUFFER_SIZE = 50  # must match application.yml's event-consumer-buffer-size
+
+# All six services in the call chain, for the readiness gate. shared-db-service has no
+# circuit breaker of its own (see SERVICE_BREAKERS above) but every other service calls
+# into it, so an unhealthy/still-starting shared-db silently corrupts every other
+# service's measurements even though it never appears in SERVICE_BREAKERS.
+ALL_SERVICE_PORTS = {
+    "gateway": 8080, "order": 8081, "inventory": 8082,
+    "payment": 8083, "notification": 8084, "shared-db": 8085,
+}
 
 # Configuration Parameter Values for Sweeps (3*3*3*2 = 54 configs per fault × 3 faults × 3 replicates = 486 total runs)
 PARAM_VALUES = {
@@ -76,6 +156,19 @@ LOAD_CONCURRENCY = 5
 TIME_BASED_MARGIN_S = 10           # safety margin on top of window + wait duration
 COUNT_BASED_WINDOW_MULTIPLE = 3    # fire >= this * slidingWindowSize calls
 COUNT_BASED_MIN_REQUESTS = 40      # floor: keep error-rate estimate statistically stable
+
+# ---- JIT warmup (discard phase) ------------------------------------------------
+# A cold Spring Boot JVM (interpreted bytecode, C1/C2 JIT not yet compiled the hot
+# path) can add 100ms+ latency to individual requests -- noise on the same order as,
+# or larger than, some of what's measured, and real contamination of a DV
+# (time_to_open, time_to_recover) whose true effects are single-digit seconds. Run
+# BEFORE the baseline throughput measurement, so that measurement isn't itself
+# contaminated by JIT warmup. Results are discarded; only the dose actually
+# delivered (warmup_requests, warmup_duration_s) is kept, so the dataset can prove
+# the warmup ran rather than merely assert it. "Whichever is longer" means BOTH
+# floors must be met, not either one alone.
+WARMUP_MIN_REQUESTS = 200
+WARMUP_MIN_DURATION_S = 10.0
 
 # ---- Real (request-level) blast radius (Task 2) ------------------------------
 # SUBJECT SET = the four CB-bearing downstream services whose real per-leg failure we
@@ -119,6 +212,7 @@ CB_SLIDING_WINDOW_TYPE={config['slidingWindowType']}
 CB_FAILURE_RATE_THRESHOLD={config['failureRateThreshold']}
 CB_WAIT_DURATION_OPEN={config['waitDurationInOpenState']}s
 CB_PERMITTED_CALLS_HALF_OPEN={PERMITTED_CALLS_HALF_OPEN}
+CB_EVENT_BUFFER_SIZE={CB_EVENT_BUFFER_SIZE}
 CB_MINIMUM_CALLS={CB_MINIMUM_CALLS}
 """
     os.makedirs(os.path.dirname(ENV_PATH), exist_ok=True)
@@ -138,38 +232,40 @@ def update_containers():
         return False
     return True
 
-def wait_for_healthy(timeout=60):
-    """Polls gateway and notification-service until both report UP.
+def wait_for_readiness(timeout=90):
+    """Polls /actuator/health on all SIX services until every one reports UP, or
+    a hard deadline is hit. Supersedes the old "just check gateway + notification
+    and infer the rest" shortcut -- that inference is exactly the kind of
+    unverified assumption the breaker-reset precondition below exists to stop
+    making; shared-db-service in particular has no circuit breaker of its own
+    but sits in every call chain, so a still-starting shared-db silently
+    corrupts every other service's measurements.
 
-    notification-service is checked explicitly because --no-deps in
-    update_containers() bypasses depends_on conditions, so Docker will not
-    wait for shared-db-service before starting notification-service. If
-    notification-service is UP, shared-db-service is also ready.
+    Returns (all_healthy, elapsed_s). elapsed_s is recorded on timeout too --
+    a run that barely made the deadline and one that never did are both
+    evidence worth keeping in the dataset, not just a pass/fail bit.
     """
-    endpoints = [
-        ("http://localhost:8080/actuator/health", "gateway-service"),
-        ("http://localhost:8084/actuator/health", "notification-service"),
-    ]
-    healthy = {url: False for url, _ in endpoints}
     start_time = time.time()
+    healthy = {name: False for name in ALL_SERVICE_PORTS}
     while time.time() - start_time < timeout:
-        for url, name in endpoints:
-            if healthy[url]:
+        for name, port in ALL_SERVICE_PORTS.items():
+            if healthy[name]:
                 continue
             try:
-                with urllib.request.urlopen(url, timeout=2) as response:
+                with urllib.request.urlopen(f"http://localhost:{port}/actuator/health", timeout=2) as response:
                     if response.status == 200:
                         data = json.loads(response.read().decode("utf-8"))
                         if data.get("status") == "UP":
-                            print(f"{name} is healthy!")
-                            healthy[url] = True
+                            print(f"{name}-service is healthy!")
+                            healthy[name] = True
             except Exception:
                 pass
         if all(healthy.values()):
-            return True
+            return True, round(time.time() - start_time, 3)
         time.sleep(2)
-    print("Timeout waiting for services to become healthy.", file=sys.stderr)
-    return False
+    not_ready = [name for name, ok in healthy.items() if not ok]
+    print(f"Timeout waiting for services to become healthy: {not_ready} never reported UP.", file=sys.stderr)
+    return False, round(time.time() - start_time, 3)
 
 def inject_fault(fault_type):
     """Injects the appropriate fault profile into Toxiproxy."""
@@ -187,7 +283,13 @@ def inject_fault(fault_type):
     elif fault_type == "throttle":
         # Limit database proxy bandwidth to 1 KB/s (simulates DB connection/resource limits)
         toxiproxy.inject_bandwidth_limit("shared-db-service-proxy", rate_kbps=1, toxicity=1.0)
-        
+
+    elif fault_type == "none":
+        # Deliberate no-op: this is a control replicate. toxiproxy.reset_all() above already
+        # guarantees every proxy is clean, so the "fault window" is a pure healthy-baseline
+        # window -- exactly the point. Not an error case; do not fall through to the else.
+        pass
+
     else:
         print(f"No fault injected. Type '{fault_type}' is unknown.", file=sys.stderr)
 
@@ -272,6 +374,41 @@ def generate_load(endpoint_url, requests_count=50, concurrency=5, interval_s=0.0
     print(f"Load Results - Successes: {success_count}, Failures: {failure_count}, Avg Latency: {avg_latency:.2f}ms, Throughput: {throughput:.2f} TPS, Error Rate: {error_rate:.2f}%")
     return throughput, error_rate, avg_latency
 
+def warmup_phase(endpoint_url, min_requests=WARMUP_MIN_REQUESTS, min_duration_s=WARMUP_MIN_DURATION_S,
+                  interval_s=1.0 / LOAD_RATE_RPS, concurrency=LOAD_CONCURRENCY):
+    """Discard-phase requests to steady state, run before any measurement or fault
+    injection (see the "JIT warmup" comment block above LOAD_RATE_RPS for why).
+    Responses are read and thrown away -- this exists to warm the JIT, not to
+    measure anything -- but the actual dose delivered (count, elapsed time) is
+    returned so the caller can log it rather than just assert the phase ran.
+
+    Runs until BOTH min_requests have completed AND min_duration_s has elapsed --
+    "200 requests or 10s, whichever is longer" means neither floor may be skipped,
+    not that meeting either alone is sufficient.
+    """
+    print(f"Warming up JIT: discarding responses from {endpoint_url} for >= {min_requests} "
+          f"requests and >= {min_duration_s:.0f}s (whichever is longer)...")
+    start = time.time()
+    requests_sent = 0
+
+    def send_and_discard():
+        try:
+            with urllib.request.urlopen(endpoint_url, timeout=5) as res:
+                res.read()
+        except Exception:
+            pass  # discard phase -- failures here are not measured or logged as errors
+
+    with ThreadPoolExecutor(max_workers=concurrency) as executor:
+        while requests_sent < min_requests or (time.time() - start) < min_duration_s:
+            executor.submit(send_and_discard)
+            requests_sent += 1
+            time.sleep(interval_s)
+    # executor.__exit__ blocks until every in-flight request completes, so the
+    # elapsed time below reflects genuine JVM activity, not just dispatch time.
+    elapsed = round(time.time() - start, 3)
+    print(f"Warmup complete: {requests_sent} requests over {elapsed:.1f}s.")
+    return requests_sent, elapsed
+
 def get_blast_radius():
     """Queries the Gateway's custom aggregator endpoint for the current blast radius.
 
@@ -294,6 +431,197 @@ def get_blast_radius():
     except Exception as e:
         print(f"Failed to query blast radius from Gateway: {e}", file=sys.stderr)
     return None  # Sentinel: distinguishable from a real 0.0 (healthy mesh)
+
+# ---- Breaker-state-reset precondition -----------------------------------------
+# update_containers() already force-recreates every container before every run, which
+# SHOULD reset Resilience4j's in-memory CircuitBreakerRegistry (a fresh JVM has no
+# accumulated state) -- but that has been observed NOT to hold: a replicate can start
+# with a breaker already OPEN/near-tripped from the prior run, tripping in ~0.3s
+# instead of the ~6s its identical siblings take on a genuine cold start. The functions
+# below make the reset explicit (rather than trusting force-recreate blindly) and then
+# verify it against ground truth before any fault is injected, so a run that can't be
+# trusted is aborted instead of silently written as if it started clean.
+#
+# Verified against the actual resilience4j-spring-boot3 2.2.0 jar this project depends
+# on (decompiled CircuitBreakerEndpoint.class) rather than assumed from memory:
+#   GET  /actuator/circuitbreakers            -> {"circuitBreakers": {name: {"state":
+#        "CLOSED"|"OPEN"|..., "bufferedCalls": int, ...}}}   (@ReadOperation)
+#   POST /actuator/circuitbreakers/{name}     body {"updateState": "CLOSE"}  ->
+#        calls CircuitBreaker.transitionToClosedState()      (@WriteOperation)
+# Deliberately NOT using /actuator/health for the read: management.health.circuitbreakers
+# .enabled is opt-in, and if it were ever turned off, health would report a bare "UP" with
+# no breaker detail and this assertion would pass vacuously -- the exact failure mode this
+# precondition exists to prevent. /actuator/circuitbreakers needs no such opt-in and is
+# already in every service's management.endpoints.web.exposure.include.
+
+def _get_circuit_breakers(port):
+    """GET /actuator/circuitbreakers: {breaker_name: {"state": ..., "bufferedCalls": ...}}.
+    Returns {} on any failure -- callers must treat that as "could not verify" (fail
+    closed), never as "no breakers configured"."""
+    url = f"http://localhost:{port}/actuator/circuitbreakers"
+    try:
+        with urllib.request.urlopen(url, timeout=3) as response:
+            data = json.loads(response.read().decode("utf-8"))
+            return data.get("circuitBreakers", {})
+    except Exception as e:
+        print(f"Failed to read circuit breakers (port {port}): {e}", file=sys.stderr)
+        return {}
+
+def _transition_breaker_to_closed(port, breaker_name):
+    """POST /actuator/circuitbreakers/{name} {"updateState": "CLOSE"} -- forces an
+    immediate, explicit reset to CLOSED, independent of (and a belt-and-suspenders
+    complement to) the per-run container force-recreate in update_containers().
+    Best-effort: the real gate is check_breaker_precondition() re-reading ground
+    truth afterward, not this call succeeding."""
+    url = f"http://localhost:{port}/actuator/circuitbreakers/{breaker_name}"
+    body = json.dumps({"updateState": "CLOSE"}).encode("utf-8")
+    req = urllib.request.Request(url, data=body, method="POST",
+                                  headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=3) as response:
+            return response.status == 200
+    except Exception as e:
+        print(f"Failed to reset {breaker_name} to CLOSED (port {port}): {e}", file=sys.stderr)
+        return False
+
+def reset_all_breakers():
+    """Best-effort: force every known breaker (SERVICE_BREAKERS) to CLOSED via the
+    actuator write endpoint before check_breaker_precondition() asserts the result."""
+    for service, (port, breakers) in SERVICE_BREAKERS.items():
+        for breaker in breakers:
+            _transition_breaker_to_closed(port, breaker)
+
+def _serialize_cb_map(nested):
+    """{service: {breaker: value}} -> "service:breaker=value;service:breaker=value",
+    matching the "svc:rate;svc:rate" convention already used for leg_failure_rates."""
+    return ";".join(
+        f"{service}:{breaker}={value}"
+        for service, breakers in nested.items()
+        for breaker, value in breakers.items()
+    )
+
+def check_breaker_precondition():
+    """Reset-then-verify: reads every known breaker's ACTUAL state and bufferedCalls
+    straight from /actuator/circuitbreakers and asserts both are clean. Fails closed --
+    an unreachable service counts as a failure, not a pass.
+
+    Two independent checks, because they catch different failures:
+      * state != CLOSED       -- the reset didn't take, or something re-tripped it
+        between the reset call and this read.
+      * bufferedCalls != 0    -- on a genuinely fresh container this is always 0.
+        Non-zero is the direct test of whether force-recreate is doing what
+        update_containers()'s docstring assumes: a breaker can already read CLOSED
+        again (Resilience4j resets bufferedCalls per sliding-window slot, not just on
+        state transitions) while still carrying calls from the PRIOR run's window --
+        state alone would miss that carryover.
+    """
+    cb_state = {}
+    buffered_calls = {}
+    fail_reasons = []
+
+    for service, (port, breakers) in SERVICE_BREAKERS.items():
+        details = _get_circuit_breakers(port)
+        cb_state[service] = {}
+        buffered_calls[service] = {}
+        for breaker in breakers:
+            info = details.get(breaker)
+            if info is None:
+                cb_state[service][breaker] = "UNREACHABLE"
+                buffered_calls[service][breaker] = "UNREACHABLE"
+                fail_reasons.append(f"{service}:{breaker}=UNREACHABLE")
+                continue
+            state = info.get("state", "UNKNOWN")
+            buffered = info.get("bufferedCalls", -1)
+            cb_state[service][breaker] = state
+            buffered_calls[service][breaker] = buffered
+            if state != "CLOSED":
+                fail_reasons.append(f"{service}:{breaker}=state:{state}")
+            if buffered != 0:
+                fail_reasons.append(f"{service}:{breaker}=buffered:{buffered}")
+
+    return {
+        "ok": not fail_reasons,
+        "fail_reason": "; ".join(fail_reasons),
+        "cb_state": cb_state,
+        "buffered_calls": buffered_calls,
+    }
+
+def _fetch_breaker_events(port, breaker_name):
+    """Raw STATE_TRANSITION events currently in `breaker_name`'s actuator ring
+    buffer, oldest first. Returns [] on any failure -- this is diagnostic
+    instrumentation and must never abort a run."""
+    url = f"http://localhost:{port}/actuator/circuitbreakerevents/{breaker_name}"
+    try:
+        with urllib.request.urlopen(url, timeout=3) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except Exception as e:
+        print(f"Failed to fetch {breaker_name} CB events (port {port}): {e}", file=sys.stderr)
+        return []
+    return [e for e in data.get("circuitBreakerEvents", []) if e.get("type") == "STATE_TRANSITION"]
+
+def snapshot_breaker_event_counts():
+    """{(service, breaker): event count right now}, taken before the fault so
+    collect_new_transitions() can slice off just the events this run adds.
+
+    In practice each run's containers are force-recreated (see update_containers),
+    so every breaker's ring buffer already starts empty -- this snapshot is a
+    defensive baseline, not load-bearing, in case that recreate-per-run behavior
+    ever changes.
+    """
+    return {
+        (service, breaker): len(_fetch_breaker_events(port, breaker))
+        for service, (port, breakers) in SERVICE_BREAKERS.items()
+        for breaker in breakers
+    }
+
+def collect_new_transitions(before_counts):
+    """STATE_TRANSITION events added to any breaker's buffer since `before_counts`,
+    merged across services and ordered chronologically.
+
+    Ordering relies on creationTime sorting correctly as a plain string: every
+    service is the same JVM timezone offset and Jackson's ISO-8601 serialization
+    is fixed-width, so lexicographic order == chronological order here without
+    needing to parse Java's ZonedDateTime format.
+    """
+    transitions = []
+    for service, (port, breakers) in SERVICE_BREAKERS.items():
+        for breaker in breakers:
+            events = _fetch_breaker_events(port, breaker)
+            before = before_counts.get((service, breaker), 0)
+            for event in events[before:]:
+                transitions.append({
+                    "service": service,
+                    "breaker": breaker,
+                    "state_transition": event.get("stateTransition"),
+                    "creation_time": event.get("creationTime"),
+                })
+    transitions.sort(key=lambda t: t["creation_time"] or "")
+    return transitions
+
+def log_cb_transitions(experiment_id, topology, fault_type, config, mode, replicate,
+                        fault_injected_at, fault_cleared_at, transitions):
+    """Appends one JSON line per run recording every circuit breaker's real
+    CLOSED/OPEN/HALF_OPEN transitions -- kept as a sidecar (not master_dataset.csv
+    columns) because the transition list is variable-length per run and a CSV
+    cell can't hold an ordered, multi-service event list cleanly. Join back to
+    the CSV row via experiment_id + replicate + mode.
+    """
+    path = CANARY_CB_TRANSITIONS_PATH if mode == "canary" else CB_TRANSITIONS_PATH
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    record = {
+        "experiment_id": experiment_id,
+        "topology": topology.upper(),
+        "fault_type": fault_type.upper(),
+        "window_type": config["slidingWindowType"],
+        "environment": ENVIRONMENT,
+        "mode": mode,
+        "replicate": replicate,
+        "fault_injected_at": fault_injected_at,
+        "fault_cleared_at": fault_cleared_at,
+        "transitions": transitions,
+    }
+    with open(path, "a") as f:
+        f.write(json.dumps(record) + "\n")
 
 # ---- Real (request-level) blast radius (Task 2) ------------------------------
 # The legacy get_blast_radius() above measures breaker STATE (% of services with an OPEN
@@ -383,7 +711,7 @@ def compute_real_blast_radius(before, after, tau=REAL_BLAST_LEG_ERROR_THRESHOLD)
 def make_experiment_id(topology, fault_type, config):
     """Builds a deterministic ID matching experiment_matrix.csv e.g. LIN-LAT-CNT-T50-W10-D15."""
     topo_map  = {"linear": "LIN", "fanout": "FAN", "mesh": "MSH"}
-    fault_map = {"latency": "LAT", "crash": "CRS", "throttle": "THR"}
+    fault_map = {"latency": "LAT", "crash": "CRS", "throttle": "THR", "none": "NON"}
     wtype_map = {"COUNT_BASED": "CNT", "TIME_BASED": "TIM"}
     topo  = topo_map.get(topology, topology[:3].upper())
     fault = fault_map.get(fault_type, fault_type[:3].upper())
@@ -414,7 +742,17 @@ def get_dataset_path(mode):
 
 def log_results(config, fault_type, mode, topology, metrics, replicate):
     """Appends experiment run results to master_dataset.csv (full mode) or
-    canary_runs.csv (canary mode) -- 18-col schema, same DATASET_HEADERS either way."""
+    canary_runs.csv (canary mode) -- 28-col schema, same DATASET_HEADERS either way.
+
+    metrics only needs to carry the keys a given call actually has: a
+    PRECONDITION_FAIL row (aborted before fault injection, before warmup even
+    runs) passes just the precondition_* / readiness_wait_s / cb_state_pre /
+    buffered_calls_pre / run_order_seed / run_index keys, and every outcome
+    column below (blast_radius, error_rate, warmup_requests, ...) is written
+    blank rather than KeyError-ing or fabricating a 0.0. run_order_seed and
+    run_index are the two exceptions expected on every row regardless of
+    outcome -- a run's position in the shuffled execution order is known the
+    moment it starts, independent of what happens during it."""
     dataset_path = get_dataset_path(mode)
     os.makedirs(os.path.dirname(dataset_path), exist_ok=True)
     file_exists = os.path.exists(dataset_path)
@@ -457,16 +795,31 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
             f"{metrics.get('blast_radius', ''):.4f}" if metrics.get('blast_radius') is not None else "",
             time_to_open if time_to_open is not None else "",   # "" = CB never opened (meaningful null)
             time_to_recover if time_to_recover is not None else "",  # "" = system did not recover (meaningful null)
-            f"{metrics['error_rate']:.4f}",
-            f"{metrics['throughput_loss']:.4f}",
+            f"{metrics['error_rate']:.4f}" if metrics.get('error_rate') is not None else "",
+            f"{metrics['throughput_loss']:.4f}" if metrics.get('throughput_loss') is not None else "",
             f"{metrics['real_blast_radius']:.4f}" if metrics.get('real_blast_radius') is not None else "",  # "" = no leg observable (measurement gap)
             ";".join(f"{svc}:{rate:.4f}" for svc, rate in (metrics.get('leg_failure_rates') or {}).items()),  # raw per-leg rates; "" = none observed
+            metrics.get("precondition_ok", ""),
+            metrics.get("precondition_fail_reason", ""),
+            f"{metrics['readiness_wait_s']:.3f}" if metrics.get('readiness_wait_s') is not None else "",
+            metrics.get("cb_state_pre", ""),
+            metrics.get("buffered_calls_pre", ""),
+            metrics.get("warmup_requests", ""),
+            f"{metrics['warmup_duration_s']:.3f}" if metrics.get('warmup_duration_s') is not None else "",
+            metrics.get("run_order_seed", ""),
+            metrics.get("run_index", ""),
             "",  # excluded_reason -- always empty at write time; only analysis/quarantine.py fills it
         ])
     print(f"Saved run metrics to {dataset_path}")
 
-def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1):
-    """Orchestrates a single configuration and fault run."""
+def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
+                        run_order_seed=None, run_index=None):
+    """Orchestrates a single configuration and fault run.
+
+    run_order_seed/run_index describe this run's place in the sweep's shuffled
+    execution order (see main()) -- attached to every log_results call in this
+    function, including both abort paths, so a run's position is recoverable
+    even when it never got far enough to produce an outcome."""
     print("\n" + "="*60)
     print(f"STARTING EXPERIMENT: Mode={mode}, Topology={topology}, Fault={fault_type}, Replicate={replicate}")
     print(f"Config: {config}")
@@ -478,13 +831,56 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1)
         print("Skipping run due to Docker compose failure.", file=sys.stderr)
         return False
 
-    # 2. Verify containers started up
-    if not wait_for_healthy():
-        print("Skipping run due to unhealthy services.", file=sys.stderr)
+    # 2. Verify all six containers came up -- including shared-db-service, which has
+    #    no breaker of its own but sits in every call chain (see wait_for_readiness).
+    all_ready, readiness_wait_s = wait_for_readiness()
+    if not all_ready:
+        print("Skipping run: not all six services became healthy within the readiness deadline.",
+              file=sys.stderr)
+        log_results(config, fault_type, mode, topology, {
+            "precondition_ok": False,
+            "precondition_fail_reason": "READINESS_TIMEOUT",
+            "readiness_wait_s": readiness_wait_s,
+            "run_order_seed": run_order_seed,
+            "run_index": run_index,
+        }, replicate)
         return False
 
-    # 3. Measure pre-fault baseline throughput (healthy warm-up)
+    # 2b. Breaker-state-reset precondition (see the "Breaker-state-reset precondition"
+    #    block above get_blast_radius() for the full rationale). update_containers()
+    #    already force-recreates every container every run, which SHOULD reset
+    #    Resilience4j's in-memory registry to CLOSED -- this makes that explicit via
+    #    the actuator instead of trusting it blindly, then verifies the result before
+    #    any fault is injected. A run that fails this check measures nothing real and
+    #    is aborted rather than silently recorded as if it started clean.
+    reset_all_breakers()
+    precondition = check_breaker_precondition()
+    if not precondition["ok"]:
+        print(f"PRECONDITION_FAIL: {precondition['fail_reason']}", file=sys.stderr)
+        log_results(config, fault_type, mode, topology, {
+            "precondition_ok": False,
+            "precondition_fail_reason": precondition["fail_reason"],
+            "readiness_wait_s": readiness_wait_s,
+            "cb_state_pre": _serialize_cb_map(precondition["cb_state"]),
+            "buffered_calls_pre": _serialize_cb_map(precondition["buffered_calls"]),
+            "run_order_seed": run_order_seed,
+            "run_index": run_index,
+        }, replicate)
+        return False
+
+    # Snapshot each interior breaker's actuator ring buffer before the fault, so
+    # collect_new_transitions() can isolate just this run's real state transitions
+    # further down -- this is what actually answers "did order's breaker open",
+    # which error_rate/blast_radius cannot (see SERVICE_BREAKERS docstring above).
+    before_cb_counts = snapshot_breaker_event_counts()
+
+    # 2c. JIT warmup (discard phase) -- BEFORE the baseline measurement below, so
+    #    that measurement isn't itself contaminated by cold-JVM artifacts. See the
+    #    "JIT warmup" comment block near LOAD_RATE_RPS for the full rationale.
     endpoint = f"http://localhost:8080/api/v1/{topology}"
+    warmup_requests, warmup_duration_s = warmup_phase(endpoint)
+
+    # 3. Measure pre-fault baseline throughput (against an already-warm JVM)
     print("Measuring pre-fault baseline...")
     baseline_throughput, _, _ = generate_load(endpoint, requests_count=20, concurrency=3)
     if baseline_throughput <= 0:
@@ -492,6 +888,7 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1)
         return False
 
     # 4. Inject fault into Toxiproxy
+    fault_injected_at = _now_iso()
     try:
         inject_fault(fault_type)
     except Exception as e:
@@ -577,6 +974,7 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1)
 
     # 6. Reset Toxiproxy
     toxiproxy.reset_all()
+    fault_cleared_at = _now_iso()
 
     # 7. Measure time_to_open and time_to_recover.
     #    time_to_recover is ONLY computed when a breaker was confirmed open
@@ -599,12 +997,15 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1)
         #     can't even attempt its permitted probe calls, so we send a few
         #     real requests each iteration to give it that chance.
         #  2. This still can't perfectly distinguish "HALF_OPEN, about to
-        #     re-open" from "genuinely CLOSED" using only this endpoint -- that
-        #     would need the breaker's precise state (e.g. via
-        #     /actuator/circuitbreakerevents STATE_TRANSITION events, not
-        #     wired here). To reduce (not eliminate) false-early recovery
-        #     reads, require the reading to stay at 0.0 across two consecutive
-        #     probes, one second apart, before declaring recovery.
+        #     re-open" from "genuinely CLOSED" using only the aggregate
+        #     blast-radius endpoint polled here in real time. The precise
+        #     per-breaker STATE_TRANSITION events ARE captured (see
+        #     collect_new_transitions() / cb_transitions.jsonl below), but as a
+        #     post-hoc record for analysis, not as a synchronous gate on this
+        #     loop's recovery decision. To reduce (not eliminate) false-early
+        #     recovery reads here, require the reading to stay at 0.0 across
+        #     two consecutive probes, one second apart, before declaring
+        #     recovery.
         recovery_deadline = time.time() + config["waitDurationInOpenState"] + 10
         consecutive_zero_reads = 0
         while time.time() < recovery_deadline:
@@ -636,8 +1037,27 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1)
         "avg_latency_ms": avg_latency,
         "time_to_open": time_to_open,
         "time_to_recover": time_to_recover,
+        "precondition_ok": True,
+        "precondition_fail_reason": "",
+        "readiness_wait_s": readiness_wait_s,
+        "cb_state_pre": _serialize_cb_map(precondition["cb_state"]),
+        "buffered_calls_pre": _serialize_cb_map(precondition["buffered_calls"]),
+        "warmup_requests": warmup_requests,
+        "warmup_duration_s": warmup_duration_s,
+        "run_order_seed": run_order_seed,
+        "run_index": run_index,
     }
     log_results(config, fault_type, mode, topology, metrics, replicate)
+
+    # Record real per-service breaker transitions for this run regardless of what
+    # blast_radius/cb_opened concluded -- catching the case where the aggregate
+    # signal says "nothing opened" but an interior breaker tripped via the
+    # slow-call path is the entire point of this sidecar.
+    transitions = collect_new_transitions(before_cb_counts)
+    log_cb_transitions(
+        make_experiment_id(topology, fault_type, config), topology, fault_type, config,
+        mode, replicate, fault_injected_at, fault_cleared_at, transitions,
+    )
     return True
 
 def generate_combinations(mode):
@@ -670,15 +1090,51 @@ def generate_combinations(mode):
                         })
     return configs
 
+def build_shuffled_run_list(configs, replicates, seed=None):
+    """Builds the full (config_index, config, replicate) run list and shuffles it
+    with a dedicated random.Random instance (not the global random module, so
+    nothing else in this process can perturb the sequence) -- sequential execution
+    of a long sweep on one host confounds treatment (config) with thermal/memory
+    drift over the sweep's wall-clock duration, so execution order must be
+    decorrelated from config order.
+
+    Returns (run_order_seed, run_list). If seed is None, a fresh seed is drawn from
+    OS entropy (random.SystemRandom -- unpredictable and independent of any prior
+    random.seed() call elsewhere) so each invocation gets a genuinely different
+    order by default; the caller persists run_order_seed to every dataset row so
+    the resulting order is reconstructable after the fact.
+    """
+    run_order_seed = seed if seed is not None else random.SystemRandom().randint(0, 2**31 - 1)
+    run_list = [(i, config, rep) for i, config in enumerate(configs) for rep in range(1, replicates + 1)]
+    random.Random(run_order_seed).shuffle(run_list)
+    return run_order_seed, run_list
+
 def main():
     parser = argparse.ArgumentParser(description="CascadeShield Parameter Sweep Automation Runner")
     parser.add_argument("--mode", choices=["canary", "full"], default="canary", help="canary (5 configs × 3 replicates = 15 runs) or full (54 configs × 3 replicates = 162 runs per fault type; 486 total across 3 faults)")
-    parser.add_argument("--fault", choices=["latency", "crash", "throttle"], default="latency", help="Fault type to inject")
+    parser.add_argument("--fault", choices=["latency", "crash", "throttle", "none"], default="latency",
+                         help="Fault type to inject. 'none' is the no-fault control condition -- "
+                              f"requires --replicates >= {MIN_NONE_FAULT_REPLICATES} (see MIN_NONE_FAULT_REPLICATES).")
     parser.add_argument("--topology", choices=["linear", "fanout", "mesh"], default="linear", help="Service mesh topology pattern")
     parser.add_argument("--replicates", type=int, default=N_REPLICATES, help=f"Number of replicates per config (default: {N_REPLICATES})")
-    
+    parser.add_argument("--seed", type=int, default=None,
+                         help="Seed for the run-order shuffle (default: a fresh random seed each "
+                              "invocation, printed and persisted to run_order_seed). Pass an explicit "
+                              "value to reproduce a specific execution order.")
+
     args = parser.parse_args()
-    
+
+    # Enforced, not advisory: a no-fault sweep run below the floor produces a control
+    # sample too thin to establish phi (the baseline false-trip rate), which is the entire
+    # reason to collect it -- silently under-sampling here would defeat the point rather
+    # than just being a smaller version of it.
+    if args.fault == "none" and args.replicates < MIN_NONE_FAULT_REPLICATES:
+        print(f"--fault none requires --replicates >= {MIN_NONE_FAULT_REPLICATES} "
+              f"(got {args.replicates}). Every config needs enough no-fault replicates to "
+              "establish a baseline false-trip rate -- a thinner control sample defeats the "
+              "purpose of collecting it.", file=sys.stderr)
+        sys.exit(1)
+
     print(f"Starting CascadeShield Runner in '{args.mode}' mode targeting '{args.topology}' topology with '{args.fault}' fault.")
     
     # Verify Toxiproxy is reachable
@@ -693,13 +1149,25 @@ def main():
     if args.mode == "canary" and CANARY_DATASET_PATH.exists():
         CANARY_DATASET_PATH.unlink()
         print(f"Cleared previous canary run data at {CANARY_DATASET_PATH}")
+    if args.mode == "canary" and CANARY_CB_TRANSITIONS_PATH.exists():
+        CANARY_CB_TRANSITIONS_PATH.unlink()
+        print(f"Cleared previous canary CB transitions at {CANARY_CB_TRANSITIONS_PATH}")
     total_runs = len(configs) * args.replicates
     print(f"Generated {len(configs)} configs × {args.replicates} replicates = {total_runs} total runs.")
+
+    # Randomize run order (see build_shuffled_run_list): sequential execution of a long
+    # sweep on one host confounds treatment (config) with thermal/memory drift over the
+    # sweep's wall-clock duration -- later configs would systematically run on a
+    # warmer/more-fragmented host, biasing exactly the comparison the sweep exists to
+    # make. run_index below is the run's position in this shuffled sequence, not its
+    # position in configs.
+    run_order_seed, run_list = build_shuffled_run_list(configs, args.replicates, args.seed)
+    print(f"Run order shuffled with seed {run_order_seed} ({len(run_list)} runs). "
+          f"Pass --seed {run_order_seed} to reproduce this exact order.")
 
     started_at = _now_iso()
     success_runs = 0
     failed_runs = 0
-    run_number = 0
     write_status({
         "mode": args.mode, "fault_type": args.fault, "topology": args.topology,
         "replicates": args.replicates, "total_configs": len(configs), "total_runs": total_runs,
@@ -708,29 +1176,29 @@ def main():
         "phase": "running", "started_at": started_at, "updated_at": started_at,
     })
 
-    for i, config in enumerate(configs):
-        for rep in range(1, args.replicates + 1):
-            run_number += 1
-            print(f"\nProgress: Run {run_number} of {total_runs} (config {i+1}/{len(configs)}, replicate {rep}/{args.replicates})")
-            write_status({
-                "mode": args.mode, "fault_type": args.fault, "topology": args.topology,
-                "replicates": args.replicates, "total_configs": len(configs), "total_runs": total_runs,
-                "run_number": run_number, "config_index": i, "current_config": config, "replicate": rep,
-                "success_runs": success_runs, "failed_runs": failed_runs,
-                "phase": "running", "started_at": started_at, "updated_at": _now_iso(),
-            })
-            success = run_experiment_run(config, args.fault, args.mode, args.topology, replicate=rep)
-            if success:
-                success_runs += 1
-            else:
-                failed_runs += 1
-            write_status({
-                "mode": args.mode, "fault_type": args.fault, "topology": args.topology,
-                "replicates": args.replicates, "total_configs": len(configs), "total_runs": total_runs,
-                "run_number": run_number, "config_index": i, "current_config": config, "replicate": rep,
-                "success_runs": success_runs, "failed_runs": failed_runs,
-                "phase": "running", "started_at": started_at, "updated_at": _now_iso(),
-            })
+    for run_index, (i, config, rep) in enumerate(run_list, start=1):
+        run_number = run_index  # execution sequence position, not config/replicate order
+        print(f"\nProgress: Run {run_number} of {total_runs} (config {i+1}/{len(configs)}, replicate {rep}/{args.replicates})")
+        write_status({
+            "mode": args.mode, "fault_type": args.fault, "topology": args.topology,
+            "replicates": args.replicates, "total_configs": len(configs), "total_runs": total_runs,
+            "run_number": run_number, "config_index": i, "current_config": config, "replicate": rep,
+            "success_runs": success_runs, "failed_runs": failed_runs,
+            "phase": "running", "started_at": started_at, "updated_at": _now_iso(),
+        })
+        success = run_experiment_run(config, args.fault, args.mode, args.topology, replicate=rep,
+                                      run_order_seed=run_order_seed, run_index=run_index)
+        if success:
+            success_runs += 1
+        else:
+            failed_runs += 1
+        write_status({
+            "mode": args.mode, "fault_type": args.fault, "topology": args.topology,
+            "replicates": args.replicates, "total_configs": len(configs), "total_runs": total_runs,
+            "run_number": run_number, "config_index": i, "current_config": config, "replicate": rep,
+            "success_runs": success_runs, "failed_runs": failed_runs,
+            "phase": "running", "started_at": started_at, "updated_at": _now_iso(),
+        })
 
     print("\n" + "="*60)
     print(f"SWEEP COMPLETED: {success_runs}/{total_runs} runs executed successfully.")

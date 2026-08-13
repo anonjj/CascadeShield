@@ -11,9 +11,10 @@
 |---|---|---|
 | **Primary DVs** | `time_to_open`, `time_to_recover` | Every reported mean carries a bootstrap CI. |
 | **Secondary DVs** | `leg_failure_rates` (continuous severity), `blast_radius` / `real_blast_radius` (quartized), `throughput_loss`, p95/p99 client latency *(pending)* | $B_{\text{real}}$ is reported **as a function of $\tau_{\text{leg}}$**, never at one pinned threshold — see `analysis/tau_sweep.py` and decision D-001. |
-| **Control DVs** *(mandatory)* | $\phi$ false-trip rate (derived from `fault_type = NONE` rows), missed-detection rate, `flap_count` *(pending, Jay)* | Without $\phi$ no configuration in this paper may be described as safe. |
-| **Provenance** | `experiment_id`, `environment`, `mode`, `replicate`, `run_timestamp`, `permitted_calls_half_open`, `run_index`, `run_order_seed`, image digests *(pending, Jay)* | Never model features. |
-| **Validity** | `excluded_reason`, `precondition_ok` *(pending, Jay)*, `warmup_requests` / `warmup_duration_s` *(pending, Jay)* | Rows are marked, never deleted. |
+| **Control DVs** *(mandatory)* | $\phi$ false-trip rate (from `fault_type = NONE` rows ✅), missed-detection rate, `flap_count` *(pending, Jay)* | Without $\phi$ no configuration in this paper may be described as safe. |
+| **Provenance** | `experiment_id`, `environment`, `mode`, `replicate`, `run_timestamp`, `permitted_calls_half_open`, `run_index` ✅, `run_order_seed` ✅, image digests *(pending, Jay)* | Never model features. |
+| **Validity** | `excluded_reason` ✅, `precondition_ok` / `precondition_fail_reason` / `readiness_wait_s` / `cb_state_pre` / `buffered_calls_pre` ✅, `warmup_requests` / `warmup_duration_s` ✅ | Rows are marked, never deleted. `precondition_ok = False` means the run never happened; `excluded_reason` means it happened but is untrustworthy. Analyses drop both. |
+| **λ factor** *(Day 2, BLOCKING)* | `lambda_target`, `lambda_achieved`, `lambda_cv`, `effective_horizon` — **none exist yet** | H1 and H2 are claims *about* $\lambda$. Without `lambda_achieved` the independent variable is unmeasured and neither can be claimed; `analysis/canary_readout.py` refuses to report rather than silently substituting `lambda_target`. |
 
 Standing rules:
 
@@ -52,7 +53,8 @@ See `docs/paper/leak-audit.md` for how each verdict was reached.
 
 **Status:** Defined (Week 1). **Lock target:** end of Week 2 — no column changes after that.
 **Primary file:** `data/master_dataset_schema.csv` (header-only skeleton; experiments append rows).
-**Planning file:** `data/experiment_matrix.csv` (the 486 planned configurations).
+**Planning file:** `data/experiment_matrix.csv` (486 fault-bearing configurations —
+`LATENCY`/`CRASH`/`THROTTLE` — plus 162 `NONE` no-fault control configurations, 648 total).
 
 > 🔄 **SWEEP IN PROGRESS — current `master_dataset.csv` is a partial rebuild.**
 > After the blast-radius metric change the dataset was reseeded from empty, and collection is
@@ -89,7 +91,7 @@ past 486 (e.g. 486 configs × 2 environments × 3 replicates = 2,916 rows).
 | Column | Type | Valid values | Unit | ML encoding |
 |--------|------|--------------|------|-------------|
 | `topology` | categorical | `LINEAR` (planned: `FAN_OUT`, `SHARED_DEP_MESH`) | — | one-hot |
-| `fault_type` | categorical | `LATENCY`, `CRASH`, `THROTTLE` | — | one-hot |
+| `fault_type` | categorical | `LATENCY`, `CRASH`, `THROTTLE`, `NONE` | — | one-hot (`NONE` excluded — see note below) |
 | `window_type` | categorical (binary) | `COUNT_BASED`, `TIME_BASED` | — | binary (0/1) — **the primary novelty variable** |
 | `threshold` | int | `{30, 50, 70}` (range 1–100) | percent | numeric |
 | `window_size` | int | `{5, 10, 20}` (range 1–1000) | **calls if COUNT_BASED, seconds if TIME_BASED** | numeric (see note) |
@@ -106,6 +108,20 @@ past 486 (e.g. 486 configs × 2 environments × 3 replicates = 2,916 rows).
 > synthetic placeholder is gone; do not reintroduce `generate_synthetic_data.py` output into
 > this file.
 
+> **`fault_type=NONE` — the no-fault control condition.** Without it, a config reading
+> `blast_radius=0` under a real fault is not distinguishable from a config that would read 0
+> regardless of whether anything actually happened — "safe" is only a meaningful claim
+> relative to a baseline false-trip rate (**phi**), which requires actually running the mesh
+> with no fault injected. `runner.py --fault none` runs this control condition (`inject_fault`
+> is a deliberate no-op; Toxiproxy stays clean for the whole window) and **enforces
+> `--replicates >= 10`** for every config when selected (`MIN_NONE_FAULT_REPLICATES` in
+> `runner.py`) — under-sampling the control defeats the reason to collect it. `NONE` is
+> deliberately **not** in `ml/preprocessing.py`'s `FAULT_TYPES`: it isn't a fault the
+> recommender should learn to react to, and one-hot-encoding it would silently produce an
+> all-zero row indistinguishable from an unrecognised category. `load_dataset()` drops
+> `fault_type=NONE` rows before returning (same pattern as the `precondition_ok=False`
+> filter above) — compute phi directly from the raw CSV instead of through that function.
+
 > **`window_size` unit warning.** Its meaning *changes with `window_type`*: a value of `50` means
 > "50 calls" under COUNT_BASED but "50 seconds" under TIME_BASED. The raw number is therefore not
 > directly comparable across window types. Handle this in feature engineering (see
@@ -121,18 +137,26 @@ past 486 (e.g. 486 configs × 2 environments × 3 replicates = 2,916 rows).
 | `replicate` | int | `1..R` (R ≥ 3 recommended) | Repeat index. Enables mean ± variance per config instead of a single noisy run. |
 | `run_timestamp` | string (ISO 8601) | `2026-06-21T14:32:05Z` | Provenance. Never used as a model feature. |
 
-> **20-column real file.** The live `master_dataset.csv` carries five columns beyond the
-> original 15-column skeleton: `permitted_calls_half_open` and `mode` (operational),
-> `real_blast_radius` and `leg_failure_rates` (the request-level containment metric and the
-> raw vector behind it), and `excluded_reason` (quarantine). `preprocessing.py` recognises
-> the operational ones as provenance and excludes them from features.
+> **29-column schema.** Beyond the original 15-column skeleton the schema now carries:
+> `permitted_calls_half_open` and `mode` (operational); `real_blast_radius` and
+> `leg_failure_rates` (the request-level containment metric and the raw vector behind it);
+> the precondition-gate and warmup block (`precondition_ok`, `precondition_fail_reason`,
+> `readiness_wait_s`, `cb_state_pre`, `buffered_calls_pre`, `warmup_requests`,
+> `warmup_duration_s`); run-order randomization (`run_order_seed`, `run_index`); and
+> `excluded_reason` (quarantine, always last).
+> `preprocessing.py` recognises the operational ones as provenance and excludes them from
+> features, and its `load_dataset()` only checks that required columns are *present*, so
+> extras ride along without breaking the contract.
+>
 > `data/master_dataset_schema.csv` is the header-only skeleton and tracks
 > `runner.DATASET_HEADERS` exactly — if they disagree, `log_results` refuses to append.
+> **The live `master_dataset.csv` (80 rows) predates the precondition and run-order columns
+> and therefore no longer matches**; that is intended, since the next sweep starts a fresh
+> file. Do not "fix" it by padding columns onto historical rows.
 >
-> Jay's Day-1/Day-2 columns land in this same list and need dictionary entries in the
-> commits that add them: `precondition_ok`, `warmup_requests`, `warmup_duration_s`,
-> `run_index`, `run_order_seed`, `lambda_target`, `lambda_achieved`, `lambda_cv`,
-> `effective_horizon`, `flap_count`, and the pinned image digest set.
+> Still outstanding for the Day-2 canary: `lambda_target`, `lambda_achieved`, `lambda_cv`,
+> `effective_horizon`, plus `flap_count` and the pinned image digest set. Each needs a
+> dictionary entry in the commit that adds it.
 
 ### Dependent variables — measured outcomes → **targets / Isolation Forest inputs**
 
@@ -171,6 +195,73 @@ Deliberately **not** excluded, and why:
 > (the breaker never tripped, or the system never recovered), not random missingness. Do **not**
 > mean-impute them. Either carry a companion boolean (`cb_opened`, `recovered`) or use an explicit
 > sentinel — decide this in feature engineering before model training, not after.
+
+### Breaker-state-reset precondition columns
+
+The highest-priority harness bug found so far: circuit breaker state was observed carrying
+over between replicates of an **identical** config — one `LIN-LAT-CNT-T30-W20-D5` replicate
+tripped in 0.303s with three legs at exactly `0.0000` failure rate, against 6.256s/6.138s for
+its identical siblings, consistent with a breaker that started the run already
+OPEN/near-tripped rather than one that tripped fresh off real failures inside the run's own
+window. `update_containers()` already force-recreates every container before every run, which
+*should* reset Resilience4j's in-memory registry — these columns make that reset explicit
+(`POST /actuator/circuitbreakers/{name}` → `transitionToClosedState()`) and record the
+verification against ground truth (`GET /actuator/circuitbreakers`) instead of trusting the
+recreate blindly.
+
+| Column | Type | Range | Notes |
+|--------|------|-------|-------|
+| `precondition_ok` | bool | `True`/`False` | never null. `False` means the run was aborted **before fault injection** — every outcome column above (`blast_radius`, `error_rate`, ...) is blank on that row, not `0.0`. Exclude these rows from training/analysis; they measure nothing. |
+| `precondition_fail_reason` | string | e.g. `READINESS_TIMEOUT`, `order:inventoryServiceCB=state:OPEN`, `order:inventoryServiceCB=buffered:10` | `""` when `precondition_ok=True`. `state:X` = breaker didn't reset to CLOSED; `buffered:N` = breaker read CLOSED but still carried buffered calls from the prior run's window (the direct signal that force-recreate did not actually reset that service's JVM); `UNREACHABLE` = actuator endpoint didn't respond; `READINESS_TIMEOUT` = one or more of the six services never reported `/actuator/health` UP. |
+| `readiness_wait_s` | float | `≥ 0` | never null. Wall-clock seconds spent polling all six services (including `shared-db-service`, which has no breaker of its own but sits in every call chain) before proceeding or hitting the readiness deadline. |
+| `cb_state_pre` | string | `"service:breaker=STATE;..."` | Per-breaker state from `GET /actuator/circuitbreakers`, read immediately after the reset attempt, for all five CB-bearing services. Ground truth, not an inference from health or from the recreate having merely been attempted. |
+| `buffered_calls_pre` | string | `"service:breaker=N;..."` | Per-breaker `bufferedCalls` from the same read. `0` on a genuinely fresh container; non-zero is the direct test of whether `update_containers()`'s force-recreate is doing what its docstring assumes. |
+
+> **`precondition_ok=False` rows are filtered before training, not just documented.**
+> `ml/preprocessing.py`'s `load_dataset()` drops them automatically (with a logged warning
+> naming the file and count) whenever the `precondition_ok` column is present, so a blank
+> `blast_radius` never silently reaches the encoders as a fabricated value. Datasets from
+> before this fix (no `precondition_ok` column at all — synthetic data, archived pre-fix
+> sweeps) are untouched by this filter; there is nothing in them to drop.
+
+### JIT warmup columns
+
+A cold Spring Boot JVM (interpreted bytecode, C1/C2 JIT not yet compiled the hot path) can
+add 100ms+ latency to individual requests — noise on the same order as, or larger than,
+some of what's measured here, and real contamination of a DV (`time_to_open`,
+`time_to_recover`) whose true effects are single-digit seconds. `runner.py` now runs a
+discard-phase warmup against the run's endpoint immediately after the breaker-reset
+precondition passes and *before* the baseline throughput measurement — so that measurement
+isn't itself contaminated — until **both** 200 requests have completed **and** 10 seconds
+have elapsed (`WARMUP_MIN_REQUESTS` / `WARMUP_MIN_DURATION_S` in `runner.py`; "whichever is
+longer" means neither floor may be skipped). Responses are read and discarded; nothing from
+this phase feeds `blast_radius`/`error_rate`/etc.
+
+| Column | Type | Range | Notes |
+|--------|------|-------|-------|
+| `warmup_requests` | int | `≥ 200` | never null on a `precondition_ok=True` row; blank on a `precondition_ok=False` row (aborted before warmup ran). Proves the warmup dose actually ran rather than merely asserting it. |
+| `warmup_duration_s` | float | `≥ 10.0` | never null on a `precondition_ok=True` row; blank on a `precondition_ok=False` row. Wall-clock seconds the discard phase actually took (may exceed 10s if the request pacing made the 200-request floor the binding constraint). |
+
+### Run-order randomization columns
+
+Sequential execution of a long sweep on one host confounds treatment (config) with
+thermal/memory drift over the sweep's wall-clock duration — later configs would
+systematically run on a warmer/more-fragmented host, biasing exactly the comparison the
+sweep exists to make. `runner.py`'s `main()` builds the full `(config, replicate)` run list
+up front and shuffles it with `build_shuffled_run_list()` before executing anything, using a
+dedicated `random.Random(seed)` instance (never the global `random` module, so nothing else
+in the process can perturb the sequence). The seed defaults to a fresh value drawn from OS
+entropy each invocation (`--seed` overrides it, e.g. to reproduce a specific order for
+debugging) and is printed to stdout as well as persisted here.
+
+| Column | Type | Range | Notes |
+|--------|------|-------|-------|
+| `run_order_seed` | int | — | never null. Same value on every row from one sweep invocation. Feed to `--seed` to reproduce the exact execution order. |
+| `run_index` | int | `1..total_runs` | never null. The run's position in the **shuffled execution order**, not its position in the config/replicate grid — do not assume `run_index` correlates with `threshold`/`window_size`/etc.; that's the point. |
+
+Unlike `warmup_requests`/`precondition_ok`/etc., these two are **never blank** — a run's
+position in the sequence is known the moment it starts, independent of whether it goes on to
+pass its precondition check, warm up, or measure anything.
 
 ---
 
@@ -221,3 +312,33 @@ pipeline smoke tests and its output must never be written to this file.
 `analysis/common.py` holds the shared loaders and the bootstrap / effect-size helpers. It is the
 only place that knows each archive's metric regime, which is what stops two files with identical
 column names being pooled by accident.
+
+## Sidecar: `data/cb_transitions.jsonl` (real runs only — not part of the ML schema)
+
+`error_rate` / `blast_radius` cannot tell you whether an *interior* breaker (order,
+inventory, payment, notification's own CBs on their downstream calls) actually opened —
+Resilience4j trips on the slow-call-rate path independently of the failure-rate path, and
+a call that takes longer than `slow-call-duration-threshold` (2s) but still returns 200
+scores 0% failure rate while counting fully toward slow-call rate. Only the real
+Resilience4j `STATE_TRANSITION` events settle that.
+
+`runner.py` snapshots each breaker's `/actuator/circuitbreakerevents/{name}` ring buffer
+before the fault and diffs it after the run, writing one JSON line per run to
+`data/cb_transitions.jsonl` (`data/canary_cb_transitions.jsonl` in canary mode):
+
+```json
+{"experiment_id": "...", "topology": "LINEAR", "fault_type": "THROTTLE",
+ "window_type": "COUNT_BASED", "environment": "LOCAL", "mode": "full", "replicate": 1,
+ "fault_injected_at": "...", "fault_cleared_at": "...",
+ "transitions": [
+   {"service": "order", "breaker": "sharedDbCB", "state_transition": "CLOSED_TO_OPEN", "creation_time": "..."},
+   ...
+ ]}
+```
+
+Join to `master_dataset.csv` via (`experiment_id`, `replicate`, `mode`). `transitions` is
+`[]` when no interior breaker opened during the run — that's a real, informative result,
+not a missing record. Kept as a separate sidecar rather than new CSV columns because the
+transition list is variable-length and ordered; not part of `preprocessing.py`'s schema
+contract or fed to either model.
+

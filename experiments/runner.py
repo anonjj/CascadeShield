@@ -92,6 +92,17 @@ DATASET_HEADERS = [
     # quietly destroy any hypothesis compared across configs at their nominal rate.
     # Blank (not False) when lambda_achieved itself couldn't be measured.
     "lambda_deviation_flag",
+    # Effective horizon H: calls actually available to the sliding window during the
+    # fault window, in the same "number of calls" unit CB_MINIMUM_CALLS is evaluated
+    # against. H = window_size for COUNT_BASED (already denominated in calls);
+    # H = lambda_achieved * window_size for TIME_BASED (denominated in seconds, so
+    # the achieved -- not requested -- rate determines how many calls actually
+    # landed in the trailing window). H < CB_MINIMUM_CALLS means the breaker never
+    # had enough calls to evaluate at all during this run, a harness artifact
+    # indistinguishable from a genuine "safe" outcome without this column. Blank on
+    # a precondition_ok=False row, and blank for TIME_BASED when lambda_achieved
+    # itself is blank (see compute_effective_horizon).
+    "effective_horizon",
 ]
 
 # How many replicates per config (min 3 for variance estimation)
@@ -381,6 +392,30 @@ def compute_lambda_deviation_flag(lambda_achieved, lambda_target, threshold=LAMB
     if lambda_achieved is None:
         return None
     return abs(lambda_achieved - lambda_target) / lambda_target > threshold
+
+
+def compute_effective_horizon(window_type, window_size, lambda_achieved):
+    """Effective horizon H: how many calls the sliding window actually had a chance
+    to observe during the fault window, in the same "number of calls" unit
+    minimumNumberOfCalls (CB_MINIMUM_CALLS) is evaluated against.
+
+    COUNT_BASED windows are already denominated in calls, so H = W (window_size)
+    directly -- every call that lands is one slot in the window, independent of
+    how fast or slow they arrived. TIME_BASED windows are denominated in seconds,
+    so a window's actual call count depends on the ACHIEVED arrival rate, not the
+    requested one: H = lambda_achieved * T (window_size, seconds). A TIME_BASED
+    run with H < CB_MINIMUM_CALLS never had enough calls in its trailing window
+    to evaluate the breaker at all, regardless of failure rate -- an artifact
+    this column makes visible instead of silently confounding with a real "safe"
+    outcome. Returns None when window_type is TIME_BASED and lambda_achieved is
+    None (can't compute an achieved-rate-based horizon without a measured rate)."""
+    if window_type == "COUNT_BASED":
+        return float(window_size)
+    if window_type == "TIME_BASED":
+        if lambda_achieved is None:
+            return None
+        return lambda_achieved * window_size
+    return None
 
 
 def generate_load(endpoint_url, requests_count=50, concurrency=5, interval_s=0.05):
@@ -836,7 +871,7 @@ def get_dataset_path(mode):
 
 def log_results(config, fault_type, mode, topology, metrics, replicate):
     """Appends experiment run results to master_dataset.csv (full mode) or
-    canary_runs.csv (canary mode) -- 32-col schema, same DATASET_HEADERS either way.
+    canary_runs.csv (canary mode) -- 33-col schema, same DATASET_HEADERS either way.
 
     metrics only needs to carry the keys a given call actually has: a
     PRECONDITION_FAIL row (aborted before fault injection, before warmup even
@@ -906,6 +941,7 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
             f"{metrics['lambda_achieved']:.4f}" if metrics.get('lambda_achieved') is not None else "",
             f"{metrics['lambda_cv']:.4f}" if metrics.get('lambda_cv') is not None else "",
             metrics.get("lambda_deviation_flag") if metrics.get("lambda_deviation_flag") is not None else "",
+            f"{metrics['effective_horizon']:.4f}" if metrics.get('effective_horizon') is not None else "",
         ])
     print(f"Saved run metrics to {dataset_path}")
 
@@ -1060,6 +1096,19 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
             file=sys.stderr,
         )
 
+    # Effective horizon H: calls actually available to the sliding window (see
+    # compute_effective_horizon docstring). Diagnoses TIME_BASED windows that never
+    # filled -- distinct from, and a likely cause of, a spuriously "safe" reading.
+    effective_horizon = compute_effective_horizon(
+        config["slidingWindowType"], config["slidingWindowSize"], lambda_achieved)
+    if effective_horizon is not None and effective_horizon < CB_MINIMUM_CALLS:
+        print(
+            f"WARNING: effective horizon {effective_horizon:.2f} calls < "
+            f"CB_MINIMUM_CALLS ({CB_MINIMUM_CALLS}) -- the sliding window likely never "
+            "filled enough to evaluate the breaker during this run.",
+            file=sys.stderr,
+        )
+
     # Snapshot per-leg CB counters again at the end of the fault window (Task 2).
     cb_calls_after = snapshot_cb_calls()
     leg_failure_rates = compute_leg_failure_rates(cb_calls_before, cb_calls_after)
@@ -1161,6 +1210,7 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
         "lambda_achieved": lambda_achieved,
         "lambda_cv": lambda_cv,
         "lambda_deviation_flag": lambda_deviation_flag,
+        "effective_horizon": effective_horizon,
     }
     log_results(config, fault_type, mode, topology, metrics, replicate)
 

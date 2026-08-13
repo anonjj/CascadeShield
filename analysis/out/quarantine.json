@@ -1,0 +1,66 @@
+{
+  "recovery_cap_s": 120.0,
+  "applied": false,
+  "per_dataset": [
+    {
+      "dataset": "current",
+      "n_rows": 80,
+      "n_excluded": 1,
+      "share_excluded": 0.0125,
+      "n_analysable": 79,
+      "by_reason": {
+        "STATE_LEAK_EARLY_OPEN+STATE_LEAK_BLAST": 1
+      },
+      "column_level_notes": {},
+      "rows": [
+        {
+          "experiment_id": "LIN-LAT-CNT-T30-W20-D5",
+          "replicate": 1,
+          "time_to_open": 0.303,
+          "time_to_recover": 15.842,
+          "excluded_reason": "STATE_LEAK_EARLY_OPEN+STATE_LEAK_BLAST"
+        }
+      ]
+    },
+    {
+      "dataset": "v2_latency_5svc",
+      "n_rows": 162,
+      "n_excluded": 2,
+      "share_excluded": 0.012345679012345678,
+      "n_analysable": 160,
+      "by_reason": {
+        "STATE_LEAK_EARLY_OPEN": 1,
+        "RECOVERY_TIMEOUT_HANG": 1
+      },
+      "column_level_notes": {},
+      "rows": [
+        {
+          "experiment_id": "LIN-LAT-TIM-T50-W5-D15",
+          "replicate": 1,
+          "time_to_open": 0.291,
+          "time_to_recover": 38.521,
+          "excluded_reason": "STATE_LEAK_EARLY_OPEN"
+        },
+        {
+          "experiment_id": "LIN-LAT-TIM-T70-W20-D15",
+          "replicate": 1,
+          "time_to_open": 18.978,
+          "time_to_recover": 7540.508,
+          "excluded_reason": "RECOVERY_TIMEOUT_HANG"
+        }
+      ]
+    },
+    {
+      "dataset": "v3_gateway_not_rebuilt",
+      "n_rows": 92,
+      "n_excluded": 0,
+      "share_excluded": 0.0,
+      "n_analysable": 92,
+      "by_reason": {},
+      "column_level_notes": {
+        "blast_radius_column_unusable": "S2 fires on 95.7% of rows: blast_radius carries a constant offset from a subject that reads degraded in every run. Rows are retained -- their timing measurements are unaffected -- but blast_radius and real_blast_radius from this file must not be used as outcomes."
+      },
+      "rows": []
+    }
+  ]
+}

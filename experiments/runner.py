@@ -36,6 +36,11 @@ DATASET_HEADERS = [
     # Raw per-leg failure rates behind real_blast_radius ("svc:rate;svc:rate", each 0-1), so a
     # different TAU_LEG can be applied post-hoc from the CSV without re-running the sweep.
     "leg_failure_rates",
+    # Quarantine marker, written by analysis/quarantine.py -- NOT by a run. Empty means the
+    # row is analysable; anything else is a "+"-joined list of exclusion codes. Rows are
+    # marked rather than deleted so a reviewer can see what was dropped and why; see
+    # data/DATA_DICTIONARY.md for the code list. A live run always writes it empty.
+    "excluded_reason",
 ]
 
 # How many replicates per config (min 3 for variance estimation)
@@ -456,6 +461,7 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
             f"{metrics['throughput_loss']:.4f}",
             f"{metrics['real_blast_radius']:.4f}" if metrics.get('real_blast_radius') is not None else "",  # "" = no leg observable (measurement gap)
             ";".join(f"{svc}:{rate:.4f}" for svc, rate in (metrics.get('leg_failure_rates') or {}).items()),  # raw per-leg rates; "" = none observed
+            "",  # excluded_reason -- always empty at write time; only analysis/quarantine.py fills it
         ])
     print(f"Saved run metrics to {dataset_path}")
 

@@ -50,3 +50,11 @@ ml/recommended.env
 .claude/
 logs/
 experiments/logs/
+
+# Self-test artifacts from analysis/canary_readout.py --self-test. Synthetic data; kept out
+# of the repo so a watermarked placeholder can never be mistaken for a result.
+figures/SELFTEST_*
+analysis/out/selftest_*
+
+# Day-2 canary run list is a design artifact, not collected data -- track it despite data/*.
+!data/canary_matrix.csv

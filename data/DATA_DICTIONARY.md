@@ -186,6 +186,31 @@ Unlike `warmup_requests`/`precondition_ok`/etc., these two are **never blank** �
 position in the sequence is known the moment it starts, independent of whether it goes on to
 pass its precondition check, warm up, or measure anything.
 
+### Achieved arrival-rate columns
+
+`compute_load_plan()` sizes an offered rate (`target_rps`, i.e. λ) for the fault window, and
+`generate_load()` paces its dispatch loop to hit it — but pacing is a request, not a
+guarantee. Under a saturated thread pool (or a backend gone slow/hanging under the injected
+fault itself), each `send_request` call queues behind the previous one, so the rate that
+actually reaches the gateway can drift from what was requested. A config that "looks safe"
+only because its offered load silently fell short of the nominal rate would be a false
+negative that a nominal-rate-only comparison across configs could never catch — this is
+measured, not assumed, precisely to close that gap.
+
+`lambda_achieved` and `lambda_cv` are computed in `generate_load()` from each dispatched
+request's actual send timestamp (post-queueing), not from the requested `interval_s`
+schedule: `lambda_achieved = (n-1) / span` over the sorted dispatch timestamps, and
+`lambda_cv` is the coefficient of variation (`stdev / mean`) across the inter-dispatch
+intervals between them — a high CV flags a bursty/uneven offered rate even when its mean
+happens to land on target.
+
+| Column | Type | Range | Notes |
+|--------|------|-------|-------|
+| `lambda_target` | float | `> 0` | the requested rate for this run's fault-window load (`plan["target_rps"]`, defaults to `LOAD_RATE_RPS`). Blank on a `precondition_ok=False` row. |
+| `lambda_achieved` | float | `≥ 0` | the measured rate, from real dispatch timestamps over the fault-window `generate_load()` call. Blank when fewer than `LAMBDA_MIN_REQUESTS_FOR_RATE` (3) requests were dispatched, or on a `precondition_ok=False` row. |
+| `lambda_cv` | float | `≥ 0` | coefficient of variation across inter-dispatch intervals in that same window. `0` = perfectly even pacing; larger values mean burstier/uneven dispatch. Blank under the same conditions as `lambda_achieved`. |
+| `lambda_deviation_flag` | bool | `True`/`False` | `True` when `abs(lambda_achieved - lambda_target) / lambda_target > LAMBDA_DEVIATION_THRESHOLD` (0.15, i.e. 15%). Blank (not `False`) when `lambda_achieved` couldn't be measured — absence of a measurement is not evidence of no deviation. **Rows with this flag `True` should be treated with the same suspicion as `precondition_ok=False` rows when comparing configs at their nominal rate** — the load that config actually received didn't match what the sweep asked for. |
+
 ---
 
 ## How the two models use these columns

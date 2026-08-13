@@ -5,6 +5,7 @@ import argparse
 import subprocess
 import csv
 import random
+import statistics
 import urllib.request
 import json
 import threading
@@ -70,6 +71,27 @@ DATASET_HEADERS = [
     # PRECONDITION_FAIL/READINESS_TIMEOUT aborts, has a definite position in the sequence.
     "run_order_seed",
     "run_index",
+    # Achieved-vs-requested arrival rate (lambda), measured at the gateway over the
+    # fault window's generate_load() call, not the paced interval_s schedule the
+    # dispatcher was asked to hit. A saturated thread pool (or a slow/crashing
+    # backend under fault) queues each request behind the last, so the *offered*
+    # rate can silently diverge from the *requested* one -- exactly the confound
+    # that would make a config look "safe" only because it never actually received
+    # the load a config elsewhere in the sweep did. lambda_target is the requested
+    # rate (plan["target_rps"]); lambda_achieved is measured from actual per-request
+    # dispatch timestamps (count / span); lambda_cv is the coefficient of variation
+    # across those requests' inter-dispatch intervals -- a high CV means the offered
+    # rate was bursty/uneven even if its mean matched target. All three are blank on
+    # aborted runs (never measured a real window) and blank if too few requests were
+    # dispatched to compute a rate (see LAMBDA_MIN_REQUESTS_FOR_RATE below).
+    "lambda_target",
+    "lambda_achieved",
+    "lambda_cv",
+    # True when lambda_achieved deviates from lambda_target by more than
+    # LAMBDA_DEVIATION_THRESHOLD -- nominal-vs-achieved rate divergence would
+    # quietly destroy any hypothesis compared across configs at their nominal rate.
+    # Blank (not False) when lambda_achieved itself couldn't be measured.
+    "lambda_deviation_flag",
 ]
 
 # How many replicates per config (min 3 for variance estimation)
@@ -144,6 +166,17 @@ LOAD_CONCURRENCY = 5
 TIME_BASED_MARGIN_S = 10           # safety margin on top of window + wait duration
 COUNT_BASED_WINDOW_MULTIPLE = 3    # fire >= this * slidingWindowSize calls
 COUNT_BASED_MIN_REQUESTS = 40      # floor: keep error-rate estimate statistically stable
+
+# Achieved-vs-requested arrival rate (see the "lambda_target/lambda_achieved" comment
+# block in DATASET_HEADERS). Flag a run when the measured rate misses the requested
+# one by more than this fraction -- 15% is a coarse tripwire, not a precision bound.
+LAMBDA_DEVIATION_THRESHOLD = 0.15
+# Below this many dispatched requests, span/interval-based rate and CV estimates are
+# too noisy to trust (e.g. a 2-request window has exactly one interval -- a CV of
+# either 0.0 or undefined depending on luck, not a real measurement). generate_load's
+# baseline call (20 requests) clears this; only exists as a documented floor, not
+# because any current call site is expected to fall under it.
+LAMBDA_MIN_REQUESTS_FOR_RATE = 3
 
 # experiments/gatling/src/test/scala/cascadeshield/CascadeShieldSimulation.scala (branch
 # feat/gatling-simulation, not yet merged onto main) reads its injection parameters from
@@ -341,18 +374,38 @@ def compute_load_plan(config, target_rps=LOAD_RATE_RPS, topology=None):
             "target_rps": target_rps, "gatling_profile": gatling_profile}
 
 
+def compute_lambda_deviation_flag(lambda_achieved, lambda_target, threshold=LAMBDA_DEVIATION_THRESHOLD):
+    """True when the achieved arrival rate misses the target by more than `threshold`
+    (a fraction, e.g. 0.15 = 15%). Returns None -- not False -- when lambda_achieved
+    is None, since "couldn't measure it" is not the same claim as "no deviation"."""
+    if lambda_achieved is None:
+        return None
+    return abs(lambda_achieved - lambda_target) / lambda_target > threshold
+
+
 def generate_load(endpoint_url, requests_count=50, concurrency=5, interval_s=0.05):
     """Lightweight built-in HTTP load generator to test the mesh.
 
     requests_count requests are dispatched spaced by interval_s (steady offered rate),
     so the same function drives both the short baseline warm-up and the longer,
-    duration-sized fault load (via compute_load_plan)."""
+    duration-sized fault load (via compute_load_plan).
+
+    Also measures the ACHIEVED arrival rate, not just the requested one: interval_s
+    is what the dispatch loop below asks for, but a saturated thread pool (worker
+    still busy on a slow/hanging request under fault) queues send_request behind the
+    last one, so what actually reaches the gateway can drift from what was asked
+    for. lambda_achieved is computed from each request's real dispatch timestamp
+    (count / span, not requests_count / interval_s), and lambda_cv is the
+    coefficient of variation across those requests' inter-dispatch intervals -- high
+    CV means the offered rate was bursty/uneven even when its mean lands on target.
+    Both are None when fewer than LAMBDA_MIN_REQUESTS_FOR_RATE requests were sent."""
     print(f"Generating load: {requests_count} requests to {endpoint_url} "
           f"@ ~{1.0/interval_s:.0f} req/s (~{requests_count*interval_s:.1f}s dispatch)...")
 
     success_count = 0
     failure_count = 0
     latencies = []
+    dispatch_timestamps = []
     lock = threading.Lock()
 
     t0 = time.time()
@@ -360,7 +413,7 @@ def generate_load(endpoint_url, requests_count=50, concurrency=5, interval_s=0.0
 
     def send_request():
         nonlocal success_count, failure_count, last_completion
-        start = time.time()
+        start = time.time()  # actual dispatch instant, post any thread-pool queueing
         success = False
         try:
             req = urllib.request.Request(endpoint_url)
@@ -378,6 +431,7 @@ def generate_load(endpoint_url, requests_count=50, concurrency=5, interval_s=0.0
             else:
                 failure_count += 1
             latencies.append(latency)
+            dispatch_timestamps.append(start)
             last_completion = time.time()  # true last-completion timestamp
 
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
@@ -394,8 +448,25 @@ def generate_load(endpoint_url, requests_count=50, concurrency=5, interval_s=0.0
     throughput = success_count / execution_time
     error_rate = (failure_count / requests_count) * 100 if requests_count else 0
 
+    dispatch_timestamps.sort()
+    n_dispatched = len(dispatch_timestamps)
+    lambda_achieved = None
+    lambda_cv = None
+    if n_dispatched >= LAMBDA_MIN_REQUESTS_FOR_RATE:
+        span = dispatch_timestamps[-1] - dispatch_timestamps[0]
+        if span > 0:
+            lambda_achieved = (n_dispatched - 1) / span
+        intervals = [dispatch_timestamps[i + 1] - dispatch_timestamps[i]
+                     for i in range(n_dispatched - 1)]
+        mean_interval = statistics.mean(intervals)
+        if mean_interval > 0:
+            lambda_cv = statistics.stdev(intervals) / mean_interval
+
     print(f"Load Results - Successes: {success_count}, Failures: {failure_count}, Avg Latency: {avg_latency:.2f}ms, Throughput: {throughput:.2f} TPS, Error Rate: {error_rate:.2f}%")
-    return throughput, error_rate, avg_latency
+    if lambda_achieved is not None:
+        print(f"Arrival rate - achieved: {lambda_achieved:.2f} req/s (requested ~{1.0/interval_s:.2f} req/s), CV: {lambda_cv:.3f}" if lambda_cv is not None else
+              f"Arrival rate - achieved: {lambda_achieved:.2f} req/s (requested ~{1.0/interval_s:.2f} req/s)")
+    return throughput, error_rate, avg_latency, lambda_achieved, lambda_cv
 
 def warmup_phase(endpoint_url, min_requests=WARMUP_MIN_REQUESTS, min_duration_s=WARMUP_MIN_DURATION_S,
                   interval_s=1.0 / LOAD_RATE_RPS, concurrency=LOAD_CONCURRENCY):
@@ -765,7 +836,7 @@ def get_dataset_path(mode):
 
 def log_results(config, fault_type, mode, topology, metrics, replicate):
     """Appends experiment run results to master_dataset.csv (full mode) or
-    canary_runs.csv (canary mode) -- 28-col schema, same DATASET_HEADERS either way.
+    canary_runs.csv (canary mode) -- 32-col schema, same DATASET_HEADERS either way.
 
     metrics only needs to carry the keys a given call actually has: a
     PRECONDITION_FAIL row (aborted before fault injection, before warmup even
@@ -831,6 +902,10 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
             f"{metrics['warmup_duration_s']:.3f}" if metrics.get('warmup_duration_s') is not None else "",
             metrics.get("run_order_seed", ""),
             metrics.get("run_index", ""),
+            f"{metrics['lambda_target']:.4f}" if metrics.get('lambda_target') is not None else "",
+            f"{metrics['lambda_achieved']:.4f}" if metrics.get('lambda_achieved') is not None else "",
+            f"{metrics['lambda_cv']:.4f}" if metrics.get('lambda_cv') is not None else "",
+            metrics.get("lambda_deviation_flag") if metrics.get("lambda_deviation_flag") is not None else "",
         ])
     print(f"Saved run metrics to {dataset_path}")
 
@@ -904,7 +979,7 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
 
     # 3. Measure pre-fault baseline throughput (against an already-warm JVM)
     print("Measuring pre-fault baseline...")
-    baseline_throughput, _, _ = generate_load(endpoint, requests_count=20, concurrency=3)
+    baseline_throughput, _, _, _, _ = generate_load(endpoint, requests_count=20, concurrency=3)
     if baseline_throughput <= 0:
         print("Baseline throughput is zero — mesh unhealthy pre-fault, skipping run.", file=sys.stderr)
         return False
@@ -966,10 +1041,24 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
     sampler = threading.Thread(target=_sample_blast_radius, daemon=True)
     sampler.start()
     load_start = time.time()   # reference for time_to_open (cb_open_at - load_start)
-    throughput, error_rate, avg_latency = generate_load(
+    throughput, error_rate, avg_latency, lambda_achieved, lambda_cv = generate_load(
         endpoint, requests_count=plan["requests_count"],
         concurrency=plan["concurrency"], interval_s=plan["interval_s"])
     sampler.join(timeout=sample_deadline_s + 5)
+
+    # Nominal-vs-achieved rate divergence check (see the "lambda_target/lambda_achieved"
+    # comment block in DATASET_HEADERS). lambda_target is this run's requested rate;
+    # lambda_deviation_flag stays None (not False) when lambda_achieved couldn't be
+    # measured at all, rather than fabricating a "no deviation" reading.
+    lambda_target = plan["target_rps"]
+    lambda_deviation_flag = compute_lambda_deviation_flag(lambda_achieved, lambda_target)
+    if lambda_deviation_flag:
+        print(
+            f"WARNING: achieved arrival rate {lambda_achieved:.2f} req/s deviates "
+            f"> {LAMBDA_DEVIATION_THRESHOLD*100:.0f}% from target {lambda_target} req/s "
+            "-- offered load did not match the requested rate for this run.",
+            file=sys.stderr,
+        )
 
     # Snapshot per-leg CB counters again at the end of the fault window (Task 2).
     cb_calls_after = snapshot_cb_calls()
@@ -1068,6 +1157,10 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
         "warmup_duration_s": warmup_duration_s,
         "run_order_seed": run_order_seed,
         "run_index": run_index,
+        "lambda_target": lambda_target,
+        "lambda_achieved": lambda_achieved,
+        "lambda_cv": lambda_cv,
+        "lambda_deviation_flag": lambda_deviation_flag,
     }
     log_results(config, fault_type, mode, topology, metrics, replicate)
 

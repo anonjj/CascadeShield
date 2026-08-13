@@ -211,6 +211,27 @@ happens to land on target.
 | `lambda_cv` | float | `≥ 0` | coefficient of variation across inter-dispatch intervals in that same window. `0` = perfectly even pacing; larger values mean burstier/uneven dispatch. Blank under the same conditions as `lambda_achieved`. |
 | `lambda_deviation_flag` | bool | `True`/`False` | `True` when `abs(lambda_achieved - lambda_target) / lambda_target > LAMBDA_DEVIATION_THRESHOLD` (0.15, i.e. 15%). Blank (not `False`) when `lambda_achieved` couldn't be measured — absence of a measurement is not evidence of no deviation. **Rows with this flag `True` should be treated with the same suspicion as `precondition_ok=False` rows when comparing configs at their nominal rate** — the load that config actually received didn't match what the sweep asked for. |
 
+### Effective horizon column
+
+`window_size` means different things depending on `window_type`: for `COUNT_BASED` it's a
+call count (the ring buffer is `window_size` calls deep), but for `TIME_BASED` it's a
+duration in seconds — the window is whatever calls landed in the trailing `window_size`
+seconds. `CB_MINIMUM_CALLS` (the harness's pinned `minimumNumberOfCalls`, see the CB config
+columns above) is evaluated in the **call-count** unit either way, so a `TIME_BASED` window's
+actual call count depends on the *achieved* arrival rate during the run, not the requested
+one — the same rate `lambda_achieved` measures.
+
+`effective_horizon` (H) makes that call count explicit rather than leaving it implicit and
+config-dependent: `H = window_size` for `COUNT_BASED` (already denominated in calls); `H =
+lambda_achieved × window_size` for `TIME_BASED` (rate × duration = calls actually observed).
+A `TIME_BASED` run with `H < CB_MINIMUM_CALLS` never had enough calls in its trailing window
+to evaluate the breaker at all during the fault window — a harness/load artifact that is
+otherwise indistinguishable from a genuine "safe" (never tripped) outcome in `blast_radius`.
+
+| Column | Type | Range | Notes |
+|--------|------|-------|-------|
+| `effective_horizon` | float | `≥ 0` | calls available to the sliding window during the fault window (see formula above). Blank on a `precondition_ok=False` row. For `TIME_BASED`, also blank whenever `lambda_achieved` is blank (can't derive an achieved-rate-based horizon without a measured rate). **Compare against `CB_MINIMUM_CALLS` (5) before trusting a `TIME_BASED` "safe" reading** — `H < CB_MINIMUM_CALLS` means the breaker's evaluation window never actually filled. |
+
 ---
 
 ## How the two models use these columns

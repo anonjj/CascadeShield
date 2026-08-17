@@ -4,6 +4,7 @@ x-cb-env: &cb-env
   CB_FAILURE_RATE_THRESHOLD: ${CB_FAILURE_RATE_THRESHOLD:-50}
   CB_WAIT_DURATION_OPEN: ${CB_WAIT_DURATION_OPEN:-15s}
   CB_PERMITTED_CALLS_HALF_OPEN: ${CB_PERMITTED_CALLS_HALF_OPEN:-5}
+  CB_MINIMUM_CALLS: ${CB_MINIMUM_CALLS:-5}
   CB_EVENT_BUFFER_SIZE: ${CB_EVENT_BUFFER_SIZE:-50}
 
 services:
@@ -20,7 +21,7 @@ services:
     networks:
       - cascadeshield-net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -35,7 +36,7 @@ services:
     networks:
       - cascadeshield-net
     healthcheck:
-      test: ["CMD-SHELL", "curl -s http://localhost:8000/ | grep -q 'MissingAuthenticationToken' || exit 1"]
+      test: [ "CMD-SHELL", "curl -s http://localhost:8000/ | grep -q 'MissingAuthenticationToken' || exit 1" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -54,7 +55,7 @@ services:
     networks:
       - cascadeshield-net
     healthcheck:
-      test: ["CMD", "/toxiproxy-cli", "list"]
+      test: [ "CMD", "/toxiproxy-cli", "list" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -110,7 +111,7 @@ services:
       shared-db-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health 2>/dev/null | grep -q '\"UP\"' || exit 1"]
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health 2>/dev/null | grep -q '\"UP\"' || exit 1" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -140,7 +141,7 @@ services:
       shared-db-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/actuator/health 2>/dev/null | grep -q '\"UP\"' || exit 1"]
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:8081/actuator/health 2>/dev/null | grep -q '\"UP\"' || exit 1" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -170,7 +171,7 @@ services:
       shared-db-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8082/actuator/health 2>/dev/null | grep -q '\"UP\"' || exit 1"]
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:8082/actuator/health 2>/dev/null | grep -q '\"UP\"' || exit 1" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -200,7 +201,7 @@ services:
       shared-db-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8083/actuator/health 2>/dev/null | grep -q '\"UP\"' || exit 1"]
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:8083/actuator/health 2>/dev/null | grep -q '\"UP\"' || exit 1" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -226,7 +227,7 @@ services:
       shared-db-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8084/actuator/health 2>/dev/null | grep -q '\"UP\"' || exit 1"]
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:8084/actuator/health 2>/dev/null | grep -q '\"UP\"' || exit 1" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -248,7 +249,7 @@ services:
       toxiproxy:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8085/actuator/health 2>/dev/null | grep -q '\"UP\"' || exit 1"]
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:8085/actuator/health 2>/dev/null | grep -q '\"UP\"' || exit 1" ]
       interval: 10s
       timeout: 5s
       retries: 5

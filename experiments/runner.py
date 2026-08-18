@@ -103,6 +103,16 @@ DATASET_HEADERS = [
     # a precondition_ok=False row, and blank for TIME_BASED when lambda_achieved
     # itself is blank (see compute_effective_horizon).
     "effective_horizon",
+    # Occupancy ratio ρ = how full the sliding window was relative to the minimum
+    # evaluation threshold (minimumNumberOfCalls). This is the quantity the paper calls ρ
+    # in the formula ρ = λ·T/n_min (TIME_BASED) or W/n_min (COUNT_BASED).
+    "occupancy_ratio",
+    # Observed inertness: True when the breaker never opened during the fault window
+    # (time_to_open is None) AND the lambda measurement is trustworthy (no deviation
+    # flag). This is an OBSERVED signal, not circular with occupancy_ratio — it records
+    # what actually happened, while occupancy_ratio records why. None/blank when
+    # lambda_deviation_flag is set (measurement unreliable) or on aborted runs.
+    "inert",
     # Quarantine marker, written by analysis/quarantine.py -- NOT by a run. Empty means the
     # row is analysable; anything else is a "+"-joined list of exclusion codes (see
     # data/DATA_DICTIONARY.md). Rows are marked rather than deleted so a reviewer can see
@@ -201,6 +211,9 @@ LOAD_CONCURRENCY = 5
 TIME_BASED_MARGIN_S = 10           # safety margin on top of window + wait duration
 COUNT_BASED_WINDOW_MULTIPLE = 3    # fire >= this * slidingWindowSize calls
 COUNT_BASED_MIN_REQUESTS = 40      # floor: keep error-rate estimate statistically stable
+INERTNESS_WINDOW_MULTIPLE = 10     # TIME_BASED load duration = this * window + wait + margin;
+                                   # ensures a high-n_min config (e.g. n_min=200) gets enough
+                                   # windows for calls to accumulate, not just one pass
 
 # Achieved-vs-requested arrival rate (see the "lambda_target/lambda_achieved" comment
 # block in DATASET_HEADERS). Flag a run when the measured rate misses the requested
@@ -390,15 +403,18 @@ def compute_load_plan(config, target_rps=LOAD_RATE_RPS, topology=None):
     interval_s = 1.0 / target_rps
     window = int(config["slidingWindowSize"])
     wait = int(config["waitDurationInOpenState"])
+    n_min = int(config.get("minimumNumberOfCalls", CB_MINIMUM_CALLS))
 
     if config["slidingWindowType"] == "TIME_BASED":
         # Sustain load long enough for the trailing time-window (seconds) to fill, the
         # breaker to sit OPEN for wait_duration, and an automatic HALF_OPEN probe to fire.
-        duration_s = window + wait + TIME_BASED_MARGIN_S
-        requests_count = max(int(duration_s * target_rps), CB_MINIMUM_CALLS + 1)
+        # INERTNESS_WINDOW_MULTIPLE * window ensures high-n_min configs (e.g. n_min=200)
+        # accumulate enough calls across multiple window passes, not just one.
+        duration_s = INERTNESS_WINDOW_MULTIPLE * window + wait + TIME_BASED_MARGIN_S
+        requests_count = max(int(duration_s * target_rps), n_min + 1)
     else:  # COUNT_BASED -- window is measured in calls
         requests_count = max(window * COUNT_BASED_WINDOW_MULTIPLE,
-                             CB_MINIMUM_CALLS * 3, COUNT_BASED_MIN_REQUESTS)
+                             n_min * 3, COUNT_BASED_MIN_REQUESTS)
         duration_s = requests_count * interval_s
 
     gatling_profile = {
@@ -444,6 +460,22 @@ def compute_effective_horizon(window_type, window_size, lambda_achieved):
         if lambda_achieved is None:
             return None
         return lambda_achieved * window_size
+    return None
+
+
+def compute_occupancy_ratio(window_type, window_size, min_calls, lambda_achieved):
+    """Occupancy ratio ρ: how full the sliding window is relative to the minimum
+    evaluation threshold (minimumNumberOfCalls / CB_MINIMUM_CALLS).
+
+    TIME_BASED:  ρ = lambda_achieved * window_size / min_calls
+    COUNT_BASED: ρ = window_size / min_calls
+    """
+    if window_type == "COUNT_BASED":
+        return window_size / min_calls
+    if window_type == "TIME_BASED":
+        if lambda_achieved is None:
+            return None
+        return lambda_achieved * window_size / min_calls
     return None
 
 
@@ -978,6 +1010,16 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
             f"{metrics['lambda_cv']:.4f}" if metrics.get('lambda_cv') is not None else "",
             metrics.get("lambda_deviation_flag") if metrics.get("lambda_deviation_flag") is not None else "",
             f"{metrics['effective_horizon']:.4f}" if metrics.get('effective_horizon') is not None else "",
+            # occupancy_ratio: computed here (not passed in metrics) so it is always derived
+            # from the same window_size/min_calls/lambda_achieved columns that are written
+            # above -- never parsed from the experiment ID string.
+            # Uses config's n_min (swept in occupancy mode), NOT the module constant CB_MINIMUM_CALLS.
+            f"{compute_occupancy_ratio(config['slidingWindowType'], config['slidingWindowSize'], config.get('minimumNumberOfCalls', CB_MINIMUM_CALLS), metrics.get('lambda_achieved')):.4f}"
+                if compute_occupancy_ratio(config['slidingWindowType'], config['slidingWindowSize'], config.get('minimumNumberOfCalls', CB_MINIMUM_CALLS), metrics.get('lambda_achieved')) is not None else "",
+            # inert: observed signal — True when breaker never opened AND lambda measurement
+            # is trustworthy. None/blank when lambda deviated or on aborted runs.
+            ("" if metrics.get("lambda_deviation_flag") else (metrics.get("time_to_open") is None))
+                if metrics.get("lambda_deviation_flag") is not None else "",
             "",  # excluded_reason -- always empty at write time; only analysis/quarantine.py fills it
         ])
     print(f"Saved run metrics to {dataset_path}")
@@ -1140,10 +1182,11 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
     # filled -- distinct from, and a likely cause of, a spuriously "safe" reading.
     effective_horizon = compute_effective_horizon(
         config["slidingWindowType"], config["slidingWindowSize"], lambda_achieved)
-    if effective_horizon is not None and effective_horizon < CB_MINIMUM_CALLS:
+    n_min_for_horizon = config.get("minimumNumberOfCalls", CB_MINIMUM_CALLS)
+    if effective_horizon is not None and effective_horizon < n_min_for_horizon:
         print(
             f"WARNING: effective horizon {effective_horizon:.2f} calls < "
-            f"CB_MINIMUM_CALLS ({CB_MINIMUM_CALLS}) -- the sliding window likely never "
+            f"minimumNumberOfCalls ({n_min_for_horizon}) -- the sliding window likely never "
             "filled enough to evaluate the breaker during this run.",
             file=sys.stderr,
         )
@@ -1264,8 +1307,32 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
     )
     return True
 
+def generate_occupancy_combinations():
+    """Occupancy-ratio study (recovery plan §3.1 TIME arm + §3.2 COUNT control).
+    Isolated from the main matrix: LINEAR + LATENCY only; threshold and wait fixed.
+    54 unique configs: 36 TIME cells (3λ × 3T × 4n_min) + 18 COUNT cells (2λ × 3W × 3n_min)."""
+    combos = []
+    # TIME_BASED phase grid:  lambda × T × n_min  = 3*3*4 = 36 cells
+    for rps in (5, 10, 20):
+        for window in (5, 10, 20):
+            for n_min in (5, 50, 100, 200):
+                combos.append({"failureRateThreshold": 50, "slidingWindowSize": window,
+                    "waitDurationInOpenState": 15, "slidingWindowType": "TIME_BASED",
+                    "minimumNumberOfCalls": n_min, "targetRps": rps})
+    # COUNT_BASED control arm:  lambda × W × n_min  = 2*3*3 = 18 cells
+    for rps in (5, 20):
+        for window in (5, 10, 20):
+            for n_min in (5, 50, 200):
+                combos.append({"failureRateThreshold": 50, "slidingWindowSize": window,
+                    "waitDurationInOpenState": 15, "slidingWindowType": "COUNT_BASED",
+                    "minimumNumberOfCalls": n_min, "targetRps": rps})
+    return combos
+
 def generate_combinations(mode):
     """Generates configuration combinations depending on the mode."""
+    if mode == "occupancy":
+        return generate_occupancy_combinations()
+
     configs = []
     
     if mode == "canary":
@@ -1273,26 +1340,13 @@ def generate_combinations(mode):
         configs = [
             # Extreme Aggressive
             {"failureRateThreshold": 30, "slidingWindowSize": 5, "waitDurationInOpenState": 5, "slidingWindowType": "COUNT_BASED"},
-        {"failureRateThreshold": 30, "slidingWindowSize": 5, "waitDurationInOpenState": 5, "slidingWindowType": "TIME_BASED"},
+            {"failureRateThreshold": 30, "slidingWindowSize": 5, "waitDurationInOpenState": 5, "slidingWindowType": "TIME_BASED"},
             # Extreme Conservative
             {"failureRateThreshold": 70, "slidingWindowSize": 20, "waitDurationInOpenState": 30, "slidingWindowType": "COUNT_BASED"},
             {"failureRateThreshold": 70, "slidingWindowSize": 20, "waitDurationInOpenState": 30, "slidingWindowType": "TIME_BASED"},
             # Midpoint config
             {"failureRateThreshold": 50, "slidingWindowSize": 10, "waitDurationInOpenState": 15, "slidingWindowType": "COUNT_BASED"},
         ]
-    elif mode == "occupancy":
-        # window x n_min x lambda, TIME_BASED only -- see OCCUPANCY_* constants above.
-        for window in PARAM_VALUES["slidingWindowSize"]:
-            for min_calls in OCCUPANCY_MIN_CALLS_VALUES:
-                for rps in OCCUPANCY_TARGET_RPS_VALUES:
-                    configs.append({
-                        "failureRateThreshold": OCCUPANCY_FIXED_FAILURE_RATE_THRESHOLD,
-                        "slidingWindowSize": window,
-                        "waitDurationInOpenState": OCCUPANCY_FIXED_WAIT_DURATION_S,
-                        "slidingWindowType": "TIME_BASED",
-                        "minimumNumberOfCalls": min_calls,
-                        "targetRps": rps,
-                    })
     else:
         # Full Sweep: 3*3*3*2 = 54 configs per fault × 3 faults × 3 replicates = 486 total runs
         for threshold in PARAM_VALUES["failureRateThreshold"]:
@@ -1341,7 +1395,8 @@ def apply_run_limit(run_list, limit):
 
 def main():
     parser = argparse.ArgumentParser(description="CascadeShield Parameter Sweep Automation Runner")
-    parser.add_argument("--mode", choices=["canary", "full", "occupancy"], default="canary", help="canary (5 configs × 3 replicates = 15 runs), full (54 configs × 3 replicates = 162 runs per fault type; 486 total across 3 faults), or occupancy (60 TIME_BASED configs sweeping minimumNumberOfCalls × targetRps)")
+    parser.add_argument("--mode", choices=["canary", "full", "occupancy"], default="canary",
+                         help="canary (15 runs), full (162/fault), or occupancy (54 configs × replicates, §3.1+§3.2 phase grid)")
     parser.add_argument("--fault", choices=["latency", "crash", "throttle", "none"], default="latency",
                          help="Fault type to inject. 'none' is the no-fault control condition -- "
                               f"requires --replicates >= {MIN_NONE_FAULT_REPLICATES} (see MIN_NONE_FAULT_REPLICATES).")

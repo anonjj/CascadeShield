@@ -29,7 +29,6 @@ data/canary_runs.csv
 !data/master_dataset_schema.csv
 !data/master_dataset_v1_prefix.csv
 !data/master_dataset_v2_latency_5svc.csv
-!data/master_dataset.csv
 
 # Generated figure artifact (was previously covered by the now-removed bare *.csv)
 figures/summary_stats.csv

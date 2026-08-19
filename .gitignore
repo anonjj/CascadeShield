@@ -57,3 +57,5 @@ analysis/out/selftest_*
 
 # Day-2 canary run list is a design artifact, not collected data -- track it despite data/*.
 !data/canary_matrix.csv
+data/occupancy_dataset.csv
+data/occ_partial_*.csv

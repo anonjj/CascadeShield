@@ -22,6 +22,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # CSV Dataset Schema
 DATASET_PATH = BASE_DIR / "data" / "master_dataset.csv"
 CANARY_DATASET_PATH = BASE_DIR / "data" / "canary_runs.csv"
+OCCUPANCY_DATASET_PATH = BASE_DIR / "data" / "occupancy_dataset.csv"
 STATUS_PATH = BASE_DIR / "data" / "run_status.json"
 ENV_PATH = BASE_DIR / "infra" / ".env"
 COMPOSE_FILE_PATH = BASE_DIR / "infra" / "docker-compose.yml"
@@ -934,8 +935,12 @@ def write_status(status):
     os.replace(tmp_path, STATUS_PATH)
 
 def get_dataset_path(mode):
-    """canary writes to a disposable file; full writes to the real research dataset."""
-    return CANARY_DATASET_PATH if mode == "canary" else DATASET_PATH
+    """canary -> disposable file; occupancy -> its own dataset; full -> the real research dataset."""
+    if mode == "canary":
+        return CANARY_DATASET_PATH
+    if mode == "occupancy":
+        return OCCUPANCY_DATASET_PATH
+    return DATASET_PATH
 
 def log_results(config, fault_type, mode, topology, metrics, replicate):
     """Appends experiment run results to master_dataset.csv (full mode) or

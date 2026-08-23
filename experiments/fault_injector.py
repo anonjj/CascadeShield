@@ -104,7 +104,7 @@ class ToxiproxyClient:
         payload = {
             "name": "reset_peer_toxic",
             "type": "reset_peer",
-            "stream": "downstream",
+            "stream": "upstream",
             "toxicity": toxicity,
             "attributes": {
                 "timeout": timeout_ms

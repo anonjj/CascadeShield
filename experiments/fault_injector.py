@@ -93,6 +93,26 @@ class ToxiproxyClient:
         print(f"Injecting bandwidth limit on '{name}': {rate_kbps} KB/s (toxicity={toxicity})")
         self._request(f"/proxies/{name}/toxics", method="POST", data=payload)
 
+    def inject_reset_peer(self, name, timeout_ms=0, toxicity=1.0, clear_first=True):
+        """Resets the TCP connection on a fraction of requests (toxicity), simulating a
+        graded crash -- toxicity=1.0 resets every connection, matching a full outage.
+
+        Pass clear_first=False to stack this toxic on top of an existing one."""
+        if clear_first:
+            self.clear_toxics(name)
+
+        payload = {
+            "name": "reset_peer_toxic",
+            "type": "reset_peer",
+            "stream": "downstream",
+            "toxicity": toxicity,
+            "attributes": {
+                "timeout": timeout_ms
+            }
+        }
+        print(f"Injecting reset_peer on '{name}': timeout={timeout_ms}ms (toxicity={toxicity})")
+        self._request(f"/proxies/{name}/toxics", method="POST", data=payload)
+
     def clear_toxics(self, name):
         """Removes all toxics from a specific proxy."""
         try:

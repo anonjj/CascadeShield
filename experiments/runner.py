@@ -22,6 +22,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # CSV Dataset Schema
 DATASET_PATH = BASE_DIR / "data" / "master_dataset.csv"
 CANARY_DATASET_PATH = BASE_DIR / "data" / "canary_runs.csv"
+SWEEP_DATASET_PATH = BASE_DIR / "data" / "crash_toxicity_sweep.csv"
 STATUS_PATH = BASE_DIR / "data" / "run_status.json"
 ENV_PATH = BASE_DIR / "infra" / ".env"
 COMPOSE_FILE_PATH = BASE_DIR / "infra" / "docker-compose.yml"
@@ -116,6 +117,11 @@ DATASET_HEADERS = [
     # turned out not to be trustworthy. Analyses must drop both.
     "excluded_reason",
 ]
+
+# Crash toxicity sweep (mode="sweep"): same 34 columns as master, plus the configured
+# toxicity setpoint. A separate header/file so a new column never touches the master
+# schema -- see get_dataset_path/log_results.
+SWEEP_DATASET_HEADERS = DATASET_HEADERS + ["injected_toxicity"]
 
 # How many replicates per config (min 3 for variance estimation)
 N_REPLICATES = 3
@@ -324,19 +330,24 @@ def wait_for_readiness(timeout=90):
     print(f"Timeout waiting for services to become healthy: {not_ready} never reported UP.", file=sys.stderr)
     return False, round(time.time() - start_time, 3)
 
-def inject_fault(fault_type):
-    """Injects the appropriate fault profile into Toxiproxy."""
+def inject_fault(fault_type, toxicity=1.0, crash_target=None):
+    """Injects the appropriate fault profile into Toxiproxy.
+
+    toxicity/crash_target only affect the crash branch; both are no-ops for the
+    other fault types."""
     toxiproxy.reset_all()
-    
+
     if fault_type == "latency":
         # Inject high latency (3000ms) on inventory-service-proxy
         # This simulates a slow inventory downstream dependency
         toxiproxy.inject_latency("inventory-service-proxy", delay_ms=3000, toxicity=1.0)
-        
+
     elif fault_type == "crash":
-        # Disable payment-service-proxy completely (simulates a crashed instance)
-        toxiproxy.set_enabled("payment-service-proxy", False)
-        
+        # Reset a fraction (toxicity) of connections to the target proxy, simulating a
+        # graded crash. toxicity=1.0 resets every connection (full outage, matching the
+        # pre-sweep behavior of disabling the proxy outright).
+        toxiproxy.inject_reset_peer(crash_target or "payment-service-proxy", timeout_ms=0, toxicity=toxicity)
+
     elif fault_type == "throttle":
         # Limit database proxy bandwidth to 1 KB/s (simulates DB connection/resource limits)
         toxiproxy.inject_bandwidth_limit("shared-db-service-proxy", rate_kbps=1, toxicity=1.0)
@@ -880,12 +891,18 @@ def write_status(status):
     os.replace(tmp_path, STATUS_PATH)
 
 def get_dataset_path(mode):
-    """canary writes to a disposable file; full writes to the real research dataset."""
-    return CANARY_DATASET_PATH if mode == "canary" else DATASET_PATH
+    """canary writes to a disposable file, sweep writes to its own isolated file, and
+    full writes to the real research dataset."""
+    if mode == "canary":
+        return CANARY_DATASET_PATH
+    if mode == "sweep":
+        return SWEEP_DATASET_PATH
+    return DATASET_PATH
 
 def log_results(config, fault_type, mode, topology, metrics, replicate):
-    """Appends experiment run results to master_dataset.csv (full mode) or
-    canary_runs.csv (canary mode) -- 33-col schema, same DATASET_HEADERS either way.
+    """Appends experiment run results to master_dataset.csv (full mode), canary_runs.csv
+    (canary mode), or crash_toxicity_sweep.csv (sweep mode -- DATASET_HEADERS plus
+    injected_toxicity, kept out of the master schema).
 
     metrics only needs to carry the keys a given call actually has: a
     PRECONDITION_FAIL row (aborted before fault injection, before warmup even
@@ -897,16 +914,17 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
     outcome -- a run's position in the shuffled execution order is known the
     moment it starts, independent of what happens during it."""
     dataset_path = get_dataset_path(mode)
+    headers = SWEEP_DATASET_HEADERS if mode == "sweep" else DATASET_HEADERS
     os.makedirs(os.path.dirname(dataset_path), exist_ok=True)
     file_exists = os.path.exists(dataset_path)
 
     if file_exists:
         with open(dataset_path, newline="") as f:
             existing_header = next(csv.reader(f), [])
-        if existing_header != DATASET_HEADERS:
+        if existing_header != headers:
             print(
-                f"{os.path.basename(dataset_path)} header does not match the current DATASET_HEADERS "
-                f"(expected {DATASET_HEADERS}, found {existing_header}). Refusing to "
+                f"{os.path.basename(dataset_path)} header does not match the current schema "
+                f"(expected {headers}, found {existing_header}). Refusing to "
                 "append — this would silently shift columns for every downstream row. "
                 "Move or rename the stale file first.",
                 file=sys.stderr,
@@ -920,9 +938,9 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
     with open(dataset_path, mode="a", newline="") as f:
         writer = csv.writer(f)
         if not file_exists:
-            writer.writerow(DATASET_HEADERS)
+            writer.writerow(headers)
 
-        writer.writerow([
+        row = [
             experiment_id,
             topology.upper(),
             fault_type.upper(),
@@ -957,11 +975,14 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
             metrics.get("lambda_deviation_flag") if metrics.get("lambda_deviation_flag") is not None else "",
             f"{metrics['effective_horizon']:.4f}" if metrics.get('effective_horizon') is not None else "",
             "",  # excluded_reason -- always empty at write time; only analysis/quarantine.py fills it
-        ])
+        ]
+        if mode == "sweep":
+            row.append(f"{metrics['injected_toxicity']:.4f}" if metrics.get('injected_toxicity') is not None else "")
+        writer.writerow(row)
     print(f"Saved run metrics to {dataset_path}")
 
 def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
-                        run_order_seed=None, run_index=None):
+                        run_order_seed=None, run_index=None, toxicity=1.0):
     """Orchestrates a single configuration and fault run.
 
     run_order_seed/run_index describe this run's place in the sweep's shuffled
@@ -991,6 +1012,7 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
             "readiness_wait_s": readiness_wait_s,
             "run_order_seed": run_order_seed,
             "run_index": run_index,
+            "injected_toxicity": toxicity,
         }, replicate)
         return False
 
@@ -1013,6 +1035,7 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
             "buffered_calls_pre": _serialize_cb_map(precondition["buffered_calls"]),
             "run_order_seed": run_order_seed,
             "run_index": run_index,
+            "injected_toxicity": toxicity,
         }, replicate)
         return False
 
@@ -1037,8 +1060,11 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
 
     # 4. Inject fault into Toxiproxy
     fault_injected_at = _now_iso()
+    # Sweep mode retargets crash to inventory-service-proxy (the same target latency
+    # uses) so mechanism, not service position, is the only thing varying.
+    crash_target = "inventory-service-proxy" if mode == "sweep" else None
     try:
-        inject_fault(fault_type)
+        inject_fault(fault_type, toxicity=toxicity, crash_target=crash_target)
     except Exception as e:
         print(f"Fault injection failed: {e} — skipping run.", file=sys.stderr)
         toxiproxy.reset_all()
@@ -1226,6 +1252,7 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
         "lambda_cv": lambda_cv,
         "lambda_deviation_flag": lambda_deviation_flag,
         "effective_horizon": effective_horizon,
+        "injected_toxicity": toxicity,
     }
     log_results(config, fault_type, mode, topology, metrics, replicate)
 
@@ -1304,11 +1331,15 @@ def apply_run_limit(run_list, limit):
 
 def main():
     parser = argparse.ArgumentParser(description="CascadeShield Parameter Sweep Automation Runner")
-    parser.add_argument("--mode", choices=["canary", "full"], default="canary", help="canary (5 configs × 3 replicates = 15 runs) or full (54 configs × 3 replicates = 162 runs per fault type; 486 total across 3 faults)")
+    parser.add_argument("--mode", choices=["canary", "full", "sweep"], default="canary", help="canary (5 configs × 3 replicates = 15 runs), full (54 configs × 3 replicates = 162 runs per fault type; 486 total across 3 faults), or sweep (crash toxicity sweep -- writes to data/crash_toxicity_sweep.csv, not master; use with --fault crash --toxicity)")
     parser.add_argument("--fault", choices=["latency", "crash", "throttle", "none"], default="latency",
                          help="Fault type to inject. 'none' is the no-fault control condition -- "
                               f"requires --replicates >= {MIN_NONE_FAULT_REPLICATES} (see MIN_NONE_FAULT_REPLICATES).")
     parser.add_argument("--topology", choices=["linear", "fanout", "mesh"], default="linear", help="Service mesh topology pattern")
+    parser.add_argument("--toxicity", type=float, default=1.0,
+                         help="Fraction of connections affected by the crash fault's reset_peer toxic "
+                              "(0.0-1.0). Only meaningful for --fault crash. Default 1.0 matches today's "
+                              "full-outage crash behavior.")
     parser.add_argument("--replicates", type=int, default=N_REPLICATES, help=f"Number of replicates per config (default: {N_REPLICATES})")
     parser.add_argument("--seed", type=int, default=None,
                          help="Seed for the run-order shuffle (default: a fresh random seed each "
@@ -1390,7 +1421,8 @@ def main():
             "phase": "running", "started_at": started_at, "updated_at": _now_iso(),
         })
         success = run_experiment_run(config, args.fault, args.mode, args.topology, replicate=rep,
-                                      run_order_seed=run_order_seed, run_index=run_index)
+                                      run_order_seed=run_order_seed, run_index=run_index,
+                                      toxicity=args.toxicity)
         if success:
             success_runs += 1
         else:

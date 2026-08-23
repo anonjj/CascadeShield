@@ -1283,6 +1283,16 @@ def generate_combinations(mode):
             # Midpoint config
             {"failureRateThreshold": 50, "slidingWindowSize": 10, "waitDurationInOpenState": 15, "slidingWindowType": "COUNT_BASED"},
         ]
+    elif mode == "sweep":
+        # Crash toxicity sweep: window_type/window_size/wait fixed at the canonical
+        # midpoint config so toxicity is the only thing varying run-to-run; only
+        # failureRateThreshold varies here (the second swept factor, alongside
+        # --toxicity). [20, 40, 60, 80] is provisional -- confirm before the real
+        # Phase 4 run.
+        configs = [
+            {"failureRateThreshold": t, "slidingWindowSize": 10, "waitDurationInOpenState": 15, "slidingWindowType": "COUNT_BASED"}
+            for t in [20, 40, 60, 80]
+        ]
     else:
         # Full Sweep: 3*3*3*2 = 54 configs per fault × 3 faults × 3 replicates = 486 total runs
         for threshold in PARAM_VALUES["failureRateThreshold"]:

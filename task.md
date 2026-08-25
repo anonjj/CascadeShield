@@ -1,5 +1,43 @@
 # Tasks
 
+## D7 — λ is a single value, and it is the variable your theory is about (in progress)
+
+- [x] **Code ported and wired up.** `--mode occupancy` added to `experiments/runner.py`:
+      54 configs (36 TIME_BASED cells: 3λ×3window×4n_min, + 18 COUNT_BASED control
+      cells: 2λ×3window×3n_min), writing to its own `data/occupancy_dataset.csv`
+      (`OCCUPANCY_DATASET_HEADERS = DATASET_HEADERS + ["occupancy_ratio", "inert"]` —
+      master schema untouched). Ported from the unmerged `origin/experiment/occupancy-ratio`
+      branch (already designed, 3 commits from Aug 17-19) rather than redesigned from
+      scratch, but manually re-integrated against everything that changed in `runner.py`
+      since — D9's dict-based `log_results`, D11's throttle removal, D12's sweep mode.
+      Fixed two real bugs found while porting: (1) the original put the new columns
+      directly in the shared `DATASET_HEADERS`, which would have header-mismatched the
+      already-collected 34-col `data/master_dataset.csv`; (2) the original changed
+      `compute_load_plan()`'s TIME_BASED duration formula *unconditionally*, silently
+      making full/canary sweeps run ~10x longer — now gated to occupancy-mode configs
+      only. Verified via py_compile, config-count checks, and a temp-path `log_results`
+      smoke test (correct `occupancy_ratio` math, correct tri-state `inert`, correct
+      `-M/-L` experiment_id suffixing). Pushed to `feat/d7-occupancy-lambda-sweep`.
+
+- [ ] **Not yet done: an actual Docker end-to-end run.** No live mesh/Toxiproxy in this
+      environment, so `--mode occupancy` has never actually been run against the real
+      services — only verified at the Python-logic level. Next step: on a machine with
+      the stack up, run `python3 experiments/runner.py --mode occupancy --fault latency
+      --topology linear --limit 1` as a smoke test before committing to the full
+      54-config × replicates run.
+
+- [ ] **Not yet done: `data/DATA_DICTIONARY.md` documentation** for the new `occupancy`
+      mode and its `occupancy_ratio`/`inert` columns (the dictionary currently only
+      describes the master/canary/sweep schemas).
+
+- [ ] **Unrelated bug found while in this file, flagged not fixed:** `CB_EVENT_BUFFER_SIZE`
+      is emitted as **2000** into every generated `infra/.env`, not the documented/expected
+      **50** every service's `application.yml` defaults to and that an automated review
+      (`docs/reviews/2026-08-17-commit-review.md`, HIGH severity) already flagged 9 days
+      ago. Still present, affects every mode's runs (not just occupancy). Needs a decision:
+      revert the injected value to 50, or bump every service's default to 2000 to match —
+      see the review file for the exact fix.
+
 ## D11 — Throttle fault type (done)
 
 - [x] **Removed everywhere.** No throttle data exists in any usable archive (only the

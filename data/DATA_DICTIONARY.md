@@ -66,6 +66,18 @@ was dropped from the plan: it never produced usable data in any archive (only th
 unusable pre-timing `v1_prefix` sweep has it), and its effect was judged redundant with
 `LATENCY`'s slow-call mechanism.
 
+**Auxiliary sweep modes** write to their own isolated files, each with a small header
+extension kept out of this master schema by design (`get_dataset_path`/`log_results` in
+`experiments/runner.py`), and — like `injected_toxicity` before them — are not
+documented column-by-column here to avoid a second, driftable copy of the schema; see
+the mode's own code comments in `runner.py` for the exact columns:
+- `data/crash_toxicity_sweep.csv` (`--mode sweep`) — adds `injected_toxicity`.
+- `data/occupancy_dataset.csv` (`--mode occupancy`, **D7**: sweeps λ ∈ {5, 10, 20} against
+  `minimumNumberOfCalls` and `window_size`, since H2's crossover-λ* claim needs λ to
+  actually vary) — adds `occupancy_ratio` (how full the sliding window was relative to
+  `minimumNumberOfCalls`) and `inert` (observed: did the breaker ever open, given a
+  trustworthy `lambda_achieved` measurement).
+
 > 🔄 **SWEEP IN PROGRESS — current `master_dataset.csv` is a partial rebuild.**
 > After the blast-radius metric change the dataset was reseeded from empty, and collection is
 > still underway: **80 rows, `LINEAR` / `LATENCY` only** — one cell of the planned 324-config

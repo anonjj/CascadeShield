@@ -139,3 +139,36 @@ It does not reconsider which paper.
 `run_index`. Sequential execution of a long sweep on one host confounds treatment with thermal
 and memory drift; the seeded shuffle is what lets anyone re-derive the exact order from the
 artifact alone.
+
+---
+
+## D-006 · H3's recovery-side negative control is downgraded to untested, pending the
+transition sidecar
+
+**Date:** 2026-08-25 (ad hoc D12 investigation, outside the Day 1–5 cadence) · **Decided
+by:** Jay · **Status:** final (downgrade), revisit conditional on new data
+
+**Decision.** H3's §4 leak-audit clearance never actually tested `window_type` as a factor
+on $t_{\text{rec}}$ — it tested for breaker state carrying over between replicates, a
+different contamination mode. `analysis/window_type_recovery_leak.py` runs the direct test.
+H3's negative control on $t_{\text{rec}}$ is downgraded from "cleared" to "untested against
+this specific mechanism, pending a re-run that retains `data/cb_transitions.jsonl`."
+
+**Numbers** (`analysis/out/window_type_recovery_leak.json`, 79 rows / current archive; same
+shape on `v2_latency_5svc` and `v3_gateway_not_rebuilt`): TIME's median $t_{\text{rec}}$ is
+2.06–3.68x COUNT's at every matched $D_w \in \{5,15,30\}$. Decomposed: TIME's $t_{\text{open}}$
+anchor runs a flat ~3s later than COUNT's at every $D_w$ (non-buggy — TIME_BASED windows
+accumulate over wall-clock seconds), but TIME's excess over $D_w$ **grows** (19.1s → 20.2s →
+35.1s) while COUNT's stays flat (~1.5–1.7s) — not explainable by a constant anchor shift
+alone. The precise HALF_OPEN→CLOSED metric that would isolate the leak from the anchor shift
+could not be computed: `data/cb_transitions.jsonl` does not exist in any archive on disk.
+
+**Rejected:** treating the existing §4 leak-audit clearance as also covering a window_type
+main-effect check on $t_{\text{rec}}$ — it doesn't; it never varied window_type as a factor.
+**Also rejected:** reporting a leak/no-leak verdict from the coarse ratio alone — the anchor
+shift is a real, legitimate, non-buggy confound that the coarse metric cannot separate from
+a genuine recovery-side effect.
+
+**Revisit if:** a future `experiments/runner.py` invocation retains `data/cb_transitions.jsonl`
+for a sweep spanning both window types at matched $D_w$ — re-run
+`analysis/window_type_recovery_leak.py` against it and read the `precise` block's verdict.

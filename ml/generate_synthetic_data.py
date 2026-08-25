@@ -119,16 +119,27 @@ def simulate_outcomes(cfg, environment: str, rng: np.random.Generator) -> dict:
     wait_n = _norm(cfg.wait_duration, *WAIT_RANGE)
 
     # --- blast radius: the primary outcome -----------------------------------
-    latent = (
+    latent_base = (
         FAULT_BASE[cfg.fault_type] * TOPO_MULT[cfg.topology]
         + 0.18 * thr_n            # looser trip threshold -> contains later
         + 0.12 * win_n            # bigger window -> slower to accumulate -> later
         + 0.03 * wait_n           # longer open state -> degraded a touch longer
-        + WT_INTERACTION[(cfg.fault_type, cfg.window_type)]
     )
+    latent = latent_base + WT_INTERACTION[(cfg.fault_type, cfg.window_type)]
     env_mult = 1.0 if environment == "LOCAL" else float(rng.uniform(1.03, 1.14))
     latent *= env_mult
-    blast = float(np.clip(latent + rng.normal(0.0, 0.045), 0.03, 0.99))
+    noise = rng.normal(0.0, 0.045)
+    blast = float(np.clip(latent + noise, 0.03, 0.99))
+
+    # severity: the same draw as blast, minus window_type's additive interaction term.
+    # time_to_recover scales off this instead of `blast` so window_type cannot leak into
+    # recovery through the blast-radius channel (D12 fix,
+    # analysis/window_type_recovery_leak.py). blast_radius/error_rate/throughput_loss
+    # below are UNCHANGED -- window_type's effect on those (the intentional
+    # detection/containment-side interaction) is preserved on purpose. Reuses `noise`
+    # rather than drawing a fresh one, so this fix doesn't shift the rng stream for any
+    # later row under a fixed --seed.
+    severity = float(np.clip(latent_base * env_mult + noise, 0.03, 0.99))
 
     # --- correlated secondary outcomes ---------------------------------------
     error_rate = float(np.clip(
@@ -155,8 +166,19 @@ def simulate_outcomes(cfg, environment: str, rng: np.random.Generator) -> dict:
 
     # --- time_to_recover: NULL when not back to baseline within the window ---
     if not np.isnan(time_to_open):
-        ttr = cfg.wait_duration * (1.0 + 0.6 * blast) + rng.normal(0.0, 1.5)
+        ttr = cfg.wait_duration * (1.0 + 0.6 * severity) + rng.normal(0.0, 1.5)
         ttr = max(cfg.wait_duration * 0.8, ttr)
+        # Deliberately still gated on `blast`, not `severity`: this short-circuit's
+        # rng.random() draw only fires when blast > 0.85, and gating it on `severity`
+        # instead would change how many rows draw it (wherever blast/severity disagree
+        # on the 0.85 crossing), shifting the shared rng stream for every later row and
+        # perturbing blast_radius/error_rate/throughput_loss on unrelated rows as a pure
+        # side effect. Using `blast` here keeps rng consumption identical to before this
+        # fix -- the D12 fix only needs ttr's continuous VALUE decoupled from
+        # window_type, which the `severity` swap above already does. This leaves a
+        # narrow residual: window_type can still influence whether a high-severity run
+        # gets flagged never_recovered at all (not now-recovered's magnitude), which is
+        # a deliberately smaller and different channel than the leak this fix targets.
         never_recovered = (
             (blast > 0.85 and cfg.wait_duration >= 10 and rng.random() < 0.6)
             or ttr > OBSERVATION_WINDOW_S

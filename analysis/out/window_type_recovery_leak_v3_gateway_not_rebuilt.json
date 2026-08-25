@@ -1,0 +1,495 @@
+{
+  "dataset": "v3_gateway_not_rebuilt",
+  "coarse": {
+    "n_rows": 92,
+    "n_count": 46,
+    "n_time": 46,
+    "match_keys": {
+      "requested": [
+        "topology",
+        "fault_type",
+        "window_size",
+        "threshold",
+        "wait_duration",
+        "lambda_target"
+      ],
+      "used": [
+        "topology",
+        "fault_type",
+        "window_size",
+        "threshold",
+        "wait_duration"
+      ],
+      "missing": [
+        "lambda_target"
+      ]
+    },
+    "time_to_recover": {
+      "by_wait_duration": [
+        {
+          "wait_duration": 5.0,
+          "n_count": 16,
+          "n_time": 17,
+          "median_count": 6.471,
+          "median_time": 23.953,
+          "ratio_time_over_count": 3.7015917168907433,
+          "cliffs_delta": {
+            "delta": 1.0,
+            "magnitude": "large",
+            "n_a": 17,
+            "n_b": 16
+          },
+          "ci_count": {
+            "n_rows": 16,
+            "n_groups": 6,
+            "point": 6.5099374999999995,
+            "lo": 6.394266666666666,
+            "hi": 6.618176470588235
+          },
+          "ci_time": {
+            "n_rows": 17,
+            "n_groups": 6,
+            "point": 27.322411764705883,
+            "lo": 23.6515,
+            "hi": 32.5324705882353
+          }
+        },
+        {
+          "wait_duration": 15.0,
+          "n_count": 13,
+          "n_time": 15,
+          "median_count": 16.578,
+          "median_time": 35.106,
+          "ratio_time_over_count": 2.117625769091567,
+          "cliffs_delta": {
+            "delta": 1.0,
+            "magnitude": "large",
+            "n_a": 15,
+            "n_b": 13
+          },
+          "ci_count": {
+            "n_rows": 13,
+            "n_groups": 5,
+            "point": 16.511,
+            "lo": 16.36818181818182,
+            "hi": 16.61573333333333
+          },
+          "ci_time": {
+            "n_rows": 15,
+            "n_groups": 5,
+            "point": 38.7986,
+            "lo": 34.911133333333325,
+            "hi": 46.266066666666674
+          }
+        },
+        {
+          "wait_duration": 30.0,
+          "n_count": 15,
+          "n_time": 14,
+          "median_count": 31.575,
+          "median_time": 65.07249999999999,
+          "ratio_time_over_count": 2.0608867775138555,
+          "cliffs_delta": {
+            "delta": 0.7619047619047619,
+            "magnitude": "large",
+            "n_a": 14,
+            "n_b": 15
+          },
+          "ci_count": {
+            "n_rows": 15,
+            "n_groups": 5,
+            "point": 31.591466666666665,
+            "lo": 31.39533333333333,
+            "hi": 31.78146666666667
+          },
+          "ci_time": {
+            "n_rows": 14,
+            "n_groups": 5,
+            "point": 60.2712857142857,
+            "lo": 53.77958333333334,
+            "hi": 65.14293333333333
+          }
+        }
+      ],
+      "ratios": [
+        3.7015917168907433,
+        2.117625769091567,
+        2.0608867775138555
+      ],
+      "median_ratio": 2.117625769091567,
+      "min_ratio": 2.0608867775138555,
+      "max_ratio": 3.7015917168907433,
+      "consistent_time_slower": true,
+      "consistent_count_slower": false
+    },
+    "time_to_open_anchor": {
+      "by_wait_duration": [
+        {
+          "wait_duration": 5.0,
+          "n_count": 16,
+          "n_time": 17,
+          "median_count": 3.7515,
+          "median_time": 6.652,
+          "ratio_time_over_count": 1.7731574037051847,
+          "cliffs_delta": {
+            "delta": 0.5808823529411765,
+            "magnitude": "large",
+            "n_a": 17,
+            "n_b": 16
+          },
+          "ci_count": {
+            "n_rows": 16,
+            "n_groups": 6,
+            "point": 4.9565625,
+            "lo": 3.7572562499999997,
+            "hi": 6.201049999999994
+          },
+          "ci_time": {
+            "n_rows": 17,
+            "n_groups": 6,
+            "point": 7.572294117647058,
+            "lo": 5.889222222222222,
+            "hi": 9.910933333333332
+          }
+        },
+        {
+          "wait_duration": 15.0,
+          "n_count": 13,
+          "n_time": 15,
+          "median_count": 3.431,
+          "median_time": 6.552,
+          "ratio_time_over_count": 1.9096473331390265,
+          "cliffs_delta": {
+            "delta": 0.7846153846153846,
+            "magnitude": "large",
+            "n_a": 15,
+            "n_b": 13
+          },
+          "ci_count": {
+            "n_rows": 13,
+            "n_groups": 5,
+            "point": 3.5005384615384614,
+            "lo": 3.3835714285714285,
+            "hi": 3.673615384615385
+          },
+          "ci_time": {
+            "n_rows": 15,
+            "n_groups": 5,
+            "point": 6.1398,
+            "lo": 4.379066666666666,
+            "hi": 7.866066666666668
+          }
+        },
+        {
+          "wait_duration": 30.0,
+          "n_count": 15,
+          "n_time": 14,
+          "median_count": 3.587,
+          "median_time": 6.6915,
+          "ratio_time_over_count": 1.86548647895177,
+          "cliffs_delta": {
+            "delta": 0.9380952380952381,
+            "magnitude": "large",
+            "n_a": 14,
+            "n_b": 15
+          },
+          "ci_count": {
+            "n_rows": 15,
+            "n_groups": 5,
+            "point": 4.050733333333334,
+            "lo": 3.4186,
+            "hi": 5.179199999999999
+          },
+          "ci_time": {
+            "n_rows": 14,
+            "n_groups": 5,
+            "point": 10.5315,
+            "lo": 6.177133333333333,
+            "hi": 15.787249999999998
+          }
+        }
+      ],
+      "ratios": [
+        1.7731574037051847,
+        1.9096473331390265,
+        1.86548647895177
+      ],
+      "median_ratio": 1.86548647895177,
+      "min_ratio": 1.7731574037051847,
+      "max_ratio": 1.9096473331390265,
+      "consistent_time_slower": true,
+      "consistent_count_slower": false
+    },
+    "excess_over_wait_duration": {
+      "by_wait_duration": [
+        {
+          "wait_duration": 5.0,
+          "n_count": 16,
+          "n_time": 17,
+          "median_count": 1.471,
+          "median_time": 18.953,
+          "ratio_time_over_count": 12.884432358939495,
+          "cliffs_delta": {
+            "delta": 1.0,
+            "magnitude": "large",
+            "n_a": 17,
+            "n_b": 16
+          },
+          "ci_count": {
+            "n_rows": 16,
+            "n_groups": 6,
+            "point": 1.5099375,
+            "lo": 1.3942666666666668,
+            "hi": 1.6181764705882353
+          },
+          "ci_time": {
+            "n_rows": 17,
+            "n_groups": 6,
+            "point": 22.322411764705883,
+            "lo": 18.6515,
+            "hi": 27.532470588235295
+          }
+        },
+        {
+          "wait_duration": 15.0,
+          "n_count": 13,
+          "n_time": 15,
+          "median_count": 1.5779999999999994,
+          "median_time": 20.106,
+          "ratio_time_over_count": 12.741444866920158,
+          "cliffs_delta": {
+            "delta": 1.0,
+            "magnitude": "large",
+            "n_a": 15,
+            "n_b": 13
+          },
+          "ci_count": {
+            "n_rows": 13,
+            "n_groups": 5,
+            "point": 1.5110000000000001,
+            "lo": 1.3681818181818182,
+            "hi": 1.6157333333333335
+          },
+          "ci_time": {
+            "n_rows": 15,
+            "n_groups": 5,
+            "point": 23.7986,
+            "lo": 19.91113333333333,
+            "hi": 31.266066666666667
+          }
+        },
+        {
+          "wait_duration": 30.0,
+          "n_count": 15,
+          "n_time": 14,
+          "median_count": 1.5749999999999993,
+          "median_time": 35.0725,
+          "ratio_time_over_count": 22.268253968253976,
+          "cliffs_delta": {
+            "delta": 0.7619047619047619,
+            "magnitude": "large",
+            "n_a": 14,
+            "n_b": 15
+          },
+          "ci_count": {
+            "n_rows": 15,
+            "n_groups": 5,
+            "point": 1.5914666666666666,
+            "lo": 1.3953333333333333,
+            "hi": 1.7814666666666665
+          },
+          "ci_time": {
+            "n_rows": 14,
+            "n_groups": 5,
+            "point": 30.271285714285717,
+            "lo": 23.779583333333335,
+            "hi": 35.14293333333333
+          }
+        }
+      ],
+      "ratios": [
+        12.884432358939495,
+        12.741444866920158,
+        22.268253968253976
+      ],
+      "median_ratio": 12.884432358939495,
+      "min_ratio": 12.741444866920158,
+      "max_ratio": 22.268253968253976,
+      "consistent_time_slower": true,
+      "consistent_count_slower": false
+    },
+    "paired": {
+      "n_pairs": 16,
+      "median_paired_ratio": 2.141241306209734,
+      "share_time_slower": 1.0,
+      "rows": [
+        {
+          "topology": "LINEAR",
+          "fault_type": "LATENCY",
+          "window_size": 5,
+          "threshold": 30,
+          "wait_duration": 5,
+          "COUNT": 6.5175,
+          "TIME": 23.987,
+          "ratio": 3.680398925968546
+        },
+        {
+          "topology": "LINEAR",
+          "fault_type": "LATENCY",
+          "window_size": 5,
+          "threshold": 30,
+          "wait_duration": 15,
+          "COUNT": 16.605,
+          "TIME": 34.973,
+          "ratio": 2.1061728395061725
+        },
+        {
+          "topology": "LINEAR",
+          "fault_type": "LATENCY",
+          "window_size": 5,
+          "threshold": 30,
+          "wait_duration": 30,
+          "COUNT": 31.894,
+          "TIME": 65.112,
+          "ratio": 2.0415125101900045
+        },
+        {
+          "topology": "LINEAR",
+          "fault_type": "LATENCY",
+          "window_size": 5,
+          "threshold": 50,
+          "wait_duration": 5,
+          "COUNT": 6.463,
+          "TIME": 23.837,
+          "ratio": 3.6882252823766053
+        },
+        {
+          "topology": "LINEAR",
+          "fault_type": "LATENCY",
+          "window_size": 5,
+          "threshold": 50,
+          "wait_duration": 15,
+          "COUNT": 16.243,
+          "TIME": 34.62,
+          "ratio": 2.131379671242997
+        },
+        {
+          "topology": "LINEAR",
+          "fault_type": "LATENCY",
+          "window_size": 5,
+          "threshold": 50,
+          "wait_duration": 30,
+          "COUNT": 31.143,
+          "TIME": 48.175000000000004,
+          "ratio": 1.5468965738689273
+        },
+        {
+          "topology": "LINEAR",
+          "fault_type": "LATENCY",
+          "window_size": 10,
+          "threshold": 30,
+          "wait_duration": 5,
+          "COUNT": 6.724,
+          "TIME": 23.467,
+          "ratio": 3.490035693039857
+        },
+        {
+          "topology": "LINEAR",
+          "fault_type": "LATENCY",
+          "window_size": 10,
+          "threshold": 30,
+          "wait_duration": 15,
+          "COUNT": 16.32,
+          "TIME": 35.106,
+          "ratio": 2.151102941176471
+        },
+        {
+          "topology": "LINEAR",
+          "fault_type": "LATENCY",
+          "window_size": 10,
+          "threshold": 30,
+          "wait_duration": 30,
+          "COUNT": 31.167,
+          "TIME": 65.232,
+          "ratio": 2.0929829627490615
+        },
+        {
+          "topology": "LINEAR",
+          "fault_type": "LATENCY",
+          "window_size": 10,
+          "threshold": 50,
+          "wait_duration": 5,
+          "COUNT": 6.404999999999999,
+          "TIME": 23.361,
+          "ratio": 3.647306791569087
+        },
+        {
+          "topology": "LINEAR",
+          "fault_type": "LATENCY",
+          "window_size": 10,
+          "threshold": 50,
+          "wait_duration": 15,
+          "COUNT": 16.92,
+          "TIME": 35.737,
+          "ratio": 2.112115839243499
+        },
+        {
+          "topology": "LINEAR",
+          "fault_type": "LATENCY",
+          "window_size": 10,
+          "threshold": 50,
+          "wait_duration": 30,
+          "COUNT": 31.565,
+          "TIME": 64.618,
+          "ratio": 2.0471408205290667
+        },
+        {
+          "topology": "LINEAR",
+          "fault_type": "LATENCY",
+          "window_size": 20,
+          "threshold": 30,
+          "wait_duration": 5,
+          "COUNT": 6.267,
+          "TIME": 40.881,
+          "ratio": 6.523216850167544
+        },
+        {
+          "topology": "LINEAR",
+          "fault_type": "LATENCY",
+          "window_size": 20,
+          "threshold": 30,
+          "wait_duration": 15,
+          "COUNT": 16.323,
+          "TIME": 53.7,
+          "ratio": 3.2898364271273666
+        },
+        {
+          "topology": "LINEAR",
+          "fault_type": "LATENCY",
+          "window_size": 20,
+          "threshold": 30,
+          "wait_duration": 30,
+          "COUNT": 31.794,
+          "TIME": 64.966,
+          "ratio": 2.0433415109769135
+        },
+        {
+          "topology": "LINEAR",
+          "fault_type": "LATENCY",
+          "window_size": 20,
+          "threshold": 50,
+          "wait_duration": 5,
+          "COUNT": 6.472,
+          "TIME": 32.473,
+          "ratio": 5.017459826946848
+        }
+      ]
+    }
+  },
+  "precise": {
+    "status": "SKIPPED_NO_SIDECAR",
+    "note": "data/cb_transitions.jsonl is real-runs-only and gitignored; it does not exist in this checkout. The precise HALF_OPEN->CLOSED metric cannot be computed until a run of experiments/runner.py retains it. This script's join logic is exercised by --self-test against a synthetic fixture only.",
+    "result": null
+  },
+  "verdict": "MECHANISM_UNTESTED_NO_SIDECAR"
+}

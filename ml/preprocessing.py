@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
 # are retained so the one-hot stays multi-category (not a degenerate single column)
 # and the encoded matrix / Lambda contract does not shift when they are swept later.
 TOPOLOGIES = ["LINEAR", "FAN_OUT", "SHARED_DEP_MESH"]
-FAULT_TYPES = ["LATENCY", "CRASH", "THROTTLE"]
+FAULT_TYPES = ["LATENCY", "CRASH"]
 WINDOW_TYPES = ["COUNT_BASED", "TIME_BASED"]
 THRESHOLDS = [30, 50, 70]
 WINDOW_SIZES = [5, 10, 20]      # matches the real sweep (was the planned [10, 50, 100])

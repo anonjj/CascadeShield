@@ -182,7 +182,7 @@ ALL_SERVICE_PORTS = {
     "payment": 8083, "notification": 8084, "shared-db": 8085,
 }
 
-# Configuration Parameter Values for Sweeps (3*3*3*2 = 54 configs per fault × 3 faults × 3 replicates = 486 total runs)
+# Configuration Parameter Values for Sweeps (3*3*3*2 = 54 configs per fault × 2 faults × 3 replicates = 324 total runs)
 PARAM_VALUES = {
     "failureRateThreshold": [30, 50, 70],
     "slidingWindowSize": [5, 10, 20],
@@ -372,10 +372,6 @@ def inject_fault(fault_type, toxicity=1.0, crash_target=None):
         # graded crash. toxicity=1.0 resets every connection (full outage, matching the
         # pre-sweep behavior of disabling the proxy outright).
         toxiproxy.inject_reset_peer(crash_target or "payment-service-proxy", timeout_ms=0, toxicity=toxicity)
-
-    elif fault_type == "throttle":
-        # Limit database proxy bandwidth to 1 KB/s (simulates DB connection/resource limits)
-        toxiproxy.inject_bandwidth_limit("shared-db-service-proxy", rate_kbps=1, toxicity=1.0)
 
     elif fault_type == "none":
         # Deliberate no-op: this is a control replicate. toxiproxy.reset_all() above already
@@ -880,7 +876,7 @@ def compute_leg_failure_rates(before, after):
     caller's perspective it is propagated failure, not success; slow-but-completed calls stay
     success. This RAW per-leg breakdown is persisted (leg_failure_rates column) so
     real_blast_radius can be recomputed at ANY TAU_LEG straight from the CSV -- no need to
-    re-run the 486-run sweep if the threshold changes after sign-off. Returns {} if nothing
+    re-run the 324-run sweep if the threshold changes after sign-off. Returns {} if nothing
     observable (measurement gap). See docs/proposals/blast-radius-redefinition.md."""
     rates = {}
     if not before or not after:
@@ -916,7 +912,7 @@ def compute_real_blast_radius(before, after, tau=REAL_BLAST_LEG_ERROR_THRESHOLD)
 def make_experiment_id(topology, fault_type, config):
     """Builds a deterministic ID matching experiment_matrix.csv e.g. LIN-LAT-CNT-T50-W10-D15."""
     topo_map  = {"linear": "LIN", "fanout": "FAN", "mesh": "MSH"}
-    fault_map = {"latency": "LAT", "crash": "CRS", "throttle": "THR", "none": "NON"}
+    fault_map = {"latency": "LAT", "crash": "CRS", "none": "NON"}
     wtype_map = {"COUNT_BASED": "CNT", "TIME_BASED": "TIM"}
     topo  = topo_map.get(topology, topology[:3].upper())
     fault = fault_map.get(fault_type, fault_type[:3].upper())
@@ -1176,7 +1172,7 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
                 blast_radius_container[0] = result
                 cb_open_at[0] = time.time()   # record when we first saw an open CB
                 return
-        # Final read after the deadline: for latency/throttle faults, each request
+        # Final read after the deadline: for latency faults, each request
         # can take 3-5s, so the CB may not trip until after the 12s poll window.
         # If this read finds a nonzero blast radius, stamp cb_open_at here too —
         # otherwise we'd write a row with blast_radius > 0 but time_to_open = null,
@@ -1409,7 +1405,7 @@ def generate_combinations(mode):
             for t in [20, 40, 60, 80]
         ]
     else:
-        # Full Sweep: 3*3*3*2 = 54 configs per fault × 3 faults × 3 replicates = 486 total runs
+        # Full Sweep: 3*3*3*2 = 54 configs per fault × 2 faults × 3 replicates = 324 total runs
         for threshold in PARAM_VALUES["failureRateThreshold"]:
             for window in PARAM_VALUES["slidingWindowSize"]:
                 for wait in PARAM_VALUES["waitDurationInOpenState"]:
@@ -1458,14 +1454,12 @@ def main():
     parser = argparse.ArgumentParser(description="CascadeShield Parameter Sweep Automation Runner")
     parser.add_argument("--mode", choices=["canary", "full", "sweep", "occupancy"], default="canary",
                          help="canary (5 configs × 3 replicates = 15 runs), full (54 configs × 3 replicates "
-                              "= 162 runs per fault type; 486 total across 3 faults), sweep (crash toxicity "
+                              "= 162 runs per fault type; 324 total across 2 faults), sweep (crash toxicity "
                               "sweep -- writes to data/crash_toxicity_sweep.csv, not master; use with "
                               "--fault crash --toxicity), or occupancy (D7 lambda-sweep, 54 configs × "
                               "replicates -- writes to data/occupancy_dataset.csv, not master; use with "
                               "--fault latency --topology linear)")
-    # NOTE: --fault keeps "throttle" here -- D11 (throttle removal) is a separate,
-    # out-of-scope decision for this merge (A1/A3/A5 harness-gap ports only).
-    parser.add_argument("--fault", choices=["latency", "crash", "throttle", "none"], default="latency",
+    parser.add_argument("--fault", choices=["latency", "crash", "none"], default="latency",
                          help="Fault type to inject. 'none' is the no-fault control condition -- "
                               f"requires --replicates >= {MIN_NONE_FAULT_REPLICATES} (see MIN_NONE_FAULT_REPLICATES).")
     parser.add_argument("--topology", choices=["linear", "fanout", "mesh"], default="linear", help="Service mesh topology pattern")

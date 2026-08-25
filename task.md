@@ -26,9 +26,13 @@
       --topology linear --limit 1` as a smoke test before committing to the full
       54-config × replicates run.
 
-- [ ] **Not yet done: `data/DATA_DICTIONARY.md` documentation** for the new `occupancy`
-      mode and its `occupancy_ratio`/`inert` columns (the dictionary currently only
-      describes the master/canary/sweep schemas).
+- [x] **`data/DATA_DICTIONARY.md` documentation — done, scoped to match precedent.**
+      Checked first: `injected_toxicity` (D12's structurally identical sweep-mode
+      column) was never given a full column-spec section there either — the dictionary
+      is scoped to the master ML-training schema, and mode-specific extension columns
+      live in `runner.py`'s own code comments to avoid a second, driftable schema copy.
+      Added a short pointer paragraph instead (which file, which mode, which two new
+      columns, why) rather than duplicating the schema.
 
 - [x] **Unrelated bug found while in this file — now fixed.** `CB_EVENT_BUFFER_SIZE` was
       emitted as **2000** into every generated `infra/.env`, not the documented/expected

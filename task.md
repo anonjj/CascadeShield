@@ -1,5 +1,18 @@
 # Tasks
 
+## D11 — Throttle fault type (done)
+
+- [x] **Removed everywhere.** No throttle data exists in any usable archive (only the
+      unusable, pre-timing-collector `master_dataset_v1_prefix.csv` has it), and its
+      slow-call mechanism was judged redundant with `LATENCY`'s. Dropped from the real
+      harness (`experiments/runner.py`/`fault_injector.py`), the ML schema
+      (`ml/preprocessing.py`'s `FAULT_TYPES`, `ml/generate_synthetic_data.py`'s fault
+      dicts), and every doc that stated the real-sweep grid size (486 -> 324 configs
+      across 2 fault types instead of 3), including `data/experiment_matrix.csv`'s
+      planning rows (648 -> 486). Historical references to `master_dataset_v1_prefix.csv`'s
+      actual 486-row size were left alone — that's a fact about an archive, not the
+      live design. Pushed to `remove/d11-throttle-fault-type`.
+
 ## D12 — window_type -> recovery leak (open)
 
 - [ ] **The Aug-15 leak is real.** `analysis/window_type_recovery_leak.py` confirms

@@ -30,13 +30,13 @@
       mode and its `occupancy_ratio`/`inert` columns (the dictionary currently only
       describes the master/canary/sweep schemas).
 
-- [ ] **Unrelated bug found while in this file, flagged not fixed:** `CB_EVENT_BUFFER_SIZE`
-      is emitted as **2000** into every generated `infra/.env`, not the documented/expected
-      **50** every service's `application.yml` defaults to and that an automated review
-      (`docs/reviews/2026-08-17-commit-review.md`, HIGH severity) already flagged 9 days
-      ago. Still present, affects every mode's runs (not just occupancy). Needs a decision:
-      revert the injected value to 50, or bump every service's default to 2000 to match —
-      see the review file for the exact fix.
+- [x] **Unrelated bug found while in this file — now fixed.** `CB_EVENT_BUFFER_SIZE` was
+      emitted as **2000** into every generated `infra/.env`, not the documented/expected
+      **50** every service's `application.yml` defaults to (flagged HIGH severity by
+      `docs/reviews/2026-08-17-commit-review.md` 9 days ago, never fixed). No rationale
+      for 2000 existed anywhere (checked `git log -S`), so reverted rather than propagated:
+      deleted the dead `EVENT_BUFFER_SIZE=2000` constant, `.env` template points back at
+      `CB_EVENT_BUFFER_SIZE=50`. Affected every mode's runs, not just occupancy's.
 
 ## D11 — Throttle fault type (done)
 

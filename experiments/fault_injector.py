@@ -54,9 +54,7 @@ class ToxiproxyClient:
     def inject_latency(self, name, delay_ms, jitter_ms=0, toxicity=1.0, clear_first=True):
         """Injects latency into a proxy's downstream path.
 
-        Pass clear_first=False to stack this toxic on top of an existing one
-        (e.g. bandwidth + latency for a throttle profile that actually trips
-        the breaker's slow-call detector)."""
+        Pass clear_first=False to stack this toxic on top of an existing one."""
         if clear_first:
             self.clear_toxics(name)
 
@@ -71,26 +69,6 @@ class ToxiproxyClient:
             }
         }
         print(f"Injecting latency on '{name}': {delay_ms}ms (toxicity={toxicity})")
-        self._request(f"/proxies/{name}/toxics", method="POST", data=payload)
-
-    def inject_bandwidth_limit(self, name, rate_kbps, toxicity=1.0, clear_first=True):
-        """Limits bandwidth to simulate throttling.
-
-        Pass clear_first=False to stack this toxic on top of an existing one."""
-        if clear_first:
-            self.clear_toxics(name)
-
-        # Toxiproxy expects rate in KB/s
-        payload = {
-            "name": "bandwidth_toxic",
-            "type": "bandwidth",
-            "stream": "downstream",
-            "toxicity": toxicity,
-            "attributes": {
-                "rate": rate_kbps
-            }
-        }
-        print(f"Injecting bandwidth limit on '{name}': {rate_kbps} KB/s (toxicity={toxicity})")
         self._request(f"/proxies/{name}/toxics", method="POST", data=payload)
 
     def inject_reset_peer(self, name, timeout_ms=0, toxicity=1.0, clear_first=True):

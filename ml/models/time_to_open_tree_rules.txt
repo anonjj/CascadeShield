@@ -2,45 +2,45 @@
 |   |--- window_size <= 7.500
 |   |   |--- window_type_is_time <= 0.500
 |   |   |   |--- threshold <= 40.000
-|   |   |   |   |--- value: [0.998]
+|   |   |   |   |--- value: [1.007]
 |   |   |   |--- threshold >  40.000
-|   |   |   |   |--- value: [1.519]
+|   |   |   |   |--- value: [1.523]
 |   |   |--- window_type_is_time >  0.500
 |   |   |   |--- threshold <= 40.000
 |   |   |   |   |--- value: [1.748]
 |   |   |   |--- threshold >  40.000
-|   |   |   |   |--- value: [2.613]
+|   |   |   |   |--- value: [2.640]
 |   |--- window_size >  7.500
 |   |   |--- window_type_is_time <= 0.500
 |   |   |   |--- threshold <= 40.000
-|   |   |   |   |--- value: [2.003]
+|   |   |   |   |--- value: [1.996]
 |   |   |   |--- threshold >  40.000
-|   |   |   |   |--- value: [2.993]
+|   |   |   |   |--- value: [3.058]
 |   |   |--- window_type_is_time >  0.500
 |   |   |   |--- threshold <= 40.000
-|   |   |   |   |--- value: [3.462]
+|   |   |   |   |--- value: [3.454]
 |   |   |   |--- threshold >  40.000
-|   |   |   |   |--- value: [5.218]
+|   |   |   |   |--- value: [5.194]
 |--- window_size >  15.000
 |   |--- window_type_is_time <= 0.500
 |   |   |--- threshold <= 40.000
-|   |   |   |--- wait_duration <= 10.000
-|   |   |   |   |--- value: [4.148]
-|   |   |   |--- wait_duration >  10.000
-|   |   |   |   |--- value: [3.920]
+|   |   |   |--- wait_duration <= 22.500
+|   |   |   |   |--- value: [4.055]
+|   |   |   |--- wait_duration >  22.500
+|   |   |   |   |--- value: [3.858]
 |   |   |--- threshold >  40.000
 |   |   |   |--- threshold <= 60.000
-|   |   |   |   |--- value: [5.426]
+|   |   |   |   |--- value: [5.548]
 |   |   |   |--- threshold >  60.000
-|   |   |   |   |--- value: [7.064]
+|   |   |   |   |--- value: [6.914]
 |   |--- window_type_is_time >  0.500
 |   |   |--- threshold <= 40.000
-|   |   |   |--- wait_duration <= 22.500
-|   |   |   |   |--- value: [6.987]
-|   |   |   |--- wait_duration >  22.500
-|   |   |   |   |--- value: [7.114]
+|   |   |   |--- wait_duration <= 10.000
+|   |   |   |   |--- value: [7.134]
+|   |   |   |--- wait_duration >  10.000
+|   |   |   |   |--- value: [7.010]
 |   |   |--- threshold >  40.000
 |   |   |   |--- threshold <= 60.000
-|   |   |   |   |--- value: [9.456]
+|   |   |   |   |--- value: [9.588]
 |   |   |   |--- threshold >  60.000
-|   |   |   |   |--- value: [11.553]
+|   |   |   |   |--- value: [12.000]

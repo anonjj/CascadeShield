@@ -4,7 +4,7 @@ generate_synthetic_data.py -- CascadeShield ML pipeline (Soham)
 
 Produces a SCHEMA-CONFORMANT synthetic dataset so the ML pipeline (Isolation
 Forest + Decision Tree recommender) can be developed, tested, and demonstrated
-BEFORE the real 486-config chaos sweep has run on the mesh.
+BEFORE the real 324-config chaos sweep has run on the mesh.
 
     *** THIS DATA IS SIMULATED -- NOT MEASURED. ***
     Replace data/master_dataset.csv with the real runner.py output once the
@@ -14,7 +14,7 @@ BEFORE the real 486-config chaos sweep has run on the mesh.
 
 How it works
 ------------
-Builds the 486 real-sweep configurations directly from ml/preprocessing.py's
+Builds the 324 real-sweep configurations directly from ml/preprocessing.py's
 schema constants (topology/fault/window/threshold/window_size/wait_duration),
 NOT from data/experiment_matrix.csv -- that file documents the originally
 *planned* grid, which the real sweep deviated from (see data/DATA_DICTIONARY.md's
@@ -26,17 +26,17 @@ and prevents the two from drifting apart again.
 For each (config x environment x replicate), simulates the 5 measured outcomes
 with a documented response model that encodes the study's working hypotheses:
 
-  * Fault contagion:   CRASH > LATENCY > THROTTLE.
+  * Fault contagion:   CRASH > LATENCY.
   * Topology blast:    SHARED_DEP_MESH > FAN_OUT > LINEAR (shared deps
                        cause common-mode failure).
   * Breaker tightness: looser breakers (higher threshold, larger window) contain
                        less, so blast radius goes up.
   * NOVELTY:           the better window_type DEPENDS on the fault. TIME_BASED
                        wins under LATENCY (sustained degradation accumulates over
-                       time); COUNT_BASED wins under CRASH/THROTTLE (discrete
-                       failures are counted immediately). This interaction is the
-                       structure the Decision Tree should recover and the paper
-                       should report.
+                       time); COUNT_BASED wins under CRASH (discrete failures are
+                       counted immediately). This interaction is the structure
+                       the Decision Tree should recover and the paper should
+                       report.
   * Environment:       AWS runs are slightly worse than LOCAL (within ~15%),
                        which feeds the LOCAL-vs-AWS divergence analysis.
 
@@ -76,11 +76,11 @@ SCHEMA_COLUMNS = [
 # Short codes for experiment_id generation, matching runner.py's make_experiment_id
 # naming style (e.g. LIN-LAT-CNT-T30-W10-D5).
 TOPO_CODE = {"LINEAR": "LIN", "FAN_OUT": "FAN", "SHARED_DEP_MESH": "MSH"}
-FAULT_CODE = {"LATENCY": "LAT", "CRASH": "CRS", "THROTTLE": "THR"}
+FAULT_CODE = {"LATENCY": "LAT", "CRASH": "CRS"}
 WTYPE_CODE = {"COUNT_BASED": "CNT", "TIME_BASED": "TIM"}
 
 # ---- response-model coefficients (all documented in README.md) ----------------
-FAULT_BASE = {"CRASH": 0.55, "LATENCY": 0.45, "THROTTLE": 0.30}
+FAULT_BASE = {"CRASH": 0.55, "LATENCY": 0.45}
 # Topology keys must match preprocessing.TOPOLOGIES exactly (LINEAR, matching the
 # real sweep) so one-hot encoding in preprocessing.py produces non-zero columns.
 TOPO_MULT = {"SHARED_DEP_MESH": 1.30, "FAN_OUT": 1.05, "LINEAR": 0.82}
@@ -89,9 +89,8 @@ TOPO_MULT = {"SHARED_DEP_MESH": 1.30, "FAN_OUT": 1.05, "LINEAR": 0.82}
 WT_INTERACTION = {
     ("LATENCY", "TIME_BASED"): -0.07, ("LATENCY", "COUNT_BASED"): +0.05,
     ("CRASH", "TIME_BASED"): +0.05, ("CRASH", "COUNT_BASED"): -0.06,
-    ("THROTTLE", "TIME_BASED"): +0.03, ("THROTTLE", "COUNT_BASED"): -0.04,
 }
-FAULT_ERROR_ADJ = {"CRASH": 0.08, "LATENCY": 0.02, "THROTTLE": -0.03}
+FAULT_ERROR_ADJ = {"CRASH": 0.08, "LATENCY": 0.02}
 
 # Normalisation bounds derived directly from preprocessing.py's real sweep grid
 # so they can never drift out of sync with it again.
@@ -224,7 +223,7 @@ def inject_anomaly(out: dict, rng: np.random.Generator) -> tuple[dict, str]:
 
 
 def _build_config_grid() -> pd.DataFrame:
-    """Builds the 486-config grid as the cartesian product of preprocessing.py's
+    """Builds the 324-config grid as the cartesian product of preprocessing.py's
     real sweep constants -- the single source of truth for topology/fault/window
     values, kept in sync with runner.py's DATASET_HEADERS. Deliberately does NOT
     read data/experiment_matrix.csv (see module docstring: that file is the

@@ -20,7 +20,7 @@ Maps recommender output -> Jay's env knobs:
     window_size   -> CB_SLIDING_WINDOW_SIZE
     threshold     -> CB_FAILURE_RATE_THRESHOLD
     wait_duration -> CB_WAIT_DURATION_OPEN   (seconds, 's' suffix)
-    (CB_PERMITTED_CALLS_HALF_OPEN is not swept by the 486-config matrix; a fixed
+    (CB_PERMITTED_CALLS_HALF_OPEN is not swept by the 324-config matrix; a fixed
      default is emitted and flagged as such.)
 """
 from __future__ import annotations

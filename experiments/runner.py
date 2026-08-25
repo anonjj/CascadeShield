@@ -12,6 +12,7 @@ import threading
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from fault_injector import ToxiproxyClient
+from resumable_runner import load_completed, is_done, append_row
 
 # Toxiproxy Client
 toxiproxy = ToxiproxyClient()
@@ -122,6 +123,12 @@ DATASET_HEADERS = [
 # toxicity setpoint. A separate header/file so a new column never touches the master
 # schema -- see get_dataset_path/log_results.
 SWEEP_DATASET_HEADERS = DATASET_HEADERS + ["injected_toxicity"]
+
+# (experiment_id, str(replicate)) pairs already written to the current run's dataset
+# file -- populated once at the top of main() via resumable_runner.load_completed(),
+# and grown by log_results() after each successful append_row(). Lets a restarted
+# run skip cells it already has instead of re-running (and re-appending) them.
+completed_runs = set()
 
 # How many replicates per config (min 3 for variance estimation)
 N_REPLICATES = 3
@@ -912,73 +919,65 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
     blank rather than KeyError-ing or fabricating a 0.0. run_order_seed and
     run_index are the two exceptions expected on every row regardless of
     outcome -- a run's position in the shuffled execution order is known the
-    moment it starts, independent of what happens during it."""
+    moment it starts, independent of what happens during it.
+
+    The header-mismatch guard now lives in resumable_runner.load_completed(),
+    called once at the top of main() -- a mismatch there raises SystemExit
+    (loud, before any run starts) instead of this function silently refusing
+    to write per-row (the bug that ate the occupancy-ratio run: a stale
+    on-disk header made every call here a no-op while the sweep kept
+    "succeeding"). Every successful write here also records the row's
+    (experiment_id, replicate) into completed_runs so a restarted run skips
+    it (see is_done() in main())."""
     dataset_path = get_dataset_path(mode)
     headers = SWEEP_DATASET_HEADERS if mode == "sweep" else DATASET_HEADERS
     os.makedirs(os.path.dirname(dataset_path), exist_ok=True)
-    file_exists = os.path.exists(dataset_path)
-
-    if file_exists:
-        with open(dataset_path, newline="") as f:
-            existing_header = next(csv.reader(f), [])
-        if existing_header != headers:
-            print(
-                f"{os.path.basename(dataset_path)} header does not match the current schema "
-                f"(expected {headers}, found {existing_header}). Refusing to "
-                "append — this would silently shift columns for every downstream row. "
-                "Move or rename the stale file first.",
-                file=sys.stderr,
-            )
-            return
 
     experiment_id = make_experiment_id(topology, fault_type, config)
     time_to_open = metrics.get("time_to_open")
     time_to_recover = metrics.get("time_to_recover")
 
-    with open(dataset_path, mode="a", newline="") as f:
-        writer = csv.writer(f)
-        if not file_exists:
-            writer.writerow(headers)
+    row = {
+        "experiment_id": experiment_id,
+        "topology": topology.upper(),
+        "fault_type": fault_type.upper(),
+        "window_type": config["slidingWindowType"],
+        "threshold": config["failureRateThreshold"],
+        "window_size": config["slidingWindowSize"],
+        "wait_duration": config["waitDurationInOpenState"],
+        "permitted_calls_half_open": config.get("permittedCallsInHalfOpenState", 5),
+        "environment": ENVIRONMENT,
+        "mode": mode,
+        "replicate": replicate,
+        "run_timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "blast_radius": f"{metrics.get('blast_radius', ''):.4f}" if metrics.get('blast_radius') is not None else "",
+        "time_to_open": time_to_open if time_to_open is not None else "",   # "" = CB never opened (meaningful null)
+        "time_to_recover": time_to_recover if time_to_recover is not None else "",  # "" = system did not recover (meaningful null)
+        "error_rate": f"{metrics['error_rate']:.4f}" if metrics.get('error_rate') is not None else "",
+        "throughput_loss": f"{metrics['throughput_loss']:.4f}" if metrics.get('throughput_loss') is not None else "",
+        "real_blast_radius": f"{metrics['real_blast_radius']:.4f}" if metrics.get('real_blast_radius') is not None else "",  # "" = no leg observable (measurement gap)
+        "leg_failure_rates": ";".join(f"{svc}:{rate:.4f}" for svc, rate in (metrics.get('leg_failure_rates') or {}).items()),  # raw per-leg rates; "" = none observed
+        "precondition_ok": metrics.get("precondition_ok", ""),
+        "precondition_fail_reason": metrics.get("precondition_fail_reason", ""),
+        "readiness_wait_s": f"{metrics['readiness_wait_s']:.3f}" if metrics.get('readiness_wait_s') is not None else "",
+        "cb_state_pre": metrics.get("cb_state_pre", ""),
+        "buffered_calls_pre": metrics.get("buffered_calls_pre", ""),
+        "warmup_requests": metrics.get("warmup_requests", ""),
+        "warmup_duration_s": f"{metrics['warmup_duration_s']:.3f}" if metrics.get('warmup_duration_s') is not None else "",
+        "run_order_seed": metrics.get("run_order_seed", ""),
+        "run_index": metrics.get("run_index", ""),
+        "lambda_target": f"{metrics['lambda_target']:.4f}" if metrics.get('lambda_target') is not None else "",
+        "lambda_achieved": f"{metrics['lambda_achieved']:.4f}" if metrics.get('lambda_achieved') is not None else "",
+        "lambda_cv": f"{metrics['lambda_cv']:.4f}" if metrics.get('lambda_cv') is not None else "",
+        "lambda_deviation_flag": metrics.get("lambda_deviation_flag") if metrics.get("lambda_deviation_flag") is not None else "",
+        "effective_horizon": f"{metrics['effective_horizon']:.4f}" if metrics.get('effective_horizon') is not None else "",
+        "excluded_reason": "",  # always empty at write time; only analysis/quarantine.py fills it
+    }
+    if mode == "sweep":
+        row["injected_toxicity"] = f"{metrics['injected_toxicity']:.4f}" if metrics.get('injected_toxicity') is not None else ""
 
-        row = [
-            experiment_id,
-            topology.upper(),
-            fault_type.upper(),
-            config["slidingWindowType"],
-            config["failureRateThreshold"],
-            config["slidingWindowSize"],
-            config["waitDurationInOpenState"],
-            config.get("permittedCallsInHalfOpenState", 5),
-            ENVIRONMENT,
-            mode,
-            replicate,
-            time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            f"{metrics.get('blast_radius', ''):.4f}" if metrics.get('blast_radius') is not None else "",
-            time_to_open if time_to_open is not None else "",   # "" = CB never opened (meaningful null)
-            time_to_recover if time_to_recover is not None else "",  # "" = system did not recover (meaningful null)
-            f"{metrics['error_rate']:.4f}" if metrics.get('error_rate') is not None else "",
-            f"{metrics['throughput_loss']:.4f}" if metrics.get('throughput_loss') is not None else "",
-            f"{metrics['real_blast_radius']:.4f}" if metrics.get('real_blast_radius') is not None else "",  # "" = no leg observable (measurement gap)
-            ";".join(f"{svc}:{rate:.4f}" for svc, rate in (metrics.get('leg_failure_rates') or {}).items()),  # raw per-leg rates; "" = none observed
-            metrics.get("precondition_ok", ""),
-            metrics.get("precondition_fail_reason", ""),
-            f"{metrics['readiness_wait_s']:.3f}" if metrics.get('readiness_wait_s') is not None else "",
-            metrics.get("cb_state_pre", ""),
-            metrics.get("buffered_calls_pre", ""),
-            metrics.get("warmup_requests", ""),
-            f"{metrics['warmup_duration_s']:.3f}" if metrics.get('warmup_duration_s') is not None else "",
-            metrics.get("run_order_seed", ""),
-            metrics.get("run_index", ""),
-            f"{metrics['lambda_target']:.4f}" if metrics.get('lambda_target') is not None else "",
-            f"{metrics['lambda_achieved']:.4f}" if metrics.get('lambda_achieved') is not None else "",
-            f"{metrics['lambda_cv']:.4f}" if metrics.get('lambda_cv') is not None else "",
-            metrics.get("lambda_deviation_flag") if metrics.get("lambda_deviation_flag") is not None else "",
-            f"{metrics['effective_horizon']:.4f}" if metrics.get('effective_horizon') is not None else "",
-            "",  # excluded_reason -- always empty at write time; only analysis/quarantine.py fills it
-        ]
-        if mode == "sweep":
-            row.append(f"{metrics['injected_toxicity']:.4f}" if metrics.get('injected_toxicity') is not None else "")
-        writer.writerow(row)
+    append_row(dataset_path, row, headers)
+    completed_runs.add((experiment_id, str(replicate)))
     print(f"Saved run metrics to {dataset_path}")
 
 def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
@@ -1393,6 +1392,18 @@ def main():
     total_runs = len(configs) * args.replicates
     print(f"Generated {len(configs)} configs × {args.replicates} replicates = {total_runs} total runs.")
 
+    # Resumability (D9): load whatever (experiment_id, replicate) pairs the dataset file
+    # already has, once, up front. A header mismatch raises SystemExit here -- loudly,
+    # before any run starts -- rather than log_results() silently refusing every write
+    # while the loop keeps reporting "progress" (the bug that ate the occupancy run).
+    global completed_runs
+    dataset_path = get_dataset_path(args.mode)
+    dataset_headers = SWEEP_DATASET_HEADERS if args.mode == "sweep" else DATASET_HEADERS
+    completed_runs = load_completed(dataset_path, dataset_headers)
+    if completed_runs:
+        print(f"Resuming {dataset_path}: {len(completed_runs)} (experiment_id, replicate) "
+              "cell(s) already recorded and will be skipped.")
+
     # Randomize run order (see build_shuffled_run_list): sequential execution of a long
     # sweep on one host confounds treatment (config) with thermal/memory drift over the
     # sweep's wall-clock duration -- later configs would systematically run on a
@@ -1420,9 +1431,17 @@ def main():
         "phase": "running", "started_at": started_at, "updated_at": started_at,
     })
 
+    skipped_runs = 0
     for run_index, (i, config, rep) in enumerate(run_list, start=1):
         run_number = run_index  # execution sequence position, not config/replicate order
         print(f"\nProgress: Run {run_number} of {total_runs} (config {i+1}/{len(configs)}, replicate {rep}/{args.replicates})")
+
+        experiment_id = make_experiment_id(args.topology, args.fault, config)
+        if is_done(experiment_id, rep, completed_runs):
+            print(f"Skipping run {run_number}: {experiment_id} replicate {rep} already in {dataset_path}.")
+            skipped_runs += 1
+            continue
+
         write_status({
             "mode": args.mode, "fault_type": args.fault, "topology": args.topology,
             "replicates": args.replicates, "total_configs": len(configs), "total_runs": total_runs,
@@ -1446,7 +1465,8 @@ def main():
         })
 
     print("\n" + "="*60)
-    print(f"SWEEP COMPLETED: {success_runs}/{total_runs} runs executed successfully.")
+    print(f"SWEEP COMPLETED: {success_runs}/{total_runs} runs executed successfully "
+          f"({skipped_runs} skipped as already-recorded on resume).")
     print(f"Master dataset: {get_dataset_path(args.mode)}")
     print("="*60)
     write_status({
@@ -1454,7 +1474,7 @@ def main():
         "replicates": args.replicates, "total_configs": len(configs), "total_runs": total_runs,
         "run_number": total_runs, "config_index": len(configs) - 1 if configs else None,
         "current_config": None, "replicate": None,
-        "success_runs": success_runs, "failed_runs": failed_runs,
+        "success_runs": success_runs, "failed_runs": failed_runs, "skipped_runs": skipped_runs,
         "phase": "completed", "started_at": started_at, "updated_at": _now_iso(),
     })
 

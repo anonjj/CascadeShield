@@ -24,6 +24,7 @@ __pycache__/
 # otherwise match, and a global `*.csv` re-shadowed these files. Keep canary output ignored.
 data/*
 data/canary_runs.csv
+data/occupancy_dataset.csv
 !data/DATA_DICTIONARY.md
 !data/experiment_matrix.csv
 !data/master_dataset_schema.csv

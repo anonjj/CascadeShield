@@ -278,7 +278,6 @@ GATEWAY_DIAGNOSTIC_TARGET = {"gateway-service": "http://localhost:8080"}
 # A leg counts as "degraded" if its observed error rate over the fault window exceeds this.
 # OPEN QUESTION -- threshold to be signed off; see docs/proposals/blast-radius-redefinition.md
 REAL_BLAST_LEG_ERROR_THRESHOLD = 0.50
-EVENT_BUFFER_SIZE = 2000   # module-level, beside PERMITTED_CALLS_HALF_OPEN
 
 
 def run_command(args, cwd=None):
@@ -300,7 +299,7 @@ CB_SLIDING_WINDOW_TYPE={config['slidingWindowType']}
 CB_FAILURE_RATE_THRESHOLD={config['failureRateThreshold']}
 CB_WAIT_DURATION_OPEN={config['waitDurationInOpenState']}s
 CB_PERMITTED_CALLS_HALF_OPEN={PERMITTED_CALLS_HALF_OPEN}
-CB_EVENT_BUFFER_SIZE={EVENT_BUFFER_SIZE}
+CB_EVENT_BUFFER_SIZE={CB_EVENT_BUFFER_SIZE}
 CB_MINIMUM_CALLS={config.get('minimumNumberOfCalls', CB_MINIMUM_CALLS)}
 """
     os.makedirs(os.path.dirname(ENV_PATH), exist_ok=True)

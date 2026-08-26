@@ -216,6 +216,35 @@ This is the strongest available form of the H5 claim, and it makes the FAN_OUT c
 genuine test rather than a repetition: FAN_OUT is the only topology in the system where $B$ can
 physically take a value other than 0 and 0.25.
 
+### 5.4 Retiring the quartized metric in favor of the continuous leg vector (D3 / D-007)
+
+§5.3 already shows the mechanism: on LINEAR, exactly one leg (order-service) ever fires, so
+$B$ and $B_{\text{real}}$ have exactly two attainable values on every row collected so far —
+binarizing a per-leg rate that was never bimodal to begin with. `analysis/order_leg_containment.py`
+checks whether the underlying continuous signal — `order_leg`, the raw
+`leg_failure_rates["order-service"]` value — is worth reporting on its own rather than through
+that binarization.
+
+**It is.** On the current archive (79 rows, `analysis/out/order_leg_containment.json`):
+
+| window_type | window_size | $n$ | mean order\_leg |
+|---|---|---|---|
+| COUNT_BASED | 5 | 21 | 0.2798 |
+| COUNT_BASED | 10 | 12 | 0.3330 |
+| COUNT_BASED | 20 | 8 | 0.4160 |
+| TIME_BASED | 5 | 20 | 0.4688 |
+| TIME_BASED | 10 | 9 | 0.4665 |
+| TIME_BASED | 20 | 9 | 0.4708 |
+
+`order_leg` takes **32 distinct values** (vs. 2 for the quartized metric on the same rows),
+increases monotonically with `window_size` under COUNT_BASED (0.28 → 0.33 → 0.42, 95% CI
+[0.293, 0.355] pooled), and separates window_type cleanly with **no overlap**: COUNT_BASED's
+maximum (0.4167) sits below TIME_BASED's minimum (0.45, 95% CI [0.461, 0.476]) — Cliff's
+$\delta = -1.0$ (large). Thresholding that into a 4-point denominator and then defending a
+knife-edge $\tau_{\text{leg}}$ (D-001's whole problem) throws away exactly the resolution the
+paper needs. **Decision D-007: $B$/$B_{\text{real}}$ are retired as reported outcomes; `order_leg`
+is the reported containment signal, see §6 and §7.**
+
 ---
 
 ## 6. Metrics contract — frozen Day 1, not renegotiable
@@ -223,7 +252,9 @@ physically take a value other than 0 and 0.25.
 **Primary DVs:** $t_{\text{open}}$, $t_{\text{rec}}$.
 
 **Secondary DVs:** $\rho_{\text{order}}$ and the per-leg vector (continuous severity), $B$
-(containment, quartized), throughput loss, p95/p99 client latency.
+(containment, quartized), throughput loss, p95/p99 client latency. **D-007 (Day 3+): $B$
+retired as a reported outcome — see §5.4 and §7 — $\rho_{\text{order}}$ (`order_leg`) is the
+reported containment DV.**
 
 **Control DVs (mandatory):** $\phi$ (false-trip rate under null-fault runs), missed-detection
 rate, flap count (OPEN↔CLOSED transitions per run).
@@ -258,6 +289,23 @@ Day 6:
 - The 5→4 denominator change moved $B$'s entire support from $\{0, 0.2, 0.4\}$ to
   $\{0, 0.25, 0.5, 0.75, 1.0\}$. Three successive definitions of the same construct have now
   been applied to the same system; the metric-evolution narrative is Section VII's core.
+- **$B$/$B_{\text{real}}$ are retired, not fixed (D-007).** After three node-set redefinitions
+  and a shipped $\tau_{\text{leg}}$ that ranks nothing (D-001), the quartized metric is not
+  reported as evidence anywhere in this paper. The legacy CB-state `blast_radius` column needs
+  no further code change — it has been structurally correct since the gateway-isolation fix —
+  and stays in the dataset for reference, but the paper's containment claims rest entirely on
+  the continuous `order_leg` signal (§5.4), which has the resolution the quartized metric threw
+  away. Stated here plainly rather than left implicit across §4, §5, and D-001.
+- **Isolating the gateway removed the only propagation path LINEAR can show.** The
+  `measurement-plane` fix (above) was the right call for confound control — an uncontrolled
+  gateway breaker would have dominated every result. But §5.3 shows it also means a chain
+  topology exposes exactly one subject downstream of the injection point: cascade (more than
+  one leg degraded at once) is unobservable on LINEAR **by construction**, not by bad luck.
+  Every row in every archive checked (`current`, `v2_latency_5svc`,
+  `v3_gateway_not_rebuilt` — confirmed via topology counts) is LINEAR; zero FAN_OUT rows exist
+  anywhere. `--topology fanout` is already implemented in `experiments/runner.py` and has never
+  been swept. Every cascade-shaped claim in this paper (H5 beyond its LINEAR half, H6) depends
+  on that sweep happening — stated here so a reviewer finds it stated, not discovered.
 - H6's condition was removed by the `measurement-plane` isolation block. If the arm is run, the
   paper must state it as a **deliberate reconstruction of a removed confound**, not as a
   pre-existing condition. Every current row is `isolated`.

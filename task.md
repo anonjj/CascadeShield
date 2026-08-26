@@ -1,5 +1,30 @@
 # Tasks
 
+## D3 — blast_radius: fix, replace, or retire? (done)
+
+- [x] **Retired, not fixed.** `analysis/order_leg_containment.py` (new) confirms the
+      continuous signal behind the quartized metric — `order_leg` =
+      `leg_failure_rates["order-service"]`, the one leg that ever fires on LINEAR — has
+      32 distinct values (vs. 2 for the quartized `blast_radius`/`real_blast_radius`),
+      means monotonic in `window_size` under COUNT_BASED (0.28/0.33/0.42), and a clean
+      COUNT/TIME split with zero overlap (COUNT max 0.4167 < TIME min 0.45, Cliff's delta
+      = -1.0). Decision **D-007** in `docs/paper/decision-log.md`: quartized $B$ retired
+      to `hypotheses.md` §7 threats-to-validity, `order_leg` promoted to the reported
+      containment DV (§5.4, §6). Legacy `blast_radius` column needs no code fix (already
+      correct since the gateway-isolation change), stays in the schema for reference only.
+      `data/DATA_DICTIONARY.md` corrected (was stale-labeled "Primary outcome"). ML's
+      separate `blast_radius`-thresholded safe/unsafe label deliberately left untouched —
+      out of scope, its own engineering choice. Pushed to `retire/d3-blast-radius-metric`.
+
+- [x] **LINEAR/FAN_OUT tension stated explicitly, not left for a reviewer.** Confirmed via
+      topology counts: every row in every archive (`current`, `v2_latency_5svc`,
+      `v3_gateway_not_rebuilt`) is LINEAR — zero FAN_OUT rows exist anywhere, even though
+      `--topology fanout` is already implemented in `experiments/runner.py`. Isolating the
+      gateway (the right call for confound control) also removed the only propagation path
+      a chain topology can expose, so cascade is unobservable on LINEAR by construction.
+      Every cascade-shaped claim (H5 beyond its LINEAR half, H6) depends on a FAN_OUT sweep
+      that hasn't happened yet — now stated as a limitation in `hypotheses.md` §7, D-007.
+
 ## D7 — λ is a single value, and it is the variable your theory is about (in progress)
 
 - [x] **Code ported and wired up.** `--mode occupancy` added to `experiments/runner.py`:

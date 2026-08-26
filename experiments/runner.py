@@ -354,23 +354,35 @@ def wait_for_readiness(timeout=90):
     print(f"Timeout waiting for services to become healthy: {not_ready} never reported UP.", file=sys.stderr)
     return False, round(time.time() - start_time, 3)
 
-def inject_fault(fault_type, toxicity=1.0, crash_target=None):
+# Must match fault_injector.ToxiproxyClient.setup_default_proxies' proxy names exactly.
+INJECT_POINT_CHOICES = [
+    "order-service-proxy", "inventory-service-proxy", "payment-service-proxy",
+    "notification-service-proxy", "shared-db-service-proxy",
+]
+
+def inject_fault(fault_type, toxicity=1.0, inject_point=None):
     """Injects the appropriate fault profile into Toxiproxy.
 
-    toxicity/crash_target only affect the crash branch; both are no-ops for the
-    other fault types."""
+    inject_point overrides which proxy the fault lands on for EITHER fault type
+    (D4's supplementary check needs latency/crash injected at a service other than
+    the historical default). None preserves the pre-existing hardcoded target per
+    fault type, so every existing call site is unaffected unless it opts in. Must
+    be one of INJECT_POINT_CHOICES (matches fault_injector.setup_default_proxies'
+    proxy names).
+
+    toxicity only affects the crash branch; a no-op for the other fault types."""
     toxiproxy.reset_all()
 
     if fault_type == "latency":
-        # Inject high latency (3000ms) on inventory-service-proxy
-        # This simulates a slow inventory downstream dependency
-        toxiproxy.inject_latency("inventory-service-proxy", delay_ms=3000, toxicity=1.0)
+        # Inject high latency (3000ms) on the target proxy (inventory-service-proxy
+        # by default) -- simulates a slow downstream dependency.
+        toxiproxy.inject_latency(inject_point or "inventory-service-proxy", delay_ms=3000, toxicity=1.0)
 
     elif fault_type == "crash":
         # Reset a fraction (toxicity) of connections to the target proxy, simulating a
         # graded crash. toxicity=1.0 resets every connection (full outage, matching the
         # pre-sweep behavior of disabling the proxy outright).
-        toxiproxy.inject_reset_peer(crash_target or "payment-service-proxy", timeout_ms=0, toxicity=toxicity)
+        toxiproxy.inject_reset_peer(inject_point or "payment-service-proxy", timeout_ms=0, toxicity=toxicity)
 
     elif fault_type == "none":
         # Deliberate no-op: this is a control replicate. toxiproxy.reset_all() above already
@@ -1051,7 +1063,7 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
     print(f"Saved run metrics to {dataset_path}")
 
 def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
-                        run_order_seed=None, run_index=None, toxicity=1.0):
+                        run_order_seed=None, run_index=None, toxicity=1.0, inject_point=None):
     """Orchestrates a single configuration and fault run.
 
     run_order_seed/run_index describe this run's place in the sweep's shuffled
@@ -1130,10 +1142,11 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
     # 4. Inject fault into Toxiproxy
     fault_injected_at = _now_iso()
     # Sweep mode retargets crash to inventory-service-proxy (the same target latency
-    # uses) so mechanism, not service position, is the only thing varying.
-    crash_target = "inventory-service-proxy" if mode == "sweep" else None
+    # uses) so mechanism, not service position, is the only thing varying -- unless the
+    # caller explicitly asked for a different --inject-point, which wins over that default.
+    effective_inject_point = inject_point or ("inventory-service-proxy" if mode == "sweep" else None)
     try:
-        inject_fault(fault_type, toxicity=toxicity, crash_target=crash_target)
+        inject_fault(fault_type, toxicity=toxicity, inject_point=effective_inject_point)
     except Exception as e:
         print(f"Fault injection failed: {e} — skipping run.", file=sys.stderr)
         toxiproxy.reset_all()
@@ -1466,6 +1479,11 @@ def main():
                          help="Fraction of connections affected by the crash fault's reset_peer toxic "
                               "(0.0-1.0). Only meaningful for --fault crash. Default 1.0 matches today's "
                               "full-outage crash behavior.")
+    parser.add_argument("--inject-point", choices=INJECT_POINT_CHOICES, default=None,
+                         help="Toxiproxy target for the fault (D4's supplementary check). Default: "
+                              "inventory-service-proxy for --fault latency, payment-service-proxy for "
+                              "--fault crash (inventory-service-proxy in --mode sweep). Passing this "
+                              "overrides those mode/fault-type defaults for either fault type.")
     parser.add_argument("--replicates", type=int, default=N_REPLICATES, help=f"Number of replicates per config (default: {N_REPLICATES})")
     parser.add_argument("--seed", type=int, default=None,
                          help="Seed for the run-order shuffle (default: a fresh random seed each "
@@ -1573,7 +1591,7 @@ def main():
         })
         success = run_experiment_run(config, args.fault, args.mode, args.topology, replicate=rep,
                                       run_order_seed=run_order_seed, run_index=run_index,
-                                      toxicity=args.toxicity)
+                                      toxicity=args.toxicity, inject_point=args.inject_point)
         if success:
             success_runs += 1
         else:

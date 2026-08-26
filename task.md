@@ -1,5 +1,24 @@
 # Tasks
 
+## A2 — `--inject-point` CLI arg (done)
+
+- [x] **Both hardcodes replaced.** `inject_fault()`'s latency branch (`inventory-service-proxy`,
+      unconditional) and the crash-branch's sweep-mode retarget (`crash_target =
+      "inventory-service-proxy" if mode == "sweep" else None`) both collapsed into one
+      `inject_point` param, threaded CLI -> `main()` -> `run_experiment_run()` ->
+      `inject_fault()`. `--inject-point {order-service-proxy, inventory-service-proxy,
+      payment-service-proxy, notification-service-proxy, shared-db-service-proxy}`
+      (choices matching `fault_injector.setup_default_proxies()`'s proxy names, argparse
+      rejects anything else). Unset (`None`) preserves every existing default exactly:
+      latency -> inventory-service-proxy, crash -> payment-service-proxy (sweep mode's
+      inventory-service-proxy retarget still applies when unset), so no existing call
+      site's behavior changes. An explicit `--inject-point` wins over the sweep-mode
+      default. Verified via py_compile, a precedence self-test (4 cases: unset/non-sweep,
+      unset/sweep, explicit override on sweep, explicit on non-sweep), and an argparse
+      smoke test (valid choice runs, invalid choice rejected with the choice list).
+      Needed for D4's supplementary check (does the mechanism hold at an injection point
+      other than the historical default).
+
 ## D7 — λ is a single value, and it is the variable your theory is about (in progress)
 
 - [x] **Code ported and wired up.** `--mode occupancy` added to `experiments/runner.py`:

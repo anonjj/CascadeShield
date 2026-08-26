@@ -21,10 +21,10 @@
 
 - [ ] **Not yet done: an actual Docker end-to-end run.** No live mesh/Toxiproxy in this
       environment, so `--mode occupancy` has never actually been run against the real
-      services — only verified at the Python-logic level. Next step: on a machine with
-      the stack up, run `python3 experiments/runner.py --mode occupancy --fault latency
-      --topology linear --limit 1` as a smoke test before committing to the full
-      54-config × replicates run.
+      services — only verified at the Python-logic level. **Plan: run on the codespace,
+      bundled with the other pending live-stack tests.** Smoke test first:
+      `python3 experiments/runner.py --mode occupancy --fault latency --topology linear
+      --limit 1` — before committing to the full 54-config × replicates run.
 
 - [x] **`data/DATA_DICTIONARY.md` documentation — done, scoped to match precedent.**
       Checked first: `injected_toxicity` (D12's structurally identical sweep-mode

@@ -96,6 +96,16 @@ The unique key is the triple **(`experiment_id`, `environment`, `replicate`)**, 
 alone. There are **324 unique configurations**; with environments and replicates the table grows
 past 324 (e.g. 324 configs × 2 environments × 3 replicates = 1,944 rows).
 
+> **`machine_id` is not part of the key above, by design — watch it when comparing across
+> machines.** The triple was scoped before D6/D-008 added `machine_id`, back when
+> `environment` was the only host-provenance column and every run for a given
+> `(experiment_id, environment, replicate)` came from the same box. A cross-machine
+> calibration block (D-008) deliberately runs the *same* `(experiment_id, environment,
+> replicate)` on two different machines — that's the point, it's what makes the machines
+> comparable — so the triple alone no longer identifies a row once such data exists.
+> `analysis/machine_calibration.py` groups by `machine_id` explicitly rather than relying
+> on the triple to have stayed unique.
+
 `324 = 3 (topology) × 2 (fault_type) × 2 (window_type) × 3 (threshold) × 3 (window_size) × 3 (wait_duration)`
 
 ---
@@ -165,6 +175,7 @@ past 324 (e.g. 324 configs × 2 environments × 3 replicates = 1,944 rows).
 |--------|------|--------------|-------|
 | `permitted_calls_half_open` | int | `{5}` in this sweep (range ≥ 1) | Half-open probe budget — a **fixed** CB knob, not swept. Carried for provenance; **excluded from features**. |
 | `environment` | categorical | `LOCAL`, `AWS` | **Required for the ±15% divergence claim** — that metric is a per-config LOCAL-vs-AWS comparison. |
+| `machine_id` | string | hostname (e.g. `codespace-abc123`) | **Added D6/D-008.** Physical-host identity, auto-captured (`socket.gethostname()`), distinct from `environment`'s network-topology meaning. Needed to detect/calibrate a cross-machine confound whenever a sweep is split across boxes — e.g. topology split across two Codespaces. Carried for provenance; **excluded from features**. |
 | `mode` | categorical | `full` (this sweep); e.g. `canary` | Run mode/batch label. Carried for provenance; **excluded from features**. |
 | `replicate` | int | `1..R` (R ≥ 3 recommended) | Repeat index. Enables mean ± variance per config instead of a single noisy run. |
 | `run_timestamp` | string (ISO 8601) | `2026-06-21T14:32:05Z` | Provenance. Never used as a model feature. |

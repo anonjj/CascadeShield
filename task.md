@@ -1,5 +1,38 @@
 # Tasks
 
+## D6 — Cross-machine confounding (instrumented + ruled; calibration run itself blocked)
+
+- [x] **`machine_id` now stamped on every row.** `experiments/runner.py` auto-captures
+      `socket.gethostname()` (override via `MACHINE_ID` env var, mirroring the existing
+      `ENVIRONMENT` pattern) — no flag to remember, since forgetting one is exactly how
+      this confound stayed unnoticed. Distinct from `environment` (LOCAL/AWS network
+      provenance, already spoken for). Added to `DATASET_HEADERS`; inherited automatically
+      by the sweep/occupancy header extensions. `data/DATA_DICTIONARY.md` updated,
+      including a fix to the now-stale "unique key" note (`experiment_id`, `environment`,
+      `replicate` alone no longer identifies a row once a deliberate cross-machine
+      calibration reruns that same triple on a second box).
+
+- [x] **`analysis/machine_calibration.py` — built and self-tested, no real data yet.**
+      Given an identical LINEAR calibration block run on two machines, computes Cliff's
+      delta + bootstrap CI on `time_to_open`/`time_to_recover` between them and returns
+      `MACHINE_EFFECT_NEGLIGIBLE` or `MACHINE_EFFECT_DETECTED` — never fabricates a
+      verdict (`SKIPPED_NO_CALIBRATION_DATA` when fewer than 2 machines are present, which
+      is every dataset that exists today). 3/3 self-test fixtures pass.
+
+- [x] **Interim rule adopted in the paper now, not contingent on the run happening.**
+      `docs/paper/decision-log.md` D-008 and `hypotheses.md` §7: no claim in this paper
+      compares `time_to_open`/`time_to_recover` across topology unless
+      `machine_calibration.py` reads `MACHINE_EFFECT_NEGLIGIBLE`. `order_leg`/blast-radius
+      -style comparisons (D-007) are unaffected — only the timing DVs are gated.
+
+- [ ] **Not yet done: the actual calibration run.** Needs both real machines (Jay's and
+      Soham's Codespaces) — unavailable here. Next step: on each machine, run
+      `python3 experiments/runner.py --mode canary --topology linear --limit 10`, save off
+      each machine's `data/canary_runs.csv` separately (it's overwritten on the next
+      canary run), then `python3 analysis/machine_calibration.py <machine_a>.csv
+      <machine_b>.csv` and read the verdict. ~2–3h of compute; buys either a clean
+      cross-topology timing claim or a quantified correction.
+
 ## D3 — blast_radius: fix, replace, or retire? (done)
 
 - [x] **Retired, not fixed.** `analysis/order_leg_containment.py` (new) confirms the

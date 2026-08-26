@@ -306,6 +306,20 @@ Day 6:
   anywhere. `--topology fanout` is already implemented in `experiments/runner.py` and has never
   been swept. Every cascade-shaped claim in this paper (H5 beyond its LINEAR half, H6) depends
   on that sweep happening — stated here so a reviewer finds it stated, not discovered.
+- **The FAN_OUT sweep that closes the bullet above compounds with a second confound
+  (D6/D-008) unless it's run carefully.** The obvious way to get LINEAR and FAN_OUT data at
+  once is to split them across two machines. Splitting one sweep across two boxes was
+  already refused once for exactly this reason (shared-host thermal/memory drift,
+  D-005/§7); doing it along the topology axis makes it worse — machine would be **perfectly
+  aligned with topology**, so any LINEAR-vs-FAN_OUT contrast on $t_{\text{open}}$ or
+  $t_{\text{rec}}$ could not tell topology and machine apart. Every row is now stamped with
+  `machine_id` (`experiments/runner.py`, auto-captured via hostname) so this is at least
+  measurable, and D-008 sets the rule that holds **starting now, independent of whether the
+  calibration below has run**: no claim in this paper compares $t_{\text{open}}$ or
+  $t_{\text{rec}}$ across topology unless `analysis/machine_calibration.py` (run on an
+  identical ~10-run LINEAR block executed on both machines) reads
+  `MACHINE_EFFECT_NEGLIGIBLE`. `order_leg`/blast-radius-style comparisons (§5.4) are not
+  gated by this — only the timing DVs are.
 - H6's condition was removed by the `measurement-plane` isolation block. If the arm is run, the
   paper must state it as a **deliberate reconstruction of a removed confound**, not as a
   pre-existing condition. Every current row is `isolated`.

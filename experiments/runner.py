@@ -5,6 +5,7 @@ import argparse
 import subprocess
 import csv
 import random
+import socket
 import statistics
 import urllib.request
 import json
@@ -33,6 +34,11 @@ DATASET_HEADERS = [
     "experiment_id", "topology", "fault_type", "window_type",
     "threshold", "window_size", "wait_duration", "permitted_calls_half_open",
     "environment", "mode", "replicate", "run_timestamp",
+    # D6: which physical machine produced this row (see MACHINE_ID / D-008). Distinct from
+    # `environment`, which is LOCAL/AWS network-topology provenance for the divergence
+    # claim -- this is host identity, needed to detect/calibrate cross-machine confounds
+    # when a sweep is split across boxes (e.g. topology split across two Codespaces).
+    "machine_id",
     "blast_radius", "time_to_open", "time_to_recover",
     "error_rate", "throughput_loss",
     # Task 2: request-level blast radius (real observed failure), kept ALONGSIDE the
@@ -142,6 +148,12 @@ completed_runs = set()
 # How many replicates per config (min 3 for variance estimation)
 N_REPLICATES = 3
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "LOCAL")  # override to AWS on cloud runs
+# D6: which physical machine produced this row. Auto-captured (not a flag someone has to
+# remember to pass) because the cross-machine confound this exists to catch is exactly the
+# kind that goes unnoticed when it depends on operator discipline -- see
+# docs/paper/decision-log.md D-008. Override only when hostname alone doesn't disambiguate
+# (e.g. identically-named containers).
+MACHINE_ID = os.environ.get("MACHINE_ID", socket.gethostname())
 
 # No-fault control condition (fault_type=NONE): without it, a config reading blast_radius=0
 # under a real fault is not distinguishable from a config that would read 0 regardless of
@@ -814,6 +826,7 @@ def log_cb_transitions(experiment_id, topology, fault_type, config, mode, replic
         "fault_type": fault_type.upper(),
         "window_type": config["slidingWindowType"],
         "environment": ENVIRONMENT,
+        "machine_id": MACHINE_ID,
         "mode": mode,
         "replicate": replicate,
         "fault_injected_at": fault_injected_at,
@@ -1001,6 +1014,7 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
         "wait_duration": config["waitDurationInOpenState"],
         "permitted_calls_half_open": config.get("permittedCallsInHalfOpenState", 5),
         "environment": ENVIRONMENT,
+        "machine_id": MACHINE_ID,
         "mode": mode,
         "replicate": replicate,
         "run_timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),

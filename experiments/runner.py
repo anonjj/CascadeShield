@@ -147,9 +147,10 @@ SWEEP_DATASET_HEADERS = _with_extra_columns(["injected_toxicity"])
 # Occupancy-ratio sweep (mode="occupancy", D7 -- lambda is a variable, not a single
 # fixed value): same 35 columns as master, plus the occupancy diagnostic pair. A
 # separate header/file for the same reason as SWEEP_DATASET_HEADERS above -- adding
-# these directly to the shared DATASET_HEADERS would retroactively 36-column-mismatch
-# the already-collected 34-column data/master_dataset.csv (exactly the incident
-# resumable_runner.py's load_completed() now fails loudly on instead of silently).
+# these directly to the shared DATASET_HEADERS would retroactively column-mismatch
+# the already-collected data/master_dataset.csv (20 columns on disk, 80 rows) -- exactly
+# the incident resumable_runner.py's load_completed() now fails loudly on instead of
+# silently.
 OCCUPANCY_DATASET_HEADERS = _with_extra_columns(["occupancy_ratio", "inert"])
 
 # (experiment_id, str(replicate)) pairs already written to the current run's dataset

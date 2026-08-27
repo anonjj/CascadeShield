@@ -12,7 +12,7 @@
       since — D9's dict-based `log_results`, D11's throttle removal, D12's sweep mode.
       Fixed two real bugs found while porting: (1) the original put the new columns
       directly in the shared `DATASET_HEADERS`, which would have header-mismatched the
-      already-collected 34-col `data/master_dataset.csv`; (2) the original changed
+      already-collected `data/master_dataset.csv` (20-col on disk, 80 rows); (2) the original changed
       `compute_load_plan()`'s TIME_BASED duration formula *unconditionally*, silently
       making full/canary sweeps run ~10x longer — now gated to occupancy-mode configs
       only. Verified via py_compile, config-count checks, and a temp-path `log_results`

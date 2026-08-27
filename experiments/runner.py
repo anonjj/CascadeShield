@@ -985,7 +985,7 @@ def get_dataset_path(mode):
         return OCCUPANCY_DATASET_PATH
     return DATASET_PATH
 
-def log_results(config, fault_type, mode, topology, metrics, replicate):
+def log_results(config, fault_type, mode, topology, metrics, replicate, machine_id=""):
     """Appends experiment run results to master_dataset.csv (full mode), canary_runs.csv
     (canary mode), crash_toxicity_sweep.csv (sweep mode -- DATASET_HEADERS plus
     injected_toxicity), or occupancy_dataset.csv (occupancy mode -- DATASET_HEADERS plus
@@ -1000,6 +1000,13 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
     run_index are the two exceptions expected on every row regardless of
     outcome -- a run's position in the shuffled execution order is known the
     moment it starts, independent of what happens during it.
+
+    machine_id (D14) is the same kind of exception, but arrives as an argument
+    rather than through metrics: it comes from --machine-id and describes the
+    host, not the run, so it is known before the run starts and is written on
+    abort rows too. Passed explicitly rather than left to append_row's
+    restval="" blank-fill, so a row that names no machine is an operator who
+    omitted the flag, not a plumbing gap.
 
     The header-mismatch guard now lives in resumable_runner.load_completed(),
     called once at the top of main() -- a mismatch there raises SystemExit
@@ -1056,6 +1063,7 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
         "lambda_cv": f"{metrics['lambda_cv']:.4f}" if metrics.get('lambda_cv') is not None else "",
         "lambda_deviation_flag": metrics.get("lambda_deviation_flag") if metrics.get("lambda_deviation_flag") is not None else "",
         "effective_horizon": f"{metrics['effective_horizon']:.4f}" if metrics.get('effective_horizon') is not None else "",
+        "machine_id": machine_id,  # from --machine-id; "" when the flag was omitted (D14)
         "excluded_reason": "",  # always empty at write time; only analysis/quarantine.py fills it
     }
     if mode == "sweep":
@@ -1082,13 +1090,16 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
     print(f"Saved run metrics to {dataset_path}")
 
 def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
-                        run_order_seed=None, run_index=None, toxicity=1.0):
+                        run_order_seed=None, run_index=None, toxicity=1.0,
+                        machine_id=""):
     """Orchestrates a single configuration and fault run.
 
     run_order_seed/run_index describe this run's place in the sweep's shuffled
     execution order (see main()) -- attached to every log_results call in this
     function, including both abort paths, so a run's position is recoverable
-    even when it never got far enough to produce an outcome."""
+    even when it never got far enough to produce an outcome. machine_id (D14)
+    is threaded the same way and for the same reason: which host produced a row
+    is exactly as recoverable on an aborted run as on a completed one."""
     print("\n" + "="*60)
     print(f"STARTING EXPERIMENT: Mode={mode}, Topology={topology}, Fault={fault_type}, Replicate={replicate}")
     print(f"Config: {config}")
@@ -1113,7 +1124,7 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
             "run_order_seed": run_order_seed,
             "run_index": run_index,
             "injected_toxicity": toxicity,
-        }, replicate)
+        }, replicate, machine_id=machine_id)
         return False
 
     # 2b. Breaker-state-reset precondition (see the "Breaker-state-reset precondition"
@@ -1136,7 +1147,7 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
             "run_order_seed": run_order_seed,
             "run_index": run_index,
             "injected_toxicity": toxicity,
-        }, replicate)
+        }, replicate, machine_id=machine_id)
         return False
 
     # Snapshot each interior breaker's actuator ring buffer before the fault, so
@@ -1376,7 +1387,7 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
         "effective_horizon": effective_horizon,
         "injected_toxicity": toxicity,
     }
-    log_results(config, fault_type, mode, topology, metrics, replicate)
+    log_results(config, fault_type, mode, topology, metrics, replicate, machine_id=machine_id)
 
     # Record real per-service breaker transitions for this run regardless of what
     # blast_radius/cb_opened concluded -- catching the case where the aggregate
@@ -1525,6 +1536,10 @@ def main():
                          help="Cap the (already shuffled) run list to the first N runs -- e.g. "
                               "--limit 1 for a single-run smoke test instead of a full sweep. "
                               "Applied after shuffling, so it does not bias which config runs.")
+    parser.add_argument("--machine-id", default="",
+                         help="Label identifying which machine/Codespace produced this run's rows, "
+                              "e.g. 'soham-codespace' or 'soham-local'. Written to the machine_id "
+                              "column. Blank if omitted.")
 
     args = parser.parse_args()
 
@@ -1623,7 +1638,7 @@ def main():
         })
         success = run_experiment_run(config, args.fault, args.mode, args.topology, replicate=rep,
                                       run_order_seed=run_order_seed, run_index=run_index,
-                                      toxicity=args.toxicity)
+                                      toxicity=args.toxicity, machine_id=args.machine_id)
         if success:
             success_runs += 1
         else:

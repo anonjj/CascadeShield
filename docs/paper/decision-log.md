@@ -140,9 +140,9 @@ It does not reconsider which paper.
 and memory drift; the seeded shuffle is what lets anyone re-derive the exact order from the
 artifact alone.
 
----  
+---
 
-## D-006 · Canonical 47-column schema freeze (restructure re-run)
+## D8 · Canonical 47-column schema freeze (restructure re-run)
 
 **Date:** 27 Aug 2026 · **Decided by:** Soham · **Status:** final
 
@@ -181,3 +181,108 @@ parameter for the crash-toxicity sweep). Per the dictionary's own rule, any such
 needs its own decision-log entry in the same commit that adds the column.
 
 ---
+
+## D13 · H3's recovery-side negative control is downgraded to untested, pending the
+transition sidecar
+
+**Date:** 2026-08-25 (ad hoc D12 investigation, outside the Day 1–5 cadence) · **Decided
+by:** Jay · **Status:** re-opened 2026-08-27 — see Update below; real signal found, not yet
+confirmed at adequate sample size
+
+**Decision.** H3's §4 leak-audit clearance never actually tested `window_type` as a factor
+on $t_{\text{rec}}$ — it tested for breaker state carrying over between replicates, a
+different contamination mode. `analysis/window_type_recovery_leak.py` runs the direct test.
+H3's negative control on $t_{\text{rec}}$ is downgraded from "cleared" to "untested against
+this specific mechanism, pending a re-run that retains `data/cb_transitions.jsonl`."
+
+**Numbers** (`analysis/out/window_type_recovery_leak.json`, 79 rows / current archive; same
+shape on `v2_latency_5svc` and `v3_gateway_not_rebuilt`): TIME's median $t_{\text{rec}}$ is
+2.06–3.68x COUNT's at every matched $D_w \in \{5,15,30\}$. Decomposed: TIME's $t_{\text{open}}$
+anchor runs a flat ~3s later than COUNT's at every $D_w$ (non-buggy — TIME_BASED windows
+accumulate over wall-clock seconds), but TIME's excess over $D_w$ **grows** (19.1s → 20.2s →
+35.1s) while COUNT's stays flat (~1.5–1.7s) — not explainable by a constant anchor shift
+alone. The precise HALF_OPEN→CLOSED metric that would isolate the leak from the anchor shift
+could not be computed: `data/cb_transitions.jsonl` does not exist in any archive on disk.
+
+**Rejected:** treating the existing §4 leak-audit clearance as also covering a window_type
+main-effect check on $t_{\text{rec}}$ — it doesn't; it never varied window_type as a factor.
+**Also rejected:** reporting a leak/no-leak verdict from the coarse ratio alone — the anchor
+shift is a real, legitimate, non-buggy confound that the coarse metric cannot separate from
+a genuine recovery-side effect.
+
+**Revisit if:** a future `experiments/runner.py` invocation retains `data/cb_transitions.jsonl`
+for a sweep spanning both window types at matched $D_w$ — re-run
+`analysis/window_type_recovery_leak.py` against it and read the `precise` block's verdict.
+
+---
+
+**Update (2026-08-27).** The revisit condition above is met. Along the way, two harness bugs
+were found and fixed that had been silently preventing the precise metric from ever being
+computed (see commits `0494dd0`, `cb7f9d7` on `worktree-session-handoff`):
+
+1. `CB_EVENT_BUFFER_SIZE` was 50 — too small once traffic is deliberately sustained through
+   the full `waitDurationInOpenState` (by design, so a HALF_OPEN probe fires): every rejected
+   call during that period emits its own `NOT_PERMITTED` event into the *same* shared
+   per-breaker ring buffer as `STATE_TRANSITION` events, and at $D_w \geq 15$ this reliably
+   evicted the original `CLOSED_TO_OPEN` event before collection. Fixed: 50 → 5000.
+2. The recovery-polling loop was breaking ~2s after the breaker left OPEN for HALF_OPEN
+   (`blast_radius` flips to 0.0 the instant it leaves OPEN, not when it reaches CLOSED — a
+   limitation the loop's own comment already documented), then collecting transitions
+   immediately — never giving HALF_OPEN's probe calls a chance to resolve either way. Fixed:
+   ~4s of additional real traffic + settle time after the loop exits, before collection.
+
+With both fixed, `analysis/window_type_recovery_leak.py` returns
+**`LEAK_CONFIRMED_ON_HALF_OPEN_LEG`**: TIME's median precise HALF_OPEN→CLOSED duration is
+**8.9x–14.3x** COUNT's, monotonically increasing with $D_w$ (2.15s→19.03s at $D_w$=5;
+2.16s→20.87s at $D_w$=15; 2.48s→35.35s at $D_w$=30) — the same shape as the coarse excess
+decomposition, now on the metric that actually isolates the HALF_OPEN leg.
+
+**Not yet promoting this to "final confirmed"**: every median above is **n=1 TIME_BASED row
+per $D_w$ bucket** (`n_count` 1/3/3) — real, directionally consistent, mechanistically
+unexplained (the originally-suspected mechanism is still architecturally ruled out for
+Resilience4j 2.2.0, so *something else* is causing this), but too thin to close the question.
+**Status stays "re-opened, preliminary" until a modest replicate top-up** (not a full re-sweep
+— a handful more `TIME_BASED` runs at each $D_w$) raises `n_time` per bucket above 1.
+
+---
+
+## D14 · `machine_id` is added to the canonical schema, before `excluded_reason`
+
+**Date:** 27 Aug 2026 · **Status:** final
+
+**Decision.** `machine_id` is added to the canonical schema as a nullable string: a free-form
+label for the machine or Codespace that produced the row (e.g. `codespace-abc123`). Blank —
+never `0`, never a sentinel — when the harness did not record one, per D8's blank rule. It is
+provenance, never a feature: `preprocessing.py`'s `FEATURE_COLUMNS` is an explicit allow-list,
+so an unlisted column cannot reach a model. Note it is **not yet** added to that module's
+`PROVENANCE_COLUMNS` either — today it simply rides along unreferenced, which is safe but
+means `machine_id` is not currently loaded for the D6 grouping that motivates it.
+
+**Why:** D6's cross-machine calibration compares runs collected on different hosts. Splitting a
+sweep across machines confounds host with treatment, and nothing in the existing 47 columns
+recovers which host wrote a given row after the fact — `environment` only distinguishes
+`LOCAL` from `AWS`, not one Codespace from another. Without this column the calibration is
+not computable from the artifact alone.
+
+**Position:** immediately **before** `excluded_reason`, making it column 47 of 48. D8 keeps
+`excluded_reason` last on purpose — it is assigned post-hoc by `analysis/quarantine.py`, so a
+column appended after it would be shifted by a re-quarantine. Every header now ends with
+`excluded_reason`: `runner.DATASET_HEADERS` and both derived headers splice their extra
+columns in before it via `_with_extra_columns()`. That also corrects a pre-existing case of the
+same fault — `injected_toxicity` (sweep mode) and `occupancy_ratio`/`inert` (occupancy mode)
+were previously appended *after* `excluded_reason`.
+
+**Rejected:** appending `machine_id` last, which is where it first landed — simpler, but it
+breaks the D8 invariant this entry exists to protect. **Also rejected:** making it non-nullable
+(rows already collected have no host to attribute, and back-filling a guess would be fabrication).
+
+**Consequence:** the canonical schema goes 47 → 48 columns. No row-writing logic changed:
+`log_results` builds a dict and writes through `resumable_runner.append_row`'s
+`DictWriter(restval="", extrasaction="ignore")`, so a row that omits `machine_id` writes it
+blank. The already-collected `data/master_dataset.csv` (20 columns on disk, 80 rows) will now
+fail `load_completed()`'s header guard loudly, as designed — the next sweep starts a fresh file
+rather than padding historical rows.
+
+**Revisit if:** every run lands on one host again and the cross-machine comparison D6 needs is
+retired — the column stays in the schema regardless (removing it would re-fork the header), but
+it can stop being populated.

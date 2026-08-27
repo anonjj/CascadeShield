@@ -1,46 +1,46 @@
 |--- window_size <= 15.000
-|   |--- window_type_is_time <= 0.500
-|   |   |--- threshold <= 60.000
+|   |--- window_size <= 7.500
+|   |   |--- window_type_is_time <= 0.500
 |   |   |   |--- threshold <= 40.000
-|   |   |   |   |--- value: [3.391]
+|   |   |   |   |--- value: [1.007]
 |   |   |   |--- threshold >  40.000
-|   |   |   |   |--- value: [3.585]
-|   |   |--- threshold >  60.000
-|   |   |   |--- window_size <= 7.500
-|   |   |   |   |--- value: [3.643]
-|   |   |   |--- window_size >  7.500
-|   |   |   |   |--- value: [6.547]
-|   |--- window_type_is_time >  0.500
-|   |   |--- window_size <= 7.500
-|   |   |   |--- wait_duration <= 22.500
-|   |   |   |   |--- value: [5.866]
-|   |   |   |--- wait_duration >  22.500
-|   |   |   |   |--- value: [4.264]
-|   |   |--- window_size >  7.500
+|   |   |   |   |--- value: [1.523]
+|   |   |--- window_type_is_time >  0.500
 |   |   |   |--- threshold <= 40.000
-|   |   |   |   |--- value: [6.753]
+|   |   |   |   |--- value: [1.748]
 |   |   |   |--- threshold >  40.000
-|   |   |   |   |--- value: [10.362]
+|   |   |   |   |--- value: [2.640]
+|   |--- window_size >  7.500
+|   |   |--- window_type_is_time <= 0.500
+|   |   |   |--- threshold <= 40.000
+|   |   |   |   |--- value: [1.996]
+|   |   |   |--- threshold >  40.000
+|   |   |   |   |--- value: [3.058]
+|   |   |--- window_type_is_time >  0.500
+|   |   |   |--- threshold <= 40.000
+|   |   |   |   |--- value: [3.454]
+|   |   |   |--- threshold >  40.000
+|   |   |   |   |--- value: [5.194]
 |--- window_size >  15.000
 |   |--- window_type_is_time <= 0.500
-|   |   |--- threshold <= 60.000
-|   |   |   |--- threshold <= 40.000
-|   |   |   |   |--- value: [6.471]
-|   |   |   |--- threshold >  40.000
-|   |   |   |   |--- value: [6.780]
-|   |   |--- threshold >  60.000
+|   |   |--- threshold <= 40.000
 |   |   |   |--- wait_duration <= 22.500
-|   |   |   |   |--- value: [9.861]
+|   |   |   |   |--- value: [4.055]
 |   |   |   |--- wait_duration >  22.500
-|   |   |   |   |--- value: [9.702]
+|   |   |   |   |--- value: [3.858]
+|   |   |--- threshold >  40.000
+|   |   |   |--- threshold <= 60.000
+|   |   |   |   |--- value: [5.548]
+|   |   |   |--- threshold >  60.000
+|   |   |   |   |--- value: [6.914]
 |   |--- window_type_is_time >  0.500
-|   |   |--- threshold <= 60.000
-|   |   |   |--- wait_duration <= 22.500
-|   |   |   |   |--- value: [9.835]
-|   |   |   |--- wait_duration >  22.500
-|   |   |   |   |--- value: [14.153]
-|   |   |--- threshold >  60.000
+|   |   |--- threshold <= 40.000
 |   |   |   |--- wait_duration <= 10.000
-|   |   |   |   |--- value: [18.991]
+|   |   |   |   |--- value: [7.134]
 |   |   |   |--- wait_duration >  10.000
-|   |   |   |   |--- value: [18.789]
+|   |   |   |   |--- value: [7.010]
+|   |   |--- threshold >  40.000
+|   |   |   |--- threshold <= 60.000
+|   |   |   |   |--- value: [9.588]
+|   |   |   |--- threshold >  60.000
+|   |   |   |   |--- value: [12.000]

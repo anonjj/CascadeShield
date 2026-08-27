@@ -4,7 +4,7 @@ generate_synthetic_data.py -- CascadeShield ML pipeline (Soham)
 
 Produces a SCHEMA-CONFORMANT synthetic dataset so the ML pipeline (Isolation
 Forest + Decision Tree recommender) can be developed, tested, and demonstrated
-BEFORE the real 486-config chaos sweep has run on the mesh.
+BEFORE the real 324-config chaos sweep has run on the mesh.
 
     *** THIS DATA IS SIMULATED -- NOT MEASURED. ***
     Replace data/master_dataset.csv with the real runner.py output once the
@@ -14,7 +14,7 @@ BEFORE the real 486-config chaos sweep has run on the mesh.
 
 How it works
 ------------
-Builds the 486 real-sweep configurations directly from ml/preprocessing.py's
+Builds the 324 real-sweep configurations directly from ml/preprocessing.py's
 schema constants (topology/fault/window/threshold/window_size/wait_duration),
 NOT from data/experiment_matrix.csv -- that file documents the originally
 *planned* grid, which the real sweep deviated from (see data/DATA_DICTIONARY.md's
@@ -26,17 +26,17 @@ and prevents the two from drifting apart again.
 For each (config x environment x replicate), simulates the 5 measured outcomes
 with a documented response model that encodes the study's working hypotheses:
 
-  * Fault contagion:   CRASH > LATENCY > THROTTLE.
+  * Fault contagion:   CRASH > LATENCY.
   * Topology blast:    SHARED_DEP_MESH > FAN_OUT > LINEAR (shared deps
                        cause common-mode failure).
   * Breaker tightness: looser breakers (higher threshold, larger window) contain
                        less, so blast radius goes up.
   * NOVELTY:           the better window_type DEPENDS on the fault. TIME_BASED
                        wins under LATENCY (sustained degradation accumulates over
-                       time); COUNT_BASED wins under CRASH/THROTTLE (discrete
-                       failures are counted immediately). This interaction is the
-                       structure the Decision Tree should recover and the paper
-                       should report.
+                       time); COUNT_BASED wins under CRASH (discrete failures are
+                       counted immediately). This interaction is the structure
+                       the Decision Tree should recover and the paper should
+                       report.
   * Environment:       AWS runs are slightly worse than LOCAL (within ~15%),
                        which feeds the LOCAL-vs-AWS divergence analysis.
 
@@ -76,11 +76,11 @@ SCHEMA_COLUMNS = [
 # Short codes for experiment_id generation, matching runner.py's make_experiment_id
 # naming style (e.g. LIN-LAT-CNT-T30-W10-D5).
 TOPO_CODE = {"LINEAR": "LIN", "FAN_OUT": "FAN", "SHARED_DEP_MESH": "MSH"}
-FAULT_CODE = {"LATENCY": "LAT", "CRASH": "CRS", "THROTTLE": "THR"}
+FAULT_CODE = {"LATENCY": "LAT", "CRASH": "CRS"}
 WTYPE_CODE = {"COUNT_BASED": "CNT", "TIME_BASED": "TIM"}
 
 # ---- response-model coefficients (all documented in README.md) ----------------
-FAULT_BASE = {"CRASH": 0.55, "LATENCY": 0.45, "THROTTLE": 0.30}
+FAULT_BASE = {"CRASH": 0.55, "LATENCY": 0.45}
 # Topology keys must match preprocessing.TOPOLOGIES exactly (LINEAR, matching the
 # real sweep) so one-hot encoding in preprocessing.py produces non-zero columns.
 TOPO_MULT = {"SHARED_DEP_MESH": 1.30, "FAN_OUT": 1.05, "LINEAR": 0.82}
@@ -89,9 +89,8 @@ TOPO_MULT = {"SHARED_DEP_MESH": 1.30, "FAN_OUT": 1.05, "LINEAR": 0.82}
 WT_INTERACTION = {
     ("LATENCY", "TIME_BASED"): -0.07, ("LATENCY", "COUNT_BASED"): +0.05,
     ("CRASH", "TIME_BASED"): +0.05, ("CRASH", "COUNT_BASED"): -0.06,
-    ("THROTTLE", "TIME_BASED"): +0.03, ("THROTTLE", "COUNT_BASED"): -0.04,
 }
-FAULT_ERROR_ADJ = {"CRASH": 0.08, "LATENCY": 0.02, "THROTTLE": -0.03}
+FAULT_ERROR_ADJ = {"CRASH": 0.08, "LATENCY": 0.02}
 
 # Normalisation bounds derived directly from preprocessing.py's real sweep grid
 # so they can never drift out of sync with it again.
@@ -119,16 +118,27 @@ def simulate_outcomes(cfg, environment: str, rng: np.random.Generator) -> dict:
     wait_n = _norm(cfg.wait_duration, *WAIT_RANGE)
 
     # --- blast radius: the primary outcome -----------------------------------
-    latent = (
+    latent_base = (
         FAULT_BASE[cfg.fault_type] * TOPO_MULT[cfg.topology]
         + 0.18 * thr_n            # looser trip threshold -> contains later
         + 0.12 * win_n            # bigger window -> slower to accumulate -> later
         + 0.03 * wait_n           # longer open state -> degraded a touch longer
-        + WT_INTERACTION[(cfg.fault_type, cfg.window_type)]
     )
+    latent = latent_base + WT_INTERACTION[(cfg.fault_type, cfg.window_type)]
     env_mult = 1.0 if environment == "LOCAL" else float(rng.uniform(1.03, 1.14))
     latent *= env_mult
-    blast = float(np.clip(latent + rng.normal(0.0, 0.045), 0.03, 0.99))
+    noise = rng.normal(0.0, 0.045)
+    blast = float(np.clip(latent + noise, 0.03, 0.99))
+
+    # severity: the same draw as blast, minus window_type's additive interaction term.
+    # time_to_recover scales off this instead of `blast` so window_type cannot leak into
+    # recovery through the blast-radius channel (D12 fix,
+    # analysis/window_type_recovery_leak.py). blast_radius/error_rate/throughput_loss
+    # below are UNCHANGED -- window_type's effect on those (the intentional
+    # detection/containment-side interaction) is preserved on purpose. Reuses `noise`
+    # rather than drawing a fresh one, so this fix doesn't shift the rng stream for any
+    # later row under a fixed --seed.
+    severity = float(np.clip(latent_base * env_mult + noise, 0.03, 0.99))
 
     # --- correlated secondary outcomes ---------------------------------------
     error_rate = float(np.clip(
@@ -155,8 +165,19 @@ def simulate_outcomes(cfg, environment: str, rng: np.random.Generator) -> dict:
 
     # --- time_to_recover: NULL when not back to baseline within the window ---
     if not np.isnan(time_to_open):
-        ttr = cfg.wait_duration * (1.0 + 0.6 * blast) + rng.normal(0.0, 1.5)
+        ttr = cfg.wait_duration * (1.0 + 0.6 * severity) + rng.normal(0.0, 1.5)
         ttr = max(cfg.wait_duration * 0.8, ttr)
+        # Deliberately still gated on `blast`, not `severity`: this short-circuit's
+        # rng.random() draw only fires when blast > 0.85, and gating it on `severity`
+        # instead would change how many rows draw it (wherever blast/severity disagree
+        # on the 0.85 crossing), shifting the shared rng stream for every later row and
+        # perturbing blast_radius/error_rate/throughput_loss on unrelated rows as a pure
+        # side effect. Using `blast` here keeps rng consumption identical to before this
+        # fix -- the D12 fix only needs ttr's continuous VALUE decoupled from
+        # window_type, which the `severity` swap above already does. This leaves a
+        # narrow residual: window_type can still influence whether a high-severity run
+        # gets flagged never_recovered at all (not now-recovered's magnitude), which is
+        # a deliberately smaller and different channel than the leak this fix targets.
         never_recovered = (
             (blast > 0.85 and cfg.wait_duration >= 10 and rng.random() < 0.6)
             or ttr > OBSERVATION_WINDOW_S
@@ -202,7 +223,7 @@ def inject_anomaly(out: dict, rng: np.random.Generator) -> tuple[dict, str]:
 
 
 def _build_config_grid() -> pd.DataFrame:
-    """Builds the 486-config grid as the cartesian product of preprocessing.py's
+    """Builds the 324-config grid as the cartesian product of preprocessing.py's
     real sweep constants -- the single source of truth for topology/fault/window
     values, kept in sync with runner.py's DATASET_HEADERS. Deliberately does NOT
     read data/experiment_matrix.csv (see module docstring: that file is the

@@ -60,12 +60,27 @@ See `docs/paper/leak-audit.md` for how each verdict was reached.
 
 **Status:** Defined (Week 1). **Lock target:** end of Week 2 — no column changes after that.
 **Primary file:** `data/master_dataset_schema.csv` (header-only skeleton; experiments append rows).
-**Planning file:** `data/experiment_matrix.csv` (486 fault-bearing configurations —
-`LATENCY`/`CRASH`/`THROTTLE` — plus 162 `NONE` no-fault control configurations, 648 total).
+**Planning file:** `data/experiment_matrix.csv` (324 fault-bearing configurations —
+`LATENCY`/`CRASH` — plus 162 `NONE` no-fault control configurations, 486 total). `THROTTLE`
+was dropped from the plan: it never produced usable data in any archive (only the
+unusable pre-timing `v1_prefix` sweep has it), and its effect was judged redundant with
+`LATENCY`'s slow-call mechanism.
+
+**Auxiliary sweep modes** write to their own isolated files, each with a small header
+extension kept out of this master schema by design (`get_dataset_path`/`log_results` in
+`experiments/runner.py`), and — like `injected_toxicity` before them — are not
+documented column-by-column here to avoid a second, driftable copy of the schema; see
+the mode's own code comments in `runner.py` for the exact columns:
+- `data/crash_toxicity_sweep.csv` (`--mode sweep`) — adds `injected_toxicity`.
+- `data/occupancy_dataset.csv` (`--mode occupancy`, **D7**: sweeps λ ∈ {5, 10, 20} against
+  `minimumNumberOfCalls` and `window_size`, since H2's crossover-λ* claim needs λ to
+  actually vary) — adds `occupancy_ratio` (how full the sliding window was relative to
+  `minimumNumberOfCalls`) and `inert` (observed: did the breaker ever open, given a
+  trustworthy `lambda_achieved` measurement).
 
 > 🔄 **SWEEP IN PROGRESS — current `master_dataset.csv` is a partial rebuild.**
 > After the blast-radius metric change the dataset was reseeded from empty, and collection is
-> still underway: **80 rows, `LINEAR` / `LATENCY` only** — one cell of the planned 486-config
+> still underway: **80 rows, `LINEAR` / `LATENCY` only** — one cell of the planned 324-config
 > matrix. Because that cell has not yet produced a run with zero tripped subjects, every row
 > currently labels `unsafe` and the classifier target is **single-class, so the Decision Tree
 > classifier is not trainable yet**. This is sweep incompleteness, not a threshold problem —
@@ -76,7 +91,7 @@ See `docs/paper/leak-audit.md` for how each verdict was reached.
 > 🔄 **RESTRUCTURE (26 Aug 2026) — the sweep above is superseded, not continued.**
 > Both the LINEAR Paper-B dataset (188/163 rows) and the FAN_OUT dataset were discarded
 > outright as part of a project restructure. `master_dataset.csv` is being rebuilt from
-> empty under the D-006 47-column schema (see below), covering LINEAR + FAN_OUT and
+> empty under the D8 48-column schema (see below), covering LINEAR + FAN_OUT and
 > LATENCY + CRASH from the start. Nothing analysable currently exists in this file — do
 > not cite counts or class balance from before this line until the re-run lands.
 
@@ -85,10 +100,10 @@ See `docs/paper/leak-audit.md` for how each verdict was reached.
 A single row = **one execution** of one configuration in one environment.
 
 The unique key is the triple **(`experiment_id`, `environment`, `replicate`)**, *not* `experiment_id`
-alone. There are **486 unique configurations**; with environments and replicates the table grows
-past 486 (e.g. 486 configs × 2 environments × 3 replicates = 2,916 rows).
+alone. There are **324 unique configurations**; with environments and replicates the table grows
+past 324 (e.g. 324 configs × 2 environments × 3 replicates = 1,944 rows).
 
-`486 = 3 (topology) × 3 (fault_type) × 2 (window_type) × 3 (threshold) × 3 (window_size) × 3 (wait_duration)`
+`324 = 3 (topology) × 2 (fault_type) × 2 (window_type) × 3 (threshold) × 3 (window_size) × 3 (wait_duration)`
 
 ---
 
@@ -105,7 +120,7 @@ past 486 (e.g. 486 configs × 2 environments × 3 replicates = 2,916 rows).
 | Column | Type | Valid values | Unit | ML encoding |
 |--------|------|--------------|------|-------------|
 | `topology` | categorical | `LINEAR` (planned: `FAN_OUT`, `SHARED_DEP_MESH`) | — | one-hot |
-| `fault_type` | categorical | `LATENCY`, `CRASH`, `THROTTLE`, `NONE` | — | one-hot (`NONE` excluded — see note below) |
+| `fault_type` | categorical | `LATENCY`, `CRASH`, `NONE` | — | one-hot (`NONE` excluded — see note below) |
 | `window_type` | categorical (binary) | `COUNT_BASED`, `TIME_BASED` | — | binary (0/1) — **the primary novelty variable** |
 | `threshold` | int | `{30, 50, 70}` (range 1–100) | percent | numeric |
 | `window_size` | int | `{5, 10, 20}` (range 1–1000) | **calls if COUNT_BASED, seconds if TIME_BASED** | numeric (see note) |
@@ -161,6 +176,7 @@ past 486 (e.g. 486 configs × 2 environments × 3 replicates = 2,916 rows).
 | `mode` | categorical | `full` (this sweep); e.g. `canary` | Run mode/batch label. Carried for provenance; **excluded from features**. |
 | `replicate` | int | `1..R` (R ≥ 3 recommended) | Repeat index. Enables mean ± variance per config instead of a single noisy run. |
 | `run_timestamp` | string (ISO 8601) | `2026-06-21T14:32:05Z` | Provenance. Never used as a model feature. |
+| `machine_id` | string | free-form host label, e.g. `codespace-abc123`; **nullable** (blank when the harness didn't record one) | Identifies which machine/Codespace produced this row, used for D6 cross-machine calibration. Provenance only; **excluded from features**. |
 
 > **29-column schema.** Beyond the original 15-column skeleton the schema now carries:
 > `permitted_calls_half_open` and `mode` (operational); `real_blast_radius` and
@@ -183,17 +199,20 @@ past 486 (e.g. 486 configs × 2 environments × 3 replicates = 2,916 rows).
 > `effective_horizon`, plus `flap_count` and the pinned image digest set. Each needs a
 > dictionary entry in the commit that adds it.
 
-> **47-column schema (D-006, post-restructure).** Supersedes the 29/34/36/38-column fork
+> **48-column schema (D8, post-restructure).** Supersedes the 29/34/36/38-column fork
 > across `linear_schema.csv` / `fanout_schema.csv` / `master_dataset_schema.csv` /
-> `occupancy_dataset.csv` — see `docs/paper/decision-log.md` D-006. One canonical header
+> `occupancy_dataset.csv` — see `docs/paper/decision-log.md` D8. One canonical header
 > for every mode; a mode that doesn't measure a column leaves it blank, never zero.
 > New/changed since the 29-column schema: `minimum_number_of_calls` is now an explicit
 > column (was parsed from `experiment_id`'s `-M{n}` segment); `occupancy_ratio` and
 > `inert` are first-class (were occupancy-file-only); `error_rate`,
 > `precondition_fail_reason`, `readiness_wait_s`, `cb_state_pre`, `buffered_calls_pre`,
 > `warmup_requests`, `warmup_duration_s`, `run_order_seed`, `run_index` folded in from the
-> master/occupancy branch. Full header + nullable-by-mode map: `master_dataset_schema.csv`
-> and `SCHEMA_FREEZE_D8.md`. `runner.DATASET_HEADERS` must match this exactly.
+> master/occupancy branch. Added after the freeze: `machine_id` (column 47 of 48, immediately
+> before `excluded_reason`, which stays last) — see the IV/metadata table below and
+> `docs/paper/decision-log.md` D14. Full header + nullable-by-mode map:
+> `master_dataset_schema.csv`; the freeze rationale is `docs/paper/decision-log.md` D8.
+> `runner.DATASET_HEADERS` must match this exactly.
 
 ### Dependent variables — measured outcomes → **targets / Isolation Forest inputs**
 
@@ -346,7 +365,7 @@ otherwise indistinguishable from a genuine "safe" (never tripped) outcome in `bl
 |--------|------|-------|-------|
 | `effective_horizon` | float | `≥ 0` | calls available to the sliding window during the fault window (see formula above). Blank on a `precondition_ok=False` row. For `TIME_BASED`, also blank whenever `lambda_achieved` is blank (can't derive an achieved-rate-based horizon without a measured rate). **Compare against `CB_MINIMUM_CALLS` (5) before trusting a `TIME_BASED` "safe" reading** — `H < CB_MINIMUM_CALLS` means the breaker's evaluation window never actually filled. |
 
-### Occupancy ratio & inertness columns (D-006)
+### Occupancy ratio & inertness columns (D8)
 
 ρ = effective_horizon / minimum_number_of_calls — the dimensionless ratio predicting
 structural inertness. ρ < 1 means the breaker's evaluation window can never fill regardless
@@ -422,11 +441,11 @@ before the fault and diffs it after the run, writing one JSON line per run to
 `data/cb_transitions.jsonl` (`data/canary_cb_transitions.jsonl` in canary mode):
 
 ```json
-{"experiment_id": "...", "topology": "LINEAR", "fault_type": "THROTTLE",
+{"experiment_id": "...", "topology": "LINEAR", "fault_type": "LATENCY",
  "window_type": "COUNT_BASED", "environment": "LOCAL", "mode": "full", "replicate": 1,
  "fault_injected_at": "...", "fault_cleared_at": "...",
  "transitions": [
-   {"service": "order", "breaker": "sharedDbCB", "state_transition": "CLOSED_TO_OPEN", "creation_time": "..."},
+   {"service": "order", "breaker": "inventoryServiceCB", "state_transition": "CLOSED_TO_OPEN", "creation_time": "..."},
    ...
  ]}
 ```

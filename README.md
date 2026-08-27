@@ -8,7 +8,7 @@
 [![Toxiproxy](https://img.shields.io/badge/Toxiproxy-2.9.0-red.svg)](https://github.com/Shopify/toxiproxy)
 [![Status: Active Research](https://img.shields.io/badge/Status-Active%20Research-yellow.svg)]()
 
-CascadeShield is a controlled experimental platform: a six-service Spring Boot mesh, a Toxiproxy fault-injection layer, a Prometheus/Grafana observability stack, and a Python sweep harness that together measure how circuit breaker parameter choices change the **blast radius** of a cascading failure. The platform sweeps **162 circuit breaker configurations × 3 fault classes = 486 runs** per topology and logs every run to a master CSV that feeds an ML pipeline (Isolation Forest anomaly detection + Decision Tree config recommender).
+CascadeShield is a controlled experimental platform: a six-service Spring Boot mesh, a Toxiproxy fault-injection layer, a Prometheus/Grafana observability stack, and a Python sweep harness that together measure how circuit breaker parameter choices change the **blast radius** of a cascading failure. The platform sweeps **162 circuit breaker configurations × 2 fault classes = 324 runs** per topology and logs every run to a master CSV that feeds an ML pipeline (Isolation Forest anomaly detection + Decision Tree config recommender).
 
 The **primary novelty claim** is a systematic `COUNT_BASED` vs `TIME_BASED` sliding-window comparison under controlled fault conditions — a dimension largely absent from existing Resilience4j empirical literature.
 
@@ -107,14 +107,14 @@ runner.py main()
       2. update_containers()                      # docker compose up -d --no-deps --force-recreate
       │                                           # (aborts run on non-zero exit)
       3. wait_for_healthy(60s)                    # poll gateway /actuator/health for "UP"
-      4. inject_fault(fault_type)                 # latency 3000ms / crash / throttle 1KB/s
+      4. inject_fault(fault_type)                 # latency 3000ms / crash
       5. generate_load(50 req, 5 threads)         # measure TPS, error rate, avg latency
       6. get_blast_radius()                       # gateway aggregator endpoint
       7. toxiproxy.reset_all()                    # restore healthy mesh
       8. log_results(...)                         # append row to data/master_dataset.csv
 ```
 
-The CB parameters flow: `runner.py` → `.env` file → compose variable substitution (`${CB_FAILURE_RATE_THRESHOLD:-50}`) → container environment → Spring's relaxed property binding → `resilience4j.circuitbreaker.configs.default.*` in each service's `application.yml`. **Zero code changes or image rebuilds between the 486 runs** — only container recreation with new env values.
+The CB parameters flow: `runner.py` → `.env` file → compose variable substitution (`${CB_FAILURE_RATE_THRESHOLD:-50}`) → container environment → Spring's relaxed property binding → `resilience4j.circuitbreaker.configs.default.*` in each service's `application.yml`. **Zero code changes or image rebuilds between the 324 runs** — only container recreation with new env values.
 
 ---
 
@@ -253,11 +253,11 @@ A second, richer implementation of the Order→Inventory edge that runs *outside
   * `write_env_file()` — renders the config as `CB_*` vars into `infra/.env`, which compose substitutes at container-create time.
   * `update_containers()` — `docker compose up -d --no-deps --force-recreate <6 services>`. `--force-recreate` because env changes alone don't trigger recreation; `--no-deps` so Postgres/DynamoDB/Toxiproxy/Prometheus survive across the 162 recreations (restarting Toxiproxy would wipe proxies and orphan the run). Checks the compose exit code and aborts the run on failure — a half-recreated mesh must never produce a CSV row.
   * `wait_for_healthy()` — polls the Gateway's `/actuator/health` for `"status":"UP"` (60s budget, 2s interval). A run that never goes healthy is skipped and logged, not recorded.
-  * `inject_fault()` — maps fault class → injection: `latency` (3s on inventory proxy), `crash` (disable payment proxy), `throttle` (1 KB/s on shared-db proxy). Each fault class targets a *different* mesh depth deliberately: mid-chain, deep-chain, and shared-dependency respectively.
+  * `inject_fault()` — maps fault class → injection: `latency` (3s on inventory proxy), `crash` (disable payment proxy). Each fault class targets a *different* mesh depth deliberately: mid-chain and deep-chain respectively.
   * `generate_load()` — 50 requests, 5-thread `ThreadPoolExecutor`, 50ms submission pacing; per-request latency captured under a `threading.Lock`; computes TPS, error %, mean latency. (Known measurement caveat on the TPS window — see §4.7.)
   * `get_blast_radius()` — wraps the Gateway aggregator call; returns `None` (not `0.0`) on failure so "measurement failed" is distinguishable from "mesh fully healthy."
   * `log_results()` — appends to `data/master_dataset.csv` (13 columns: timestamp, mode, topology, fault, the 5 swept params, blast radius, TPS, error rate, mean latency), writing the header only on first creation. Append-only: a crashed sweep loses no completed rows and can be resumed.
-  * `main()` — argparse (`--mode canary|full`, `--fault latency|crash|throttle`, `--topology linear|fanout|mesh`), verifies Toxiproxy reachability before anything else, then loops configs and reports `success_runs/total`.
+  * `main()` — argparse (`--mode canary|full`, `--fault latency|crash`, `--topology linear|fanout|mesh`), verifies Toxiproxy reachability before anything else, then loops configs and reports `success_runs/total`.
 * **Key dependencies:** `fault_injector.ToxiproxyClient`, Docker CLI on PATH, the compose file path resolved dynamically from `__file__` (no hardcoded absolute paths — runs from any checkout).
 
 ### 2.6 `infra/` — Runtime Topology as Code
@@ -325,7 +325,7 @@ A second, richer implementation of the Order→Inventory edge that runs *outside
 ### 3.5 Python stdlib harness vs Gatling/JMeter/Locust as the driver
 **Chosen:** `runner.py` with a built-in `ThreadPoolExecutor` load generator; zero pip dependencies.
 **Alternative considered:** Gatling (it remains the planned tool for the formal load-profile phase: bursty vs sustained traffic shapes).
-**Why for now:** The sweep driver's hard requirements are orchestration (compose, env files, Toxiproxy, CSV), not sophisticated load shaping — 50 paced requests suffice to charge a 5–20-call sliding window and observe a trip. A Gatling-per-run integration (JVM spin-up, simulation compilation, report parsing) would add ~30s and a parsing layer to each of 486 runs before the measurement pipeline itself was validated. The architecture anticipates the upgrade: `generate_load()` is one function with a clean `(throughput, error_rate, latency)` return contract — swapping in a Gatling invocation changes one call site.
+**Why for now:** The sweep driver's hard requirements are orchestration (compose, env files, Toxiproxy, CSV), not sophisticated load shaping — 50 paced requests suffice to charge a 5–20-call sliding window and observe a trip. A Gatling-per-run integration (JVM spin-up, simulation compilation, report parsing) would add ~30s and a parsing layer to each of 324 runs before the measurement pipeline itself was validated. The architecture anticipates the upgrade: `generate_load()` is one function with a clean `(throughput, error_rate, latency)` return contract — swapping in a Gatling invocation changes one call site.
 
 ### 3.6 `RestTemplate` + `SimpleClientHttpRequestFactory` vs WebClient/connection pooling
 **Chosen:** Blocking `RestTemplate` over the JDK's `HttpURLConnection`, no pool.
@@ -356,7 +356,7 @@ The single most important correctness rule in the codebase. `InventoryClient` (s
 The latency fault (3s) and the timeout budget (8s read) are deliberately ordered `slow-call-threshold (2s) < injected latency (3s) < read timeout (8s)`. Latency-faulted calls therefore **complete successfully but slowly**, tripping breakers via `slow-call-rate-threshold`; crash-faulted calls fail via exception, tripping breakers via `failure-rate-threshold`. The two fault classes exercise **two distinct trip mechanisms** of the same breaker — which is exactly the comparison the research questions demand. Invert any of these constants and the fault classes collapse into one.
 
 ### 4.3 Partial degradation, not binary failure
-Every intermediary controller try/catches each downstream hop independently and returns a body containing per-hop results even on 503. The mesh thus exhibits *graded* degradation — e.g., Order reporting `inventory: ok, sharedDb: unavailable` under the throttle fault. Blast radius gains resolution from this: a service can be "degraded" (one open breaker) while still partially serving.
+Every intermediary controller try/catches each downstream hop independently and returns a body containing per-hop results even on 503. The mesh thus exhibits *graded* degradation — e.g., Order reporting `inventory: ok, payment: unavailable` under the crash fault. Blast radius gains resolution from this: a service can be "degraded" (one open breaker) while still partially serving.
 
 ### 4.4 The silent-AOP failure mode, preempted
 Resilience4j's annotation model fails *silently* if AOP proxying is absent — calls simply execute unprotected. Three layered defenses: `spring-boot-starter-aop` is explicitly declared in every CB-bearing `pom.xml` (not assumed transitively); `register-health-indicator: true` makes every breaker visible in `/actuator/health` (a missing breaker in the health tree is an immediate red flag); and the Grafana state-timeline panel shows every expected breaker instance per service — an absent series is caught by eyeball during the smoke phase, before any data run.
@@ -408,7 +408,7 @@ Orchestration    Container starts out of order service_healthy gating + 60s star
 | `slidingWindowType` | `COUNT_BASED`, `TIME_BASED` |
 | `permittedCallsInHalfOpenState` | 3, 5, 10 |
 
-**162 configurations × 3 fault classes (latency / crash / throttle) = 486 runs per topology.**
+**162 configurations × 2 fault classes (latency / crash) = 324 runs per topology.**
 
 ## Appendix B — Quick Start
 
@@ -442,7 +442,7 @@ cd dashboard && pip install -r requirements.txt && python app.py
 ## Appendix C — Roadmap (per the 10-week research plan)
 
 * **Week 2:** `@CircuitBreaker` onto `InventoryClient.reserve()` (the prepared seam); experiment matrix v2 ratification; dataset schema lock (`window_fill_time_s`, null sentinels, blast-radius τ).
-* **Weeks 3–4:** 486-run Topology 1 sweep + window-type×traffic sub-study + healthy false-positive-rate set; Isolation Forest + Decision Tree (max_depth ≤ 6, 5-fold CV) training.
+* **Weeks 3–4:** 324-run Topology 1 sweep + window-type×traffic sub-study + healthy false-positive-rate set; Isolation Forest + Decision Tree (max_depth ≤ 6, 5-fold CV) training.
 * **Weeks 5–7:** AWS CDK stack, ECS Fargate canary (±15% divergence gate), full cloud sweep via Fargate Spot.
 * **Weeks 8–10:** Topology 2/3 comparative runs, IEEE paper.
 

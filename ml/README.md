@@ -1,6 +1,6 @@
 # CascadeShield — ML Pipeline
 
-Owner: **Soham**. Consumes the 486-config chaos-sweep dataset and produces the two
+Owner: **Soham**. Consumes the 324-config chaos-sweep dataset and produces the two
 interpretable models in the project's ML layer, plus the recommendation Lambda and an
 adaptive closed-loop demo.
 
@@ -19,7 +19,7 @@ data/master_dataset.csv  ──┬──► (2) decision_tree.py     ──► m
 
 ## ⚠️ The dataset is synthetic *for now*
 
-The real numbers come from `experiments/runner.py` sweeping the 486 circuit-breaker
+The real numbers come from `experiments/runner.py` sweeping the 324 circuit-breaker
 configs across the mesh. Until that sweep has run, `generate_synthetic_data.py` produces a
 **schema-identical** stand-in so the entire pipeline can be built, tested, and demoed.
 
@@ -34,10 +34,10 @@ real structure to learn and the demo is meaningful), all documented in
 
 | Driver | Encoded effect |
 |--------|----------------|
-| Fault contagion | `CRASH > LATENCY > THROTTLE` |
+| Fault contagion | `CRASH > LATENCY` |
 | Topology blast | `SHARED_DEP_MESH > FAN_OUT > LINEAR_CHAIN` |
 | Breaker tightness | looser (higher threshold / larger window) → bigger blast |
-| **Novelty interaction** | best `window_type` **depends on fault**: `TIME_BASED` wins under LATENCY, `COUNT_BASED` under CRASH/THROTTLE |
+| **Novelty interaction** | best `window_type` **depends on fault**: `TIME_BASED` wins under LATENCY, `COUNT_BASED` under CRASH |
 | Environment | AWS ~ a few % worse than LOCAL (feeds the divergence analysis) |
 
 These are *assumptions to be validated against the real sweep* — not findings. The real run

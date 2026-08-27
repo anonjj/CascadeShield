@@ -1310,6 +1310,25 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
         # If we exit the loop without recovering, time_to_recover stays None
         # (meaningful null: system did not return to baseline within the window).
 
+        # The loop above exits ~2s after the breaker leaves OPEN (blast_radius flips to
+        # 0.0 the instant it's no longer OPEN -- caveat 1 above), which is nowhere near
+        # enough of its own light traffic (1 request/iteration) to exercise all
+        # PERMITTED_CALLS_HALF_OPEN probes before we stop watching. Confirmed on real
+        # data: precise_open_to_half_open lands almost exactly at wait_duration with
+        # n_half_open_bounces=0 for nearly every row, and precise_recovered is False
+        # for 100% of them -- the sidecar never got a chance to see HALF_OPEN resolve
+        # either way. Drive a few more real requests now, purely so those probes
+        # actually get attempted, then give the resulting transition event(s) a moment
+        # to land before collect_new_transitions() reads them below.
+        for _ in range(PERMITTED_CALLS_HALF_OPEN + 2):
+            try:
+                with urllib.request.urlopen(endpoint, timeout=5) as res:
+                    res.read()
+            except Exception:
+                pass
+            time.sleep(0.3)
+        time.sleep(2)
+
     # 8. Save results
     throughput_loss = max(0.0, 1.0 - (throughput / baseline_throughput))
     metrics = {

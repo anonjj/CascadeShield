@@ -171,7 +171,18 @@ SERVICE_BREAKERS = {
     "payment":      (8083, ["notificationServiceCB", "sharedDbCB"]),
     "notification": (8084, ["sharedDbCB"]),
 }
-CB_EVENT_BUFFER_SIZE = 50  # must match application.yml's event-consumer-buffer-size
+# Resilience4j's actuator event buffer is ONE ring per breaker shared across every event
+# type (SUCCESS/ERROR/NOT_PERMITTED/STATE_TRANSITION), not a STATE_TRANSITION-only log.
+# Load fairness (below) deliberately sustains traffic through the whole wait_duration --
+# every call rejected while OPEN emits its own NOT_PERMITTED event into this same ring --
+# so a long OPEN period floods and evicts the original CLOSED_TO_OPEN transition before
+# collect_new_transitions() ever reads it (confirmed on real data: wait_duration=30 runs
+# retained only their latest OPEN_TO_HALF_OPEN event, no CLOSED_TO_OPEN, making D12's
+# precise recovery metric silently NEVER_OPEN them). Worst case across every mode this
+# runs in: occupancy's rps=20/window=20/n_min=200 TIME_BASED cell offers
+# ~(10*20+15+10)*20 = 4500 requests in one run. 5000 gives headroom above that at a
+# memory cost (a few hundred bytes/event) too small to matter.
+CB_EVENT_BUFFER_SIZE = 5000  # must match application.yml's event-consumer-buffer-size
 
 # All six services in the call chain, for the readiness gate. shared-db-service has no
 # circuit breaker of its own (see SERVICE_BREAKERS above) but every other service calls

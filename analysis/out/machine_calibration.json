@@ -1,0 +1,6 @@
+{
+  "n_rows": 0,
+  "sources": [],
+  "status": "SKIPPED_NO_CALIBRATION_DATA",
+  "reason": "fewer than 2 distinct machine_id values in the data provided"
+}

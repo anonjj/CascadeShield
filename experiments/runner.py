@@ -5,12 +5,14 @@ import argparse
 import subprocess
 import csv
 import random
+import socket
 import statistics
 import urllib.request
 import json
 import threading
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
+from breaker_observer import BreakerObserver
 from fault_injector import ToxiproxyClient
 from resumable_runner import load_completed, is_done, append_row
 
@@ -162,6 +164,12 @@ completed_runs = set()
 # How many replicates per config (min 3 for variance estimation)
 N_REPLICATES = 3
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "LOCAL")  # override to AWS on cloud runs
+# D6: which physical machine produced this row. Auto-captured (not a flag someone has to
+# remember to pass) because the cross-machine confound this exists to catch is exactly the
+# kind that goes unnoticed when it depends on operator discipline -- see
+# docs/paper/decision-log.md D16. Override only when hostname alone doesn't disambiguate
+# (e.g. identically-named containers).
+MACHINE_ID = os.environ.get("MACHINE_ID", socket.gethostname())
 
 # No-fault control condition (fault_type=NONE): without it, a config reading blast_radius=0
 # under a real fault is not distinguishable from a config that would read 0 regardless of
@@ -196,7 +204,7 @@ SERVICE_BREAKERS = {
 # Load fairness (below) deliberately sustains traffic through the whole wait_duration --
 # every call rejected while OPEN emits its own NOT_PERMITTED event into this same ring --
 # so a long OPEN period floods and evicts the original CLOSED_TO_OPEN transition before
-# collect_new_transitions() ever reads it (confirmed on real data: wait_duration=30 runs
+# BreakerObserver.collect() ever reads it (confirmed on real data: wait_duration=30 runs
 # retained only their latest OPEN_TO_HALF_OPEN event, no CLOSED_TO_OPEN, making D12's
 # precise recovery metric silently NEVER_OPEN them). Worst case across every mode this
 # runs in: occupancy's rps=20/window=20/n_min=200 TIME_BASED cell offers
@@ -385,23 +393,35 @@ def wait_for_readiness(timeout=90):
     print(f"Timeout waiting for services to become healthy: {not_ready} never reported UP.", file=sys.stderr)
     return False, round(time.time() - start_time, 3)
 
-def inject_fault(fault_type, toxicity=1.0, crash_target=None):
+# Must match fault_injector.ToxiproxyClient.setup_default_proxies' proxy names exactly.
+INJECT_POINT_CHOICES = [
+    "order-service-proxy", "inventory-service-proxy", "payment-service-proxy",
+    "notification-service-proxy", "shared-db-service-proxy",
+]
+
+def inject_fault(fault_type, toxicity=1.0, inject_point=None):
     """Injects the appropriate fault profile into Toxiproxy.
 
-    toxicity/crash_target only affect the crash branch; both are no-ops for the
-    other fault types."""
+    inject_point overrides which proxy the fault lands on for EITHER fault type
+    (D4's supplementary check needs latency/crash injected at a service other than
+    the historical default). None preserves the pre-existing hardcoded target per
+    fault type, so every existing call site is unaffected unless it opts in. Must
+    be one of INJECT_POINT_CHOICES (matches fault_injector.setup_default_proxies'
+    proxy names).
+
+    toxicity only affects the crash branch; a no-op for the other fault types."""
     toxiproxy.reset_all()
 
     if fault_type == "latency":
-        # Inject high latency (3000ms) on inventory-service-proxy
-        # This simulates a slow inventory downstream dependency
-        toxiproxy.inject_latency("inventory-service-proxy", delay_ms=3000, toxicity=1.0)
+        # Inject high latency (3000ms) on the target proxy (inventory-service-proxy
+        # by default) -- simulates a slow downstream dependency.
+        toxiproxy.inject_latency(inject_point or "inventory-service-proxy", delay_ms=3000, toxicity=1.0)
 
     elif fault_type == "crash":
         # Reset a fraction (toxicity) of connections to the target proxy, simulating a
         # graded crash. toxicity=1.0 resets every connection (full outage, matching the
         # pre-sweep behavior of disabling the proxy outright).
-        toxiproxy.inject_reset_peer(crash_target or "payment-service-proxy", timeout_ms=0, toxicity=toxicity)
+        toxiproxy.inject_reset_peer(inject_point or "payment-service-proxy", timeout_ms=0, toxicity=toxicity)
 
     elif fault_type == "none":
         # Deliberate no-op: this is a control replicate. toxiproxy.reset_all() above already
@@ -411,6 +431,16 @@ def inject_fault(fault_type, toxicity=1.0, crash_target=None):
 
     else:
         print(f"No fault injected. Type '{fault_type}' is unknown.", file=sys.stderr)
+
+
+def resolve_inject_point(inject_point, mode):
+    """The actual injection point a run will use, given an explicit --inject-point
+    (which always wins) and the mode-specific default otherwise. Factored out of
+    run_experiment_run so main()'s resumability check (make_experiment_id) and the
+    real fault injection agree on the same value -- computing this twice, once per
+    call site, is exactly the kind of duplicated-derivation risk that already bit
+    effective_horizon elsewhere in this file."""
+    return inject_point or ("inventory-service-proxy" if mode == "sweep" else None)
 
 def compute_load_plan(config, target_rps=LOAD_RATE_RPS, topology=None):
     """Sizes the offered load per window type so both COUNT_BASED and TIME_BASED windows
@@ -505,19 +535,23 @@ def compute_effective_horizon(window_type, window_size, lambda_achieved):
     return None
 
 
-def compute_occupancy_ratio(window_type, window_size, min_calls, lambda_achieved):
+def compute_occupancy_ratio(effective_horizon, min_calls):
     """Occupancy ratio rho: how full the sliding window was relative to the minimum
     evaluation threshold (minimumNumberOfCalls) -- rho = effective_horizon / min_calls.
     rho >= 1 means the window had enough calls to even evaluate the breaker; rho < 1
     means it structurally could not, regardless of failure rate. This is the quantity
     H2's inertness boundary is tested against (D7 -- does `inert` flip to True at
-    rho* = 1?). Delegates to compute_effective_horizon so the COUNT/TIME branching
-    logic exists in exactly one place. Returns None when that horizon can't be
-    computed (TIME_BASED with no measured lambda_achieved)."""
-    horizon = compute_effective_horizon(window_type, window_size, lambda_achieved)
-    if horizon is None:
+    rho* = 1?).
+
+    Takes the already-computed effective_horizon directly rather than recomputing it
+    from window_type/window_size/lambda_achieved -- run_experiment_run already calls
+    compute_effective_horizon once per run and stores it in metrics; this is the only
+    call site, so there's no reuse case served by a second internal computation of the
+    same value from the same inputs. Returns None when the horizon itself is None
+    (TIME_BASED with no measured lambda_achieved)."""
+    if effective_horizon is None:
         return None
-    return horizon / min_calls
+    return effective_horizon / min_calls
 
 
 def generate_load(endpoint_url, requests_count=50, concurrency=5, interval_s=0.05):
@@ -777,82 +811,11 @@ def check_breaker_precondition():
         "buffered_calls": buffered_calls,
     }
 
-def _fetch_breaker_events(port, breaker_name):
-    """Raw STATE_TRANSITION events currently in `breaker_name`'s actuator ring
-    buffer, oldest first. Returns [] on any failure -- this is diagnostic
-    instrumentation and must never abort a run."""
-    url = f"http://localhost:{port}/actuator/circuitbreakerevents/{breaker_name}"
-    try:
-        with urllib.request.urlopen(url, timeout=3) as response:
-            data = json.loads(response.read().decode("utf-8"))
-    except Exception as e:
-        print(f"Failed to fetch {breaker_name} CB events (port {port}): {e}", file=sys.stderr)
-        return []
-    return [e for e in data.get("circuitBreakerEvents", []) if e.get("type") == "STATE_TRANSITION"]
-
-def snapshot_breaker_event_counts():
-    """{(service, breaker): event count right now}, taken before the fault so
-    collect_new_transitions() can slice off just the events this run adds.
-
-    In practice each run's containers are force-recreated (see update_containers),
-    so every breaker's ring buffer already starts empty -- this snapshot is a
-    defensive baseline, not load-bearing, in case that recreate-per-run behavior
-    ever changes.
-    """
-    return {
-        (service, breaker): len(_fetch_breaker_events(port, breaker))
-        for service, (port, breakers) in SERVICE_BREAKERS.items()
-        for breaker in breakers
-    }
-
-def collect_new_transitions(before_counts):
-    """STATE_TRANSITION events added to any breaker's buffer since `before_counts`,
-    merged across services and ordered chronologically.
-
-    Ordering relies on creationTime sorting correctly as a plain string: every
-    service is the same JVM timezone offset and Jackson's ISO-8601 serialization
-    is fixed-width, so lexicographic order == chronological order here without
-    needing to parse Java's ZonedDateTime format.
-    """
-    transitions = []
-    for service, (port, breakers) in SERVICE_BREAKERS.items():
-        for breaker in breakers:
-            events = _fetch_breaker_events(port, breaker)
-            before = before_counts.get((service, breaker), 0)
-            for event in events[before:]:
-                transitions.append({
-                    "service": service,
-                    "breaker": breaker,
-                    "state_transition": event.get("stateTransition"),
-                    "creation_time": event.get("creationTime"),
-                })
-    transitions.sort(key=lambda t: t["creation_time"] or "")
-    return transitions
-
-def log_cb_transitions(experiment_id, topology, fault_type, config, mode, replicate,
-                        fault_injected_at, fault_cleared_at, transitions):
-    """Appends one JSON line per run recording every circuit breaker's real
-    CLOSED/OPEN/HALF_OPEN transitions -- kept as a sidecar (not master_dataset.csv
-    columns) because the transition list is variable-length per run and a CSV
-    cell can't hold an ordered, multi-service event list cleanly. Join back to
-    the CSV row via experiment_id + replicate + mode.
-    """
-    path = CANARY_CB_TRANSITIONS_PATH if mode == "canary" else CB_TRANSITIONS_PATH
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    record = {
-        "experiment_id": experiment_id,
-        "topology": topology.upper(),
-        "fault_type": fault_type.upper(),
-        "window_type": config["slidingWindowType"],
-        "environment": ENVIRONMENT,
-        "mode": mode,
-        "replicate": replicate,
-        "fault_injected_at": fault_injected_at,
-        "fault_cleared_at": fault_cleared_at,
-        "transitions": transitions,
-    }
-    with open(path, "a") as f:
-        f.write(json.dumps(record) + "\n")
+# _fetch_breaker_events, snapshot_breaker_event_counts, collect_new_transitions, and
+# log_cb_transitions moved to breaker_observer.py's BreakerObserver class (D12
+# architecture cleanup) -- they had no callers outside run_experiment_run below, and
+# all 3 of this session's real CB-observation bugs lived in the gap between these
+# being separate free functions with no single owner. See breaker_observer.py.
 
 # ---- Real (request-level) blast radius (Task 2) ------------------------------
 # The legacy get_blast_radius() above measures breaker STATE (% of services with an OPEN
@@ -939,8 +902,15 @@ def compute_real_blast_radius(before, after, tau=REAL_BLAST_LEG_ERROR_THRESHOLD)
     compute_leg_failure_rates so the scalar and the persisted raw column never disagree."""
     return real_blast_radius_from_rates(compute_leg_failure_rates(before, after), tau)
 
-def make_experiment_id(topology, fault_type, config):
-    """Builds a deterministic ID matching experiment_matrix.csv e.g. LIN-LAT-CNT-T50-W10-D15."""
+def make_experiment_id(topology, fault_type, config, toxicity=1.0, inject_point=None):
+    """Builds a deterministic ID matching experiment_matrix.csv e.g. LIN-LAT-CNT-T50-W10-D15.
+
+    toxicity/inject_point default to the values every historical run implicitly used
+    (full toxicity, no override), so every existing ID is byte-identical unless a
+    caller explicitly varies one of these -- same "appended conditionally" contract
+    as the -M/-L suffixes below. Passing the real per-run values here (not just for
+    display) is what makes resumability's (experiment_id, replicate) key actually
+    distinguish e.g. two crash-toxicity-sweep invocations at different --toxicity."""
     topo_map  = {"linear": "LIN", "fanout": "FAN", "mesh": "MSH"}
     fault_map = {"latency": "LAT", "crash": "CRS", "none": "NON"}
     wtype_map = {"COUNT_BASED": "CNT", "TIME_BASED": "TIM"}
@@ -957,6 +927,14 @@ def make_experiment_id(topology, fault_type, config):
         experiment_id += f"-M{config['minimumNumberOfCalls']}"
     if "targetRps" in config:
         experiment_id += f"-L{int(config['targetRps'])}"
+    # -X only when toxicity deviates from every historical run's implicit 1.0 (full
+    # outage) -- e.g. distinct --toxicity 0.3 vs 0.6 crash-sweep invocations.
+    if toxicity != 1.0:
+        experiment_id += f"-X{toxicity}"
+    # -I only when an explicit/effective inject_point overrides the fault-type default
+    # (see resolve_inject_point) -- short-code matches the topo/fault/wtype 3-letter style.
+    if inject_point is not None:
+        experiment_id += f"-I{inject_point[:3].upper()}"
     return experiment_id
 
 def _now_iso():
@@ -1006,9 +984,10 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
     (loud, before any run starts) instead of this function silently refusing
     to write per-row (the bug that ate the occupancy-ratio run: a stale
     on-disk header made every call here a no-op while the sweep kept
-    "succeeding"). Every successful write here also records the row's
-    (experiment_id, replicate) into completed_runs so a restarted run skips
-    it (see is_done() in main())."""
+    "succeeding"). A row is only added to completed_runs when
+    precondition_ok is True -- an aborted run (READINESS_TIMEOUT,
+    PRECONDITION_FAIL) carries no real measurement and must stay eligible
+    for a real attempt on the next resume, not get permanently stuck."""
     dataset_path = get_dataset_path(mode)
     if mode == "sweep":
         headers = SWEEP_DATASET_HEADERS
@@ -1018,7 +997,9 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
         headers = DATASET_HEADERS
     os.makedirs(os.path.dirname(dataset_path), exist_ok=True)
 
-    experiment_id = make_experiment_id(topology, fault_type, config)
+    experiment_id = make_experiment_id(
+        topology, fault_type, config,
+        metrics.get("injected_toxicity", 1.0), metrics.get("inject_point"))
     time_to_open = metrics.get("time_to_open")
     time_to_recover = metrics.get("time_to_recover")
 
@@ -1032,6 +1013,7 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
         "wait_duration": config["waitDurationInOpenState"],
         "permitted_calls_half_open": config.get("permittedCallsInHalfOpenState", 5),
         "environment": ENVIRONMENT,
+        "machine_id": MACHINE_ID,
         "mode": mode,
         "replicate": replicate,
         "run_timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -1062,9 +1044,7 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
         row["injected_toxicity"] = f"{metrics['injected_toxicity']:.4f}" if metrics.get('injected_toxicity') is not None else ""
     elif mode == "occupancy":
         n_min = config.get("minimumNumberOfCalls", CB_MINIMUM_CALLS)
-        occupancy_ratio = compute_occupancy_ratio(
-            config["slidingWindowType"], config["slidingWindowSize"],
-            n_min, metrics.get("lambda_achieved"))
+        occupancy_ratio = compute_occupancy_ratio(metrics.get("effective_horizon"), n_min)
         row["occupancy_ratio"] = f"{occupancy_ratio:.4f}" if occupancy_ratio is not None else ""
         # inert: observed signal -- True when the breaker never opened AND the lambda
         # measurement is trustworthy. Blank when lambda_deviation_flag is set (rate
@@ -1078,11 +1058,12 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
             row["inert"] = time_to_open is None
 
     append_row(dataset_path, row, headers)
-    completed_runs.add((experiment_id, str(replicate)))
+    if metrics.get("precondition_ok") is True:
+        completed_runs.add((experiment_id, str(replicate)))
     print(f"Saved run metrics to {dataset_path}")
 
 def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
-                        run_order_seed=None, run_index=None, toxicity=1.0):
+                        run_order_seed=None, run_index=None, toxicity=1.0, inject_point=None):
     """Orchestrates a single configuration and fault run.
 
     run_order_seed/run_index describe this run's place in the sweep's shuffled
@@ -1093,7 +1074,13 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
     print(f"STARTING EXPERIMENT: Mode={mode}, Topology={topology}, Fault={fault_type}, Replicate={replicate}")
     print(f"Config: {config}")
     print("="*60)
-    
+
+    # Resolved once, up front -- pure function of (inject_point, mode), no I/O -- so
+    # every log_results call below (both abort paths and the success path) records
+    # the same effective value make_experiment_id needs for resumability to actually
+    # distinguish runs at a non-default inject point.
+    effective_inject_point = resolve_inject_point(inject_point, mode)
+
     # 1. Update environments
     write_env_file(config)
     if not update_containers():
@@ -1113,6 +1100,7 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
             "run_order_seed": run_order_seed,
             "run_index": run_index,
             "injected_toxicity": toxicity,
+            "inject_point": effective_inject_point,
         }, replicate)
         return False
 
@@ -1136,19 +1124,22 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
             "run_order_seed": run_order_seed,
             "run_index": run_index,
             "injected_toxicity": toxicity,
+            "inject_point": effective_inject_point,
         }, replicate)
         return False
 
-    # Snapshot each interior breaker's actuator ring buffer before the fault, so
-    # collect_new_transitions() can isolate just this run's real state transitions
-    # further down -- this is what actually answers "did order's breaker open",
-    # which error_rate/blast_radius cannot (see SERVICE_BREAKERS docstring above).
-    before_cb_counts = snapshot_breaker_event_counts()
+    # Snapshot each interior breaker's actuator ring buffer before the fault, via
+    # BreakerObserver (breaker_observer.py) -- this is what actually answers "did
+    # order's breaker open", which error_rate/blast_radius cannot (see
+    # SERVICE_BREAKERS docstring above).
+    endpoint = f"http://localhost:8080/api/v1/{topology}"
+    observer = BreakerObserver(SERVICE_BREAKERS, endpoint, PERMITTED_CALLS_HALF_OPEN,
+                                get_blast_radius_fn=get_blast_radius)
+    before_cb_counts = observer.snapshot_before()
 
     # 2c. JIT warmup (discard phase) -- BEFORE the baseline measurement below, so
     #    that measurement isn't itself contaminated by cold-JVM artifacts. See the
     #    "JIT warmup" comment block near LOAD_RATE_RPS for the full rationale.
-    endpoint = f"http://localhost:8080/api/v1/{topology}"
     warmup_requests, warmup_duration_s = warmup_phase(endpoint)
 
     # 3. Measure pre-fault baseline throughput (against an already-warm JVM)
@@ -1161,10 +1152,11 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
     # 4. Inject fault into Toxiproxy
     fault_injected_at = _now_iso()
     # Sweep mode retargets crash to inventory-service-proxy (the same target latency
-    # uses) so mechanism, not service position, is the only thing varying.
-    crash_target = "inventory-service-proxy" if mode == "sweep" else None
+    # uses) so mechanism, not service position, is the only thing varying -- unless the
+    # caller explicitly asked for a different --inject-point, which wins over that default.
+    # (effective_inject_point resolved once, near the top of this function.)
     try:
-        inject_fault(fault_type, toxicity=toxicity, crash_target=crash_target)
+        inject_fault(fault_type, toxicity=toxicity, inject_point=effective_inject_point)
     except Exception as e:
         print(f"Fault injection failed: {e} — skipping run.", file=sys.stderr)
         toxiproxy.reset_all()
@@ -1281,73 +1273,22 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
     fault_cleared_at = _now_iso()
 
     # 7. Measure time_to_open and time_to_recover.
-    #    time_to_recover is ONLY computed when a breaker was confirmed open
-    #    (cb_opened=True). Running the recovery phase unconditionally produces
-    #    the corrupt combination: time_to_open=null + time_to_recover=0.5 s.
+    #    time_to_open is ONLY computed when a breaker was confirmed open
+    #    (cb_opened=True) -- running that computation unconditionally would
+    #    produce the corrupt combination: time_to_open=null + a real value.
+    #    time_to_recover's observation (the poll loop + HALF_OPEN probe-driving,
+    #    now owned by BreakerObserver -- see breaker_observer.py for the full
+    #    rationale) is delegated unconditionally: it internally skips the
+    #    poll/probe steps when cb_open_at is None, but ALWAYS collects real
+    #    transitions regardless of cb_opened -- an interior breaker can trip via
+    #    the slow-call path while the aggregate blast_radius signal still reads
+    #    "safe", and catching that is this sidecar's entire point.
     time_to_open = None
-    time_to_recover = None
-
     if cb_opened:
         time_to_open = round(cb_open_at[0] - load_start, 3)
 
-        # Poll for recovery, driving light traffic each iteration. Two caveats,
-        # documented rather than silently glossed over:
-        #  1. Resilience4j auto-transitions OPEN -> HALF_OPEN purely on elapsed
-        #     wait_duration, with no traffic required, and the Gateway's
-        #     blast-radius endpoint (BlastRadiusService.hasOpenCircuitBreaker)
-        #     only flags the literal "CIRCUIT_OPEN" status -- so blast_radius
-        #     reads 0.0 the moment the breaker LEAVES OPEN, before it has
-        #     necessarily reached CLOSED. Without traffic, a HALF_OPEN breaker
-        #     can't even attempt its permitted probe calls, so we send a few
-        #     real requests each iteration to give it that chance.
-        #  2. This still can't perfectly distinguish "HALF_OPEN, about to
-        #     re-open" from "genuinely CLOSED" using only the aggregate
-        #     blast-radius endpoint polled here in real time. The precise
-        #     per-breaker STATE_TRANSITION events ARE captured (see
-        #     collect_new_transitions() / cb_transitions.jsonl below), but as a
-        #     post-hoc record for analysis, not as a synchronous gate on this
-        #     loop's recovery decision. To reduce (not eliminate) false-early
-        #     recovery reads here, require the reading to stay at 0.0 across
-        #     two consecutive probes, one second apart, before declaring
-        #     recovery.
-        recovery_deadline = time.time() + config["waitDurationInOpenState"] + 10
-        consecutive_zero_reads = 0
-        while time.time() < recovery_deadline:
-            time.sleep(1.0)
-            try:
-                with urllib.request.urlopen(endpoint, timeout=5) as res:
-                    res.read()
-            except Exception:
-                pass
-            current_br = get_blast_radius()
-            if current_br is not None and current_br == 0.0:
-                consecutive_zero_reads += 1
-                if consecutive_zero_reads >= 2:
-                    time_to_recover = round(time.time() - cb_open_at[0], 3)
-                    break
-            else:
-                consecutive_zero_reads = 0
-        # If we exit the loop without recovering, time_to_recover stays None
-        # (meaningful null: system did not return to baseline within the window).
-
-        # The loop above exits ~2s after the breaker leaves OPEN (blast_radius flips to
-        # 0.0 the instant it's no longer OPEN -- caveat 1 above), which is nowhere near
-        # enough of its own light traffic (1 request/iteration) to exercise all
-        # PERMITTED_CALLS_HALF_OPEN probes before we stop watching. Confirmed on real
-        # data: precise_open_to_half_open lands almost exactly at wait_duration with
-        # n_half_open_bounces=0 for nearly every row, and precise_recovered is False
-        # for 100% of them -- the sidecar never got a chance to see HALF_OPEN resolve
-        # either way. Drive a few more real requests now, purely so those probes
-        # actually get attempted, then give the resulting transition event(s) a moment
-        # to land before collect_new_transitions() reads them below.
-        for _ in range(PERMITTED_CALLS_HALF_OPEN + 2):
-            try:
-                with urllib.request.urlopen(endpoint, timeout=5) as res:
-                    res.read()
-            except Exception:
-                pass
-            time.sleep(0.3)
-        time.sleep(2)
+    time_to_recover, transitions = observer.observe_recovery(
+        before_cb_counts, cb_open_at[0], config["waitDurationInOpenState"])
 
     # 8. Save results
     throughput_loss = max(0.0, 1.0 - (throughput / baseline_throughput))
@@ -1375,18 +1316,18 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
         "lambda_deviation_flag": lambda_deviation_flag,
         "effective_horizon": effective_horizon,
         "injected_toxicity": toxicity,
+        "inject_point": effective_inject_point,
     }
     log_results(config, fault_type, mode, topology, metrics, replicate)
 
-    # Record real per-service breaker transitions for this run regardless of what
-    # blast_radius/cb_opened concluded -- catching the case where the aggregate
-    # signal says "nothing opened" but an interior breaker tripped via the
-    # slow-call path is the entire point of this sidecar.
-    transitions = collect_new_transitions(before_cb_counts)
-    log_cb_transitions(
-        make_experiment_id(topology, fault_type, config), topology, fault_type, config,
-        mode, replicate, fault_injected_at, fault_cleared_at, transitions,
-    )
+    # transitions already collected above (observer.observe_recovery), regardless of
+    # what blast_radius/cb_opened concluded -- catching the case where the aggregate
+    # signal says "nothing opened" but an interior breaker tripped via the slow-call
+    # path is the entire point of this sidecar.
+    cb_transitions_path = CANARY_CB_TRANSITIONS_PATH if mode == "canary" else CB_TRANSITIONS_PATH
+    observer.log(cb_transitions_path, make_experiment_id(topology, fault_type, config),
+                 topology, fault_type, config, mode, replicate,
+                 fault_injected_at, fault_cleared_at, transitions)
     return True
 
 def generate_occupancy_combinations():
@@ -1516,6 +1457,11 @@ def main():
                          help="Fraction of connections affected by the crash fault's reset_peer toxic "
                               "(0.0-1.0). Only meaningful for --fault crash. Default 1.0 matches today's "
                               "full-outage crash behavior.")
+    parser.add_argument("--inject-point", choices=INJECT_POINT_CHOICES, default=None,
+                         help="Toxiproxy target for the fault (D4's supplementary check). Default: "
+                              "inventory-service-proxy for --fault latency, payment-service-proxy for "
+                              "--fault crash (inventory-service-proxy in --mode sweep). Passing this "
+                              "overrides those mode/fault-type defaults for either fault type.")
     parser.add_argument("--replicates", type=int, default=N_REPLICATES, help=f"Number of replicates per config (default: {N_REPLICATES})")
     parser.add_argument("--seed", type=int, default=None,
                          help="Seed for the run-order shuffle (default: a fresh random seed each "
@@ -1586,11 +1532,32 @@ def main():
     print(f"Run order shuffled with seed {run_order_seed} ({len(run_list)} runs). "
           f"Pass --seed {run_order_seed} to reproduce this exact order.")
 
+    # Resumability filter runs BEFORE --limit, not after: filtering post-truncation
+    # means an already-partly-done sweep's --limit N can pick N slots that are mostly
+    # already-completed, silently executing fewer than N (sometimes 0) new runs while
+    # still reporting success. Filtering first guarantees --limit N always means "up
+    # to N new runs," matching what the flag says on the tin.
+    effective_inject_point = resolve_inject_point(args.inject_point, args.mode)
+    pending = []
+    skipped_runs = 0
+    for i, config, rep in run_list:
+        experiment_id = make_experiment_id(args.topology, args.fault, config,
+                                            args.toxicity, effective_inject_point)
+        if is_done(experiment_id, rep, completed_runs):
+            print(f"Skipping: {experiment_id} replicate {rep} already in {dataset_path}.")
+            skipped_runs += 1
+        else:
+            pending.append((i, config, rep))
+    run_list = pending
+
     if args.limit is not None:
         run_list = apply_run_limit(run_list, args.limit)
         total_runs = len(run_list)
-        print(f"--limit {args.limit}: truncated to {total_runs} run(s) (post-shuffle, so this "
-              f"does not bias which config gets run).")
+        print(f"--limit {args.limit}: truncated to {total_runs} new run(s) (post-shuffle, "
+              f"post-resume-filter, so this does not bias which config gets run and always "
+              f"means up to {args.limit} NEW runs, not {args.limit} raw slots).")
+    else:
+        total_runs = len(run_list)
 
     started_at = _now_iso()
     success_runs = 0
@@ -1603,16 +1570,9 @@ def main():
         "phase": "running", "started_at": started_at, "updated_at": started_at,
     })
 
-    skipped_runs = 0
     for run_index, (i, config, rep) in enumerate(run_list, start=1):
         run_number = run_index  # execution sequence position, not config/replicate order
         print(f"\nProgress: Run {run_number} of {total_runs} (config {i+1}/{len(configs)}, replicate {rep}/{args.replicates})")
-
-        experiment_id = make_experiment_id(args.topology, args.fault, config)
-        if is_done(experiment_id, rep, completed_runs):
-            print(f"Skipping run {run_number}: {experiment_id} replicate {rep} already in {dataset_path}.")
-            skipped_runs += 1
-            continue
 
         write_status({
             "mode": args.mode, "fault_type": args.fault, "topology": args.topology,
@@ -1623,7 +1583,7 @@ def main():
         })
         success = run_experiment_run(config, args.fault, args.mode, args.topology, replicate=rep,
                                       run_order_seed=run_order_seed, run_index=run_index,
-                                      toxicity=args.toxicity)
+                                      toxicity=args.toxicity, inject_point=args.inject_point)
         if success:
             success_runs += 1
         else:

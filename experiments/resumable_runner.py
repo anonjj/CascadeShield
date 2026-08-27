@@ -25,7 +25,15 @@ import os
 
 
 def load_completed(path, header):
-    """Return the set of (experiment_id, replicate) already written.
+    """Return the set of (experiment_id, replicate) already written *with a real
+    measurement* -- a row aborted before fault injection (precondition_ok
+    written as "False", e.g. READINESS_TIMEOUT/PRECONDITION_FAIL) carries no
+    outcome and must stay eligible for a real attempt on the next resume, not
+    get permanently stuck just because a row already exists for that cell.
+    Rows with precondition_ok blank/missing (older archives predating this
+    column, or a mode that never sets it) are treated as NOT done -- re-doing
+    an already-good row is wasted compute, but silently trusting an unknown
+    state and skipping real work forever is the worse failure.
 
     Fails loudly if the file's header != the header this run will write —
     that mismatch is the silent-refuse bug (36-col occupancy pointed at the
@@ -47,6 +55,7 @@ def load_completed(path, header):
         return {
             (row.get("experiment_id"), str(row.get("replicate")))
             for row in reader
+            if row.get("precondition_ok") == "True"
         }
 
 

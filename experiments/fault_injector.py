@@ -56,7 +56,7 @@ class ToxiproxyClient:
 
         Pass clear_first=False to stack this toxic on top of an existing one."""
         if clear_first:
-            self.clear_toxics(name)
+            self.clear_toxics(name, raise_on_error=True)
 
         payload = {
             "name": "latency_toxic",
@@ -77,11 +77,18 @@ class ToxiproxyClient:
 
         Pass clear_first=False to stack this toxic on top of an existing one."""
         if clear_first:
-            self.clear_toxics(name)
+            self.clear_toxics(name, raise_on_error=True)
 
         payload = {
             "name": "reset_peer_toxic",
             "type": "reset_peer",
+            # "upstream" (not "downstream", like inject_latency above) is deliberate,
+            # not an oversight: downstream only fires once the real service's response
+            # starts flowing back -- meaning the request still reaches and is processed
+            # by the real service before the connection resets. upstream resets on the
+            # client's outbound bytes, before the proxy ever forwards to the service,
+            # matching the "instance is down" semantics of the old set_enabled(False)
+            # crash path this replaced. (Verified/fixed once already: commit c827880.)
             "stream": "upstream",
             "toxicity": toxicity,
             "attributes": {
@@ -91,8 +98,18 @@ class ToxiproxyClient:
         print(f"Injecting reset_peer on '{name}': timeout={timeout_ms}ms (toxicity={toxicity})")
         self._request(f"/proxies/{name}/toxics", method="POST", data=payload)
 
-    def clear_toxics(self, name):
-        """Removes all toxics from a specific proxy."""
+    def clear_toxics(self, name, raise_on_error=False):
+        """Removes all toxics from a specific proxy.
+
+        raise_on_error=False (default) is reset_all()'s best-effort mode: log and
+        keep going, since a failure on one proxy shouldn't stop the rest of the mesh
+        from being reset. inject_latency/inject_reset_peer's clear_first=True path
+        passes raise_on_error=True instead -- silently continuing to layer a NEW
+        toxic on top of a clear that failed risks a compound/contaminated fault,
+        undetectable beyond this stderr line. run_experiment_run's existing
+        try/except around inject_fault() already aborts the run correctly (logs,
+        resets, returns False) once this propagates -- no new handling needed
+        there, just letting the failure actually reach it."""
         try:
             # Fetch toxics from the separate toxics endpoint
             toxics_resp = self._request(f"/proxies/{name}/toxics")
@@ -106,6 +123,8 @@ class ToxiproxyClient:
             print(f"Cleared all toxics on '{name}'")
         except Exception as e:
             print(f"Failed to clear toxics on '{name}': {e}", file=sys.stderr)
+            if raise_on_error:
+                raise
 
     def reset_all(self):
         """Resets all proxies to healthy (enables them and clears all toxics)."""

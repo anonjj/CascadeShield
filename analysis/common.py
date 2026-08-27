@@ -171,6 +171,16 @@ def bootstrap_ci_grouped(df, value_col, group_col="experiment_id", statistic=np.
     }
 
 
+# Cliff's delta's magnitude labels, ordered mildest-to-strongest. Shared so a caller
+# needing "which of these magnitudes is worst" (e.g. machine_calibration.py comparing
+# several DVs) imports this instead of re-typing the same ordering locally -- one
+# definition, so a future tier addition here can't silently desync a second copy.
+# Deliberately excludes "undefined" (cliffs_delta below returns it when a group has
+# zero observations) -- that's not a magnitude, it's "never actually compared," and a
+# caller doing a worst-of walk must handle it as its own case, not rank it at all.
+MAGNITUDE_RANK = {"negligible": 0, "small": 1, "medium": 2, "large": 3}
+
+
 def cliffs_delta(a, b):
     """Cliff's delta with the conventional magnitude label. Reported next to every
     p-value -- a bare p-value is a rejection reason at empirical-SE venues."""

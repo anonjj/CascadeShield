@@ -88,6 +88,13 @@ the mode's own code comments in `runner.py` for the exact columns:
 > not need adjusting. The regressor and Isolation Forest paths are unaffected. Expect two
 > classes once the sweep reaches configs that contain the fault.
 
+> 🔄 **RESTRUCTURE (26 Aug 2026) — the sweep above is superseded, not continued.**
+> Both the LINEAR Paper-B dataset (188/163 rows) and the FAN_OUT dataset were discarded
+> outright as part of a project restructure. `master_dataset.csv` is being rebuilt from
+> empty under the D8 47-column schema (see below), covering LINEAR + FAN_OUT and
+> LATENCY + CRASH from the start. Nothing analysable currently exists in this file — do
+> not cite counts or class balance from before this line until the re-run lands.
+
 ## Row identity
 
 A single row = **one execution** of one configuration in one environment.
@@ -118,6 +125,7 @@ past 324 (e.g. 324 configs × 2 environments × 3 replicates = 1,944 rows).
 | `threshold` | int | `{30, 50, 70}` (range 1–100) | percent | numeric |
 | `window_size` | int | `{5, 10, 20}` (range 1–1000) | **calls if COUNT_BASED, seconds if TIME_BASED** | numeric (see note) |
 | `wait_duration` | int | `{5, 15, 30}` (range 1–600) | seconds in OPEN state | numeric |
+| `minimum_number_of_calls` | int | `{5, 50, 100, 200}` (occupancy sweep) | calls | numeric — direct input to ρ = λ·T/n_min |
 
 > **Sweep vs. plan.** The values above reflect the **real sweep grid** (what `runner.py`
 > actually sweeps), not `experiment_matrix.csv`, which still lists the originally *planned*
@@ -189,6 +197,19 @@ past 324 (e.g. 324 configs × 2 environments × 3 replicates = 1,944 rows).
 > Still outstanding for the Day-2 canary: `lambda_target`, `lambda_achieved`, `lambda_cv`,
 > `effective_horizon`, plus `flap_count` and the pinned image digest set. Each needs a
 > dictionary entry in the commit that adds it.
+
+> **47-column schema (D8, post-restructure).** Supersedes the 29/34/36/38-column fork
+> across `linear_schema.csv` / `fanout_schema.csv` / `master_dataset_schema.csv` /
+> `occupancy_dataset.csv` — see `docs/paper/decision-log.md` D8. One canonical header
+> for every mode; a mode that doesn't measure a column leaves it blank, never zero.
+> New/changed since the 29-column schema: `minimum_number_of_calls` is now an explicit
+> column (was parsed from `experiment_id`'s `-M{n}` segment); `occupancy_ratio` and
+> `inert` are first-class (were occupancy-file-only); `error_rate`,
+> `precondition_fail_reason`, `readiness_wait_s`, `cb_state_pre`, `buffered_calls_pre`,
+> `warmup_requests`, `warmup_duration_s`, `run_order_seed`, `run_index` folded in from the
+> master/occupancy branch. Full header + nullable-by-mode map: `master_dataset_schema.csv`;
+> the freeze rationale is `docs/paper/decision-log.md` D8.
+> `runner.DATASET_HEADERS` must match this exactly.
 
 ### Dependent variables — measured outcomes → **targets / Isolation Forest inputs**
 
@@ -341,6 +362,18 @@ otherwise indistinguishable from a genuine "safe" (never tripped) outcome in `bl
 |--------|------|-------|-------|
 | `effective_horizon` | float | `≥ 0` | calls available to the sliding window during the fault window (see formula above). Blank on a `precondition_ok=False` row. For `TIME_BASED`, also blank whenever `lambda_achieved` is blank (can't derive an achieved-rate-based horizon without a measured rate). **Compare against `CB_MINIMUM_CALLS` (5) before trusting a `TIME_BASED` "safe" reading** — `H < CB_MINIMUM_CALLS` means the breaker's evaluation window never actually filled. |
 
+### Occupancy ratio & inertness columns (D8)
+
+ρ = effective_horizon / minimum_number_of_calls — the dimensionless ratio predicting
+structural inertness. ρ < 1 means the breaker's evaluation window can never fill regardless
+of failure rate; the drain demo and occupancy grid both confirm the transition lands at
+ρ ≈ 1.
+
+| Column | Type | Range | Notes |
+|--------|------|-------|-------|
+| `occupancy_ratio` | float | `≥ 0` | `lambda_achieved × window_size / minimum_number_of_calls` (TIME_BASED) or `window_size / minimum_number_of_calls` (COUNT_BASED). Blank under the same conditions as `effective_horizon`. **Predictor**, not an outcome — keep separate from `inert`. |
+| `inert` | bool | `True`/`False`/blank | Observed, not derived from `occupancy_ratio` (deriving it from `effective_horizon < minimum_number_of_calls` would be circular — that ratio *is* ρ). Primary signal: `time_to_open` is null. Blank when `lambda_deviation_flag` is set or the row is otherwise invalid. |
+
 ---
 
 ## How the two models use these columns
@@ -419,4 +452,3 @@ Join to `master_dataset.csv` via (`experiment_id`, `replicate`, `mode`). `transi
 not a missing record. Kept as a separate sidecar rather than new CSV columns because the
 transition list is variable-length and ordered; not part of `preprocessing.py`'s schema
 contract or fed to either model.
-

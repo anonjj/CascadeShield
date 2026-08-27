@@ -157,7 +157,7 @@
       Verdict: **`LEAK_CONFIRMED_ON_HALF_OPEN_LEG`** — TIME's median precise
       HALF_OPEN->CLOSED duration is 8.9x-14.3x COUNT's, growing with `wait_duration`
       (2.15s->19.03s at D_w=5; 2.16s->20.87s at D_w=15; 2.48s->35.35s at D_w=30).
-      Written into `hypotheses.md` §4.1 and decision-log `D-006`'s 2026-08-27 update.
+      Written into `hypotheses.md` §4.1 and decision-log `D-009`'s 2026-08-27 update.
 
 - [ ] **Not yet "final confirmed": every precise median above is n=1 TIME_BASED row per
       `wait_duration` bucket.** Real, directionally consistent, but too thin to close.
@@ -168,4 +168,4 @@
       **Next step:** a modest replicate top-up (not a full re-sweep) targeting more
       `TIME_BASED` runs specifically at each `wait_duration`, then re-run
       `python analysis/window_type_recovery_leak.py current` and check `n_time` in the
-      `half_open_to_closed` block is above 1 per bucket before treating D-006 as closed.
+      `half_open_to_closed` block is above 1 per bucket before treating D-009 as closed.

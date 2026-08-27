@@ -160,7 +160,7 @@ every one of those medians comes from **n=1 TIME_BASED row per $D_w$ bucket** (`
 The direction, magnitude ordering, and consistency with the independently-measured coarse trend
 all argue this is real, but a single observation per cell is not enough to close the question.
 **Status: strong preliminary confirmation, pending a modest replicate top-up (not a full
-re-sweep) before treating $D-006$ as closed.**
+re-sweep) before treating $D-009$ as closed.**
 
 (The mechanism originally suspected — "HALF_OPEN re-evaluation goes back through the TIME_BASED
 window" — is still not architecturally plausible for Resilience4j 2.2.0, the version this repo

@@ -200,6 +200,17 @@ def load_transition_index(path):
     return index
 
 
+def _parse_java_ts(s):
+    """Resilience4j's actuator API serializes creationTime via Java's
+    ZonedDateTime.toString(), which appends a bracketed zone id (e.g.
+    "2026-08-27T09:31:15.986004462Z[Etc/UTC]") that ISO-8601 doesn't have and
+    pandas.Timestamp rejects outright. The leading offset/Z already fully
+    determines the instant -- every service runs the same JVM timezone
+    (see collect_new_transitions's ordering comment) -- so the bracket is
+    redundant; strip it rather than teach pandas a Java-specific format."""
+    return pd.Timestamp(s.split("[")[0])
+
+
 def _walk_breaker(events):
     """One breaker's chronologically-sorted STATE_TRANSITION events -> the timestamps
     of its first OPEN, its first post-open HALF_OPEN, its last HALF_OPEN->CLOSED, a
@@ -257,8 +268,8 @@ def precise_row_for(row, index):
     if not opened:
         return {"status": "NEVER_OPENED"}
 
-    t_open = min(pd.Timestamp(w["t_open"]) for w in opened.values())
-    half_opens = [pd.Timestamp(w["t_half_open_first"]) for w in opened.values()
+    t_open = min(_parse_java_ts(w["t_open"]) for w in opened.values())
+    half_opens = [_parse_java_ts(w["t_half_open_first"]) for w in opened.values()
                   if w["t_half_open_first"]]
     t_half_open = min(half_opens) if half_opens else None
     n_bounces = sum(w["bounces"] for w in opened.values())
@@ -266,7 +277,7 @@ def precise_row_for(row, index):
     # "Recovered" mirrors BlastRadiusService's "any OPEN -> degraded" semantics: not
     # clean until every breaker that opened is back to CLOSED.
     all_recovered = all(w["recovered"] for w in opened.values())
-    closed_times = [pd.Timestamp(w["t_closed_last"]) for w in opened.values() if w["t_closed_last"]]
+    closed_times = [_parse_java_ts(w["t_closed_last"]) for w in opened.values() if w["t_closed_last"]]
     recovered_at = max(closed_times) if (all_recovered and closed_times) else None
 
     result = {

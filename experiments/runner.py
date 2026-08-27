@@ -12,6 +12,7 @@ import json
 import threading
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
+from breaker_observer import BreakerObserver
 from fault_injector import ToxiproxyClient
 from resumable_runner import load_completed, is_done, append_row
 
@@ -188,7 +189,7 @@ SERVICE_BREAKERS = {
 # Load fairness (below) deliberately sustains traffic through the whole wait_duration --
 # every call rejected while OPEN emits its own NOT_PERMITTED event into this same ring --
 # so a long OPEN period floods and evicts the original CLOSED_TO_OPEN transition before
-# collect_new_transitions() ever reads it (confirmed on real data: wait_duration=30 runs
+# BreakerObserver.collect() ever reads it (confirmed on real data: wait_duration=30 runs
 # retained only their latest OPEN_TO_HALF_OPEN event, no CLOSED_TO_OPEN, making D12's
 # precise recovery metric silently NEVER_OPEN them). Worst case across every mode this
 # runs in: occupancy's rps=20/window=20/n_min=200 TIME_BASED cell offers
@@ -795,83 +796,11 @@ def check_breaker_precondition():
         "buffered_calls": buffered_calls,
     }
 
-def _fetch_breaker_events(port, breaker_name):
-    """Raw STATE_TRANSITION events currently in `breaker_name`'s actuator ring
-    buffer, oldest first. Returns [] on any failure -- this is diagnostic
-    instrumentation and must never abort a run."""
-    url = f"http://localhost:{port}/actuator/circuitbreakerevents/{breaker_name}"
-    try:
-        with urllib.request.urlopen(url, timeout=3) as response:
-            data = json.loads(response.read().decode("utf-8"))
-    except Exception as e:
-        print(f"Failed to fetch {breaker_name} CB events (port {port}): {e}", file=sys.stderr)
-        return []
-    return [e for e in data.get("circuitBreakerEvents", []) if e.get("type") == "STATE_TRANSITION"]
-
-def snapshot_breaker_event_counts():
-    """{(service, breaker): event count right now}, taken before the fault so
-    collect_new_transitions() can slice off just the events this run adds.
-
-    In practice each run's containers are force-recreated (see update_containers),
-    so every breaker's ring buffer already starts empty -- this snapshot is a
-    defensive baseline, not load-bearing, in case that recreate-per-run behavior
-    ever changes.
-    """
-    return {
-        (service, breaker): len(_fetch_breaker_events(port, breaker))
-        for service, (port, breakers) in SERVICE_BREAKERS.items()
-        for breaker in breakers
-    }
-
-def collect_new_transitions(before_counts):
-    """STATE_TRANSITION events added to any breaker's buffer since `before_counts`,
-    merged across services and ordered chronologically.
-
-    Ordering relies on creationTime sorting correctly as a plain string: every
-    service is the same JVM timezone offset and Jackson's ISO-8601 serialization
-    is fixed-width, so lexicographic order == chronological order here without
-    needing to parse Java's ZonedDateTime format.
-    """
-    transitions = []
-    for service, (port, breakers) in SERVICE_BREAKERS.items():
-        for breaker in breakers:
-            events = _fetch_breaker_events(port, breaker)
-            before = before_counts.get((service, breaker), 0)
-            for event in events[before:]:
-                transitions.append({
-                    "service": service,
-                    "breaker": breaker,
-                    "state_transition": event.get("stateTransition"),
-                    "creation_time": event.get("creationTime"),
-                })
-    transitions.sort(key=lambda t: t["creation_time"] or "")
-    return transitions
-
-def log_cb_transitions(experiment_id, topology, fault_type, config, mode, replicate,
-                        fault_injected_at, fault_cleared_at, transitions):
-    """Appends one JSON line per run recording every circuit breaker's real
-    CLOSED/OPEN/HALF_OPEN transitions -- kept as a sidecar (not master_dataset.csv
-    columns) because the transition list is variable-length per run and a CSV
-    cell can't hold an ordered, multi-service event list cleanly. Join back to
-    the CSV row via experiment_id + replicate + mode.
-    """
-    path = CANARY_CB_TRANSITIONS_PATH if mode == "canary" else CB_TRANSITIONS_PATH
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    record = {
-        "experiment_id": experiment_id,
-        "topology": topology.upper(),
-        "fault_type": fault_type.upper(),
-        "window_type": config["slidingWindowType"],
-        "environment": ENVIRONMENT,
-        "machine_id": MACHINE_ID,
-        "mode": mode,
-        "replicate": replicate,
-        "fault_injected_at": fault_injected_at,
-        "fault_cleared_at": fault_cleared_at,
-        "transitions": transitions,
-    }
-    with open(path, "a") as f:
-        f.write(json.dumps(record) + "\n")
+# _fetch_breaker_events, snapshot_breaker_event_counts, collect_new_transitions, and
+# log_cb_transitions moved to breaker_observer.py's BreakerObserver class (D12
+# architecture cleanup) -- they had no callers outside run_experiment_run below, and
+# all 3 of this session's real CB-observation bugs lived in the gap between these
+# being separate free functions with no single owner. See breaker_observer.py.
 
 # ---- Real (request-level) blast radius (Task 2) ------------------------------
 # The legacy get_blast_radius() above measures breaker STATE (% of services with an OPEN
@@ -1184,16 +1113,18 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
         }, replicate)
         return False
 
-    # Snapshot each interior breaker's actuator ring buffer before the fault, so
-    # collect_new_transitions() can isolate just this run's real state transitions
-    # further down -- this is what actually answers "did order's breaker open",
-    # which error_rate/blast_radius cannot (see SERVICE_BREAKERS docstring above).
-    before_cb_counts = snapshot_breaker_event_counts()
+    # Snapshot each interior breaker's actuator ring buffer before the fault, via
+    # BreakerObserver (breaker_observer.py) -- this is what actually answers "did
+    # order's breaker open", which error_rate/blast_radius cannot (see
+    # SERVICE_BREAKERS docstring above).
+    endpoint = f"http://localhost:8080/api/v1/{topology}"
+    observer = BreakerObserver(SERVICE_BREAKERS, endpoint, PERMITTED_CALLS_HALF_OPEN,
+                                get_blast_radius_fn=get_blast_radius)
+    before_cb_counts = observer.snapshot_before()
 
     # 2c. JIT warmup (discard phase) -- BEFORE the baseline measurement below, so
     #    that measurement isn't itself contaminated by cold-JVM artifacts. See the
     #    "JIT warmup" comment block near LOAD_RATE_RPS for the full rationale.
-    endpoint = f"http://localhost:8080/api/v1/{topology}"
     warmup_requests, warmup_duration_s = warmup_phase(endpoint)
 
     # 3. Measure pre-fault baseline throughput (against an already-warm JVM)
@@ -1327,73 +1258,22 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
     fault_cleared_at = _now_iso()
 
     # 7. Measure time_to_open and time_to_recover.
-    #    time_to_recover is ONLY computed when a breaker was confirmed open
-    #    (cb_opened=True). Running the recovery phase unconditionally produces
-    #    the corrupt combination: time_to_open=null + time_to_recover=0.5 s.
+    #    time_to_open is ONLY computed when a breaker was confirmed open
+    #    (cb_opened=True) -- running that computation unconditionally would
+    #    produce the corrupt combination: time_to_open=null + a real value.
+    #    time_to_recover's observation (the poll loop + HALF_OPEN probe-driving,
+    #    now owned by BreakerObserver -- see breaker_observer.py for the full
+    #    rationale) is delegated unconditionally: it internally skips the
+    #    poll/probe steps when cb_open_at is None, but ALWAYS collects real
+    #    transitions regardless of cb_opened -- an interior breaker can trip via
+    #    the slow-call path while the aggregate blast_radius signal still reads
+    #    "safe", and catching that is this sidecar's entire point.
     time_to_open = None
-    time_to_recover = None
-
     if cb_opened:
         time_to_open = round(cb_open_at[0] - load_start, 3)
 
-        # Poll for recovery, driving light traffic each iteration. Two caveats,
-        # documented rather than silently glossed over:
-        #  1. Resilience4j auto-transitions OPEN -> HALF_OPEN purely on elapsed
-        #     wait_duration, with no traffic required, and the Gateway's
-        #     blast-radius endpoint (BlastRadiusService.hasOpenCircuitBreaker)
-        #     only flags the literal "CIRCUIT_OPEN" status -- so blast_radius
-        #     reads 0.0 the moment the breaker LEAVES OPEN, before it has
-        #     necessarily reached CLOSED. Without traffic, a HALF_OPEN breaker
-        #     can't even attempt its permitted probe calls, so we send a few
-        #     real requests each iteration to give it that chance.
-        #  2. This still can't perfectly distinguish "HALF_OPEN, about to
-        #     re-open" from "genuinely CLOSED" using only the aggregate
-        #     blast-radius endpoint polled here in real time. The precise
-        #     per-breaker STATE_TRANSITION events ARE captured (see
-        #     collect_new_transitions() / cb_transitions.jsonl below), but as a
-        #     post-hoc record for analysis, not as a synchronous gate on this
-        #     loop's recovery decision. To reduce (not eliminate) false-early
-        #     recovery reads here, require the reading to stay at 0.0 across
-        #     two consecutive probes, one second apart, before declaring
-        #     recovery.
-        recovery_deadline = time.time() + config["waitDurationInOpenState"] + 10
-        consecutive_zero_reads = 0
-        while time.time() < recovery_deadline:
-            time.sleep(1.0)
-            try:
-                with urllib.request.urlopen(endpoint, timeout=5) as res:
-                    res.read()
-            except Exception:
-                pass
-            current_br = get_blast_radius()
-            if current_br is not None and current_br == 0.0:
-                consecutive_zero_reads += 1
-                if consecutive_zero_reads >= 2:
-                    time_to_recover = round(time.time() - cb_open_at[0], 3)
-                    break
-            else:
-                consecutive_zero_reads = 0
-        # If we exit the loop without recovering, time_to_recover stays None
-        # (meaningful null: system did not return to baseline within the window).
-
-        # The loop above exits ~2s after the breaker leaves OPEN (blast_radius flips to
-        # 0.0 the instant it's no longer OPEN -- caveat 1 above), which is nowhere near
-        # enough of its own light traffic (1 request/iteration) to exercise all
-        # PERMITTED_CALLS_HALF_OPEN probes before we stop watching. Confirmed on real
-        # data: precise_open_to_half_open lands almost exactly at wait_duration with
-        # n_half_open_bounces=0 for nearly every row, and precise_recovered is False
-        # for 100% of them -- the sidecar never got a chance to see HALF_OPEN resolve
-        # either way. Drive a few more real requests now, purely so those probes
-        # actually get attempted, then give the resulting transition event(s) a moment
-        # to land before collect_new_transitions() reads them below.
-        for _ in range(PERMITTED_CALLS_HALF_OPEN + 2):
-            try:
-                with urllib.request.urlopen(endpoint, timeout=5) as res:
-                    res.read()
-            except Exception:
-                pass
-            time.sleep(0.3)
-        time.sleep(2)
+    time_to_recover, transitions = observer.observe_recovery(
+        before_cb_counts, cb_open_at[0], config["waitDurationInOpenState"])
 
     # 8. Save results
     throughput_loss = max(0.0, 1.0 - (throughput / baseline_throughput))
@@ -1425,15 +1305,14 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
     }
     log_results(config, fault_type, mode, topology, metrics, replicate)
 
-    # Record real per-service breaker transitions for this run regardless of what
-    # blast_radius/cb_opened concluded -- catching the case where the aggregate
-    # signal says "nothing opened" but an interior breaker tripped via the
-    # slow-call path is the entire point of this sidecar.
-    transitions = collect_new_transitions(before_cb_counts)
-    log_cb_transitions(
-        make_experiment_id(topology, fault_type, config), topology, fault_type, config,
-        mode, replicate, fault_injected_at, fault_cleared_at, transitions,
-    )
+    # transitions already collected above (observer.observe_recovery), regardless of
+    # what blast_radius/cb_opened concluded -- catching the case where the aggregate
+    # signal says "nothing opened" but an interior breaker tripped via the slow-call
+    # path is the entire point of this sidecar.
+    cb_transitions_path = CANARY_CB_TRANSITIONS_PATH if mode == "canary" else CB_TRANSITIONS_PATH
+    observer.log(cb_transitions_path, make_experiment_id(topology, fault_type, config),
+                 topology, fault_type, config, mode, replicate,
+                 fault_injected_at, fault_cleared_at, transitions)
     return True
 
 def generate_occupancy_combinations():

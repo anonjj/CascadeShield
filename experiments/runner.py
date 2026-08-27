@@ -12,6 +12,7 @@ import threading
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from fault_injector import ToxiproxyClient
+from resumable_runner import load_completed, is_done, append_row
 
 # Toxiproxy Client
 toxiproxy = ToxiproxyClient()
@@ -22,6 +23,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # CSV Dataset Schema
 DATASET_PATH = BASE_DIR / "data" / "master_dataset.csv"
 CANARY_DATASET_PATH = BASE_DIR / "data" / "canary_runs.csv"
+SWEEP_DATASET_PATH = BASE_DIR / "data" / "crash_toxicity_sweep.csv"
+OCCUPANCY_DATASET_PATH = BASE_DIR / "data" / "occupancy_dataset.csv"
 STATUS_PATH = BASE_DIR / "data" / "run_status.json"
 ENV_PATH = BASE_DIR / "infra" / ".env"
 COMPOSE_FILE_PATH = BASE_DIR / "infra" / "docker-compose.yml"
@@ -117,6 +120,25 @@ DATASET_HEADERS = [
     "excluded_reason",
 ]
 
+# Crash toxicity sweep (mode="sweep"): same 34 columns as master, plus the configured
+# toxicity setpoint. A separate header/file so a new column never touches the master
+# schema -- see get_dataset_path/log_results.
+SWEEP_DATASET_HEADERS = DATASET_HEADERS + ["injected_toxicity"]
+
+# Occupancy-ratio sweep (mode="occupancy", D7 -- lambda is a variable, not a single
+# fixed value): same 34 columns as master, plus the occupancy diagnostic pair. A
+# separate header/file for the same reason as SWEEP_DATASET_HEADERS above -- adding
+# these directly to the shared DATASET_HEADERS would retroactively 36-column-mismatch
+# the already-collected 34-column data/master_dataset.csv (exactly the incident
+# resumable_runner.py's load_completed() now fails loudly on instead of silently).
+OCCUPANCY_DATASET_HEADERS = DATASET_HEADERS + ["occupancy_ratio", "inert"]
+
+# (experiment_id, str(replicate)) pairs already written to the current run's dataset
+# file -- populated once at the top of main() via resumable_runner.load_completed(),
+# and grown by log_results() after each successful append_row(). Lets a restarted
+# run skip cells it already has instead of re-running (and re-appending) them.
+completed_runs = set()
+
 # How many replicates per config (min 3 for variance estimation)
 N_REPLICATES = 3
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "LOCAL")  # override to AWS on cloud runs
@@ -149,7 +171,18 @@ SERVICE_BREAKERS = {
     "payment":      (8083, ["notificationServiceCB", "sharedDbCB"]),
     "notification": (8084, ["sharedDbCB"]),
 }
-CB_EVENT_BUFFER_SIZE = 50  # must match application.yml's event-consumer-buffer-size
+# Resilience4j's actuator event buffer is ONE ring per breaker shared across every event
+# type (SUCCESS/ERROR/NOT_PERMITTED/STATE_TRANSITION), not a STATE_TRANSITION-only log.
+# Load fairness (below) deliberately sustains traffic through the whole wait_duration --
+# every call rejected while OPEN emits its own NOT_PERMITTED event into this same ring --
+# so a long OPEN period floods and evicts the original CLOSED_TO_OPEN transition before
+# collect_new_transitions() ever reads it (confirmed on real data: wait_duration=30 runs
+# retained only their latest OPEN_TO_HALF_OPEN event, no CLOSED_TO_OPEN, making D12's
+# precise recovery metric silently NEVER_OPEN them). Worst case across every mode this
+# runs in: occupancy's rps=20/window=20/n_min=200 TIME_BASED cell offers
+# ~(10*20+15+10)*20 = 4500 requests in one run. 5000 gives headroom above that at a
+# memory cost (a few hundred bytes/event) too small to matter.
+CB_EVENT_BUFFER_SIZE = 5000  # must match application.yml's event-consumer-buffer-size
 
 # All six services in the call chain, for the readiness gate. shared-db-service has no
 # circuit breaker of its own (see SERVICE_BREAKERS above) but every other service calls
@@ -160,7 +193,7 @@ ALL_SERVICE_PORTS = {
     "payment": 8083, "notification": 8084, "shared-db": 8085,
 }
 
-# Configuration Parameter Values for Sweeps (3*3*3*2 = 54 configs per fault × 3 faults × 3 replicates = 486 total runs)
+# Configuration Parameter Values for Sweeps (3*3*3*2 = 54 configs per fault × 2 faults × 3 replicates = 324 total runs)
 PARAM_VALUES = {
     "failureRateThreshold": [30, 50, 70],
     "slidingWindowSize": [5, 10, 20],
@@ -172,7 +205,7 @@ PERMITTED_CALLS_HALF_OPEN = 5  # fixed baseline, not swept
 # short load, that threshold is never reached, so the breaker never evaluates and never
 # trips -- especially for TIME_BASED windows. We expose it (default 5) so it is actually
 # reachable within every swept window. See fix/measurement-validity + application.yml.
-CB_MINIMUM_CALLS = 5  # fixed baseline, not swept (must be <= smallest slidingWindowSize)
+CB_MINIMUM_CALLS = 5  # fixed baseline for full/canary/sweep modes (occupancy mode sweeps it instead)
 
 # ---- Load fairness (Task 1) --------------------------------------------------
 # COUNT_BASED and TIME_BASED interpret slidingWindowSize in different units (calls vs
@@ -189,6 +222,11 @@ LOAD_CONCURRENCY = 5
 TIME_BASED_MARGIN_S = 10           # safety margin on top of window + wait duration
 COUNT_BASED_WINDOW_MULTIPLE = 3    # fire >= this * slidingWindowSize calls
 COUNT_BASED_MIN_REQUESTS = 40      # floor: keep error-rate estimate statistically stable
+INERTNESS_WINDOW_MULTIPLE = 10     # occupancy mode's TIME_BASED load duration = this * window
+                                    # + wait + margin (vs full/canary's flat "window + wait +
+                                    # margin") -- a high-n_min occupancy cell (e.g. n_min=200)
+                                    # needs several window passes' worth of load for calls to
+                                    # accumulate, not just one.
 
 # Achieved-vs-requested arrival rate (see the "lambda_target/lambda_achieved" comment
 # block in DATASET_HEADERS). Flag a run when the measured rate misses the requested
@@ -251,7 +289,6 @@ GATEWAY_DIAGNOSTIC_TARGET = {"gateway-service": "http://localhost:8080"}
 # A leg counts as "degraded" if its observed error rate over the fault window exceeds this.
 # OPEN QUESTION -- threshold to be signed off; see docs/proposals/blast-radius-redefinition.md
 REAL_BLAST_LEG_ERROR_THRESHOLD = 0.50
-EVENT_BUFFER_SIZE = 2000   # module-level, beside PERMITTED_CALLS_HALF_OPEN
 
 
 def run_command(args, cwd=None):
@@ -262,15 +299,19 @@ def run_command(args, cwd=None):
     return result
 
 def write_env_file(config):
-    """Writes the current R4J config parameters to the infra/.env file."""
+    """Writes the current R4J config parameters to the infra/.env file.
+
+    config['minimumNumberOfCalls'] only exists for mode="occupancy" configs (see
+    generate_occupancy_combinations); full/canary/sweep configs fall back to the
+    fixed CB_MINIMUM_CALLS baseline, unchanged from before occupancy mode existed."""
     env_content = f"""# Auto-generated by CascadeShield Experiment Runner
 CB_SLIDING_WINDOW_SIZE={config['slidingWindowSize']}
 CB_SLIDING_WINDOW_TYPE={config['slidingWindowType']}
 CB_FAILURE_RATE_THRESHOLD={config['failureRateThreshold']}
 CB_WAIT_DURATION_OPEN={config['waitDurationInOpenState']}s
 CB_PERMITTED_CALLS_HALF_OPEN={PERMITTED_CALLS_HALF_OPEN}
-CB_EVENT_BUFFER_SIZE={EVENT_BUFFER_SIZE}
-CB_MINIMUM_CALLS={CB_MINIMUM_CALLS}
+CB_EVENT_BUFFER_SIZE={CB_EVENT_BUFFER_SIZE}
+CB_MINIMUM_CALLS={config.get('minimumNumberOfCalls', CB_MINIMUM_CALLS)}
 """
     os.makedirs(os.path.dirname(ENV_PATH), exist_ok=True)
     with open(ENV_PATH, "w") as f:
@@ -324,22 +365,23 @@ def wait_for_readiness(timeout=90):
     print(f"Timeout waiting for services to become healthy: {not_ready} never reported UP.", file=sys.stderr)
     return False, round(time.time() - start_time, 3)
 
-def inject_fault(fault_type):
-    """Injects the appropriate fault profile into Toxiproxy."""
+def inject_fault(fault_type, toxicity=1.0, crash_target=None):
+    """Injects the appropriate fault profile into Toxiproxy.
+
+    toxicity/crash_target only affect the crash branch; both are no-ops for the
+    other fault types."""
     toxiproxy.reset_all()
-    
+
     if fault_type == "latency":
         # Inject high latency (3000ms) on inventory-service-proxy
         # This simulates a slow inventory downstream dependency
         toxiproxy.inject_latency("inventory-service-proxy", delay_ms=3000, toxicity=1.0)
-        
+
     elif fault_type == "crash":
-        # Disable payment-service-proxy completely (simulates a crashed instance)
-        toxiproxy.set_enabled("payment-service-proxy", False)
-        
-    elif fault_type == "throttle":
-        # Limit database proxy bandwidth to 1 KB/s (simulates DB connection/resource limits)
-        toxiproxy.inject_bandwidth_limit("shared-db-service-proxy", rate_kbps=1, toxicity=1.0)
+        # Reset a fraction (toxicity) of connections to the target proxy, simulating a
+        # graded crash. toxicity=1.0 resets every connection (full outage, matching the
+        # pre-sweep behavior of disabling the proxy outright).
+        toxiproxy.inject_reset_peer(crash_target or "payment-service-proxy", timeout_ms=0, toxicity=toxicity)
 
     elif fault_type == "none":
         # Deliberate no-op: this is a control replicate. toxiproxy.reset_all() above already
@@ -375,15 +417,26 @@ def compute_load_plan(config, target_rps=LOAD_RATE_RPS, topology=None):
     interval_s = 1.0 / target_rps
     window = int(config["slidingWindowSize"])
     wait = int(config["waitDurationInOpenState"])
+    # minimumNumberOfCalls only exists on occupancy-mode configs (see
+    # generate_occupancy_combinations); everything else falls back to the fixed
+    # CB_MINIMUM_CALLS baseline, unchanged from before occupancy mode existed.
+    n_min = int(config.get("minimumNumberOfCalls", CB_MINIMUM_CALLS))
 
     if config["slidingWindowType"] == "TIME_BASED":
         # Sustain load long enough for the trailing time-window (seconds) to fill, the
         # breaker to sit OPEN for wait_duration, and an automatic HALF_OPEN probe to fire.
-        duration_s = window + wait + TIME_BASED_MARGIN_S
-        requests_count = max(int(duration_s * target_rps), CB_MINIMUM_CALLS + 1)
+        # Occupancy-mode configs use INERTNESS_WINDOW_MULTIPLE instead of a single window
+        # pass, since a high-n_min cell (e.g. n_min=200) needs several window passes'
+        # worth of load for calls to actually accumulate. Gated on minimumNumberOfCalls
+        # being present (not applied unconditionally) so full/canary/sweep's load sizing
+        # -- and therefore their run duration and byte-identical default behavior -- is
+        # completely unaffected.
+        window_multiple = INERTNESS_WINDOW_MULTIPLE if "minimumNumberOfCalls" in config else 1
+        duration_s = window_multiple * window + wait + TIME_BASED_MARGIN_S
+        requests_count = max(int(duration_s * target_rps), n_min + 1)
     else:  # COUNT_BASED -- window is measured in calls
         requests_count = max(window * COUNT_BASED_WINDOW_MULTIPLE,
-                             CB_MINIMUM_CALLS * 3, COUNT_BASED_MIN_REQUESTS)
+                             n_min * 3, COUNT_BASED_MIN_REQUESTS)
         duration_s = requests_count * interval_s
 
     gatling_profile = {
@@ -430,6 +483,21 @@ def compute_effective_horizon(window_type, window_size, lambda_achieved):
             return None
         return lambda_achieved * window_size
     return None
+
+
+def compute_occupancy_ratio(window_type, window_size, min_calls, lambda_achieved):
+    """Occupancy ratio rho: how full the sliding window was relative to the minimum
+    evaluation threshold (minimumNumberOfCalls) -- rho = effective_horizon / min_calls.
+    rho >= 1 means the window had enough calls to even evaluate the breaker; rho < 1
+    means it structurally could not, regardless of failure rate. This is the quantity
+    H2's inertness boundary is tested against (D7 -- does `inert` flip to True at
+    rho* = 1?). Delegates to compute_effective_horizon so the COUNT/TIME branching
+    logic exists in exactly one place. Returns None when that horizon can't be
+    computed (TIME_BASED with no measured lambda_achieved)."""
+    horizon = compute_effective_horizon(window_type, window_size, lambda_achieved)
+    if horizon is None:
+        return None
+    return horizon / min_calls
 
 
 def generate_load(endpoint_url, requests_count=50, concurrency=5, interval_s=0.05):
@@ -818,7 +886,7 @@ def compute_leg_failure_rates(before, after):
     caller's perspective it is propagated failure, not success; slow-but-completed calls stay
     success. This RAW per-leg breakdown is persisted (leg_failure_rates column) so
     real_blast_radius can be recomputed at ANY TAU_LEG straight from the CSV -- no need to
-    re-run the 486-run sweep if the threshold changes after sign-off. Returns {} if nothing
+    re-run the 324-run sweep if the threshold changes after sign-off. Returns {} if nothing
     observable (measurement gap). See docs/proposals/blast-radius-redefinition.md."""
     rates = {}
     if not before or not after:
@@ -854,15 +922,22 @@ def compute_real_blast_radius(before, after, tau=REAL_BLAST_LEG_ERROR_THRESHOLD)
 def make_experiment_id(topology, fault_type, config):
     """Builds a deterministic ID matching experiment_matrix.csv e.g. LIN-LAT-CNT-T50-W10-D15."""
     topo_map  = {"linear": "LIN", "fanout": "FAN", "mesh": "MSH"}
-    fault_map = {"latency": "LAT", "crash": "CRS", "throttle": "THR", "none": "NON"}
+    fault_map = {"latency": "LAT", "crash": "CRS", "none": "NON"}
     wtype_map = {"COUNT_BASED": "CNT", "TIME_BASED": "TIM"}
     topo  = topo_map.get(topology, topology[:3].upper())
     fault = fault_map.get(fault_type, fault_type[:3].upper())
     wtype = wtype_map.get(config["slidingWindowType"], config["slidingWindowType"][:3])
-    return (f"{topo}-{fault}-{wtype}"
-            f"-T{config['failureRateThreshold']}"
-            f"-W{config['slidingWindowSize']}"
-            f"-D{config['waitDurationInOpenState']}")
+    experiment_id = (f"{topo}-{fault}-{wtype}"
+                      f"-T{config['failureRateThreshold']}"
+                      f"-W{config['slidingWindowSize']}"
+                      f"-D{config['waitDurationInOpenState']}")
+    # -M/-L only apply to mode="occupancy" configs (minimumNumberOfCalls/targetRps are
+    # swept there); appended conditionally so every other mode's IDs are unchanged.
+    if "minimumNumberOfCalls" in config:
+        experiment_id += f"-M{config['minimumNumberOfCalls']}"
+    if "targetRps" in config:
+        experiment_id += f"-L{int(config['targetRps'])}"
+    return experiment_id
 
 def _now_iso():
     """UTC timestamp in the same format log_results() uses for run_timestamp,
@@ -880,12 +955,21 @@ def write_status(status):
     os.replace(tmp_path, STATUS_PATH)
 
 def get_dataset_path(mode):
-    """canary writes to a disposable file; full writes to the real research dataset."""
-    return CANARY_DATASET_PATH if mode == "canary" else DATASET_PATH
+    """canary writes to a disposable file, sweep/occupancy write to their own isolated
+    files, and full writes to the real research dataset."""
+    if mode == "canary":
+        return CANARY_DATASET_PATH
+    if mode == "sweep":
+        return SWEEP_DATASET_PATH
+    if mode == "occupancy":
+        return OCCUPANCY_DATASET_PATH
+    return DATASET_PATH
 
 def log_results(config, fault_type, mode, topology, metrics, replicate):
-    """Appends experiment run results to master_dataset.csv (full mode) or
-    canary_runs.csv (canary mode) -- 33-col schema, same DATASET_HEADERS either way.
+    """Appends experiment run results to master_dataset.csv (full mode), canary_runs.csv
+    (canary mode), crash_toxicity_sweep.csv (sweep mode -- DATASET_HEADERS plus
+    injected_toxicity), or occupancy_dataset.csv (occupancy mode -- DATASET_HEADERS plus
+    occupancy_ratio/inert). Both extensions are kept out of the master schema.
 
     metrics only needs to carry the keys a given call actually has: a
     PRECONDITION_FAIL row (aborted before fault injection, before warmup even
@@ -895,73 +979,90 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
     blank rather than KeyError-ing or fabricating a 0.0. run_order_seed and
     run_index are the two exceptions expected on every row regardless of
     outcome -- a run's position in the shuffled execution order is known the
-    moment it starts, independent of what happens during it."""
-    dataset_path = get_dataset_path(mode)
-    os.makedirs(os.path.dirname(dataset_path), exist_ok=True)
-    file_exists = os.path.exists(dataset_path)
+    moment it starts, independent of what happens during it.
 
-    if file_exists:
-        with open(dataset_path, newline="") as f:
-            existing_header = next(csv.reader(f), [])
-        if existing_header != DATASET_HEADERS:
-            print(
-                f"{os.path.basename(dataset_path)} header does not match the current DATASET_HEADERS "
-                f"(expected {DATASET_HEADERS}, found {existing_header}). Refusing to "
-                "append — this would silently shift columns for every downstream row. "
-                "Move or rename the stale file first.",
-                file=sys.stderr,
-            )
-            return
+    The header-mismatch guard now lives in resumable_runner.load_completed(),
+    called once at the top of main() -- a mismatch there raises SystemExit
+    (loud, before any run starts) instead of this function silently refusing
+    to write per-row (the bug that ate the occupancy-ratio run: a stale
+    on-disk header made every call here a no-op while the sweep kept
+    "succeeding"). Every successful write here also records the row's
+    (experiment_id, replicate) into completed_runs so a restarted run skips
+    it (see is_done() in main())."""
+    dataset_path = get_dataset_path(mode)
+    if mode == "sweep":
+        headers = SWEEP_DATASET_HEADERS
+    elif mode == "occupancy":
+        headers = OCCUPANCY_DATASET_HEADERS
+    else:
+        headers = DATASET_HEADERS
+    os.makedirs(os.path.dirname(dataset_path), exist_ok=True)
 
     experiment_id = make_experiment_id(topology, fault_type, config)
     time_to_open = metrics.get("time_to_open")
     time_to_recover = metrics.get("time_to_recover")
 
-    with open(dataset_path, mode="a", newline="") as f:
-        writer = csv.writer(f)
-        if not file_exists:
-            writer.writerow(DATASET_HEADERS)
+    row = {
+        "experiment_id": experiment_id,
+        "topology": topology.upper(),
+        "fault_type": fault_type.upper(),
+        "window_type": config["slidingWindowType"],
+        "threshold": config["failureRateThreshold"],
+        "window_size": config["slidingWindowSize"],
+        "wait_duration": config["waitDurationInOpenState"],
+        "permitted_calls_half_open": config.get("permittedCallsInHalfOpenState", 5),
+        "environment": ENVIRONMENT,
+        "mode": mode,
+        "replicate": replicate,
+        "run_timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "blast_radius": f"{metrics.get('blast_radius', ''):.4f}" if metrics.get('blast_radius') is not None else "",
+        "time_to_open": time_to_open if time_to_open is not None else "",   # "" = CB never opened (meaningful null)
+        "time_to_recover": time_to_recover if time_to_recover is not None else "",  # "" = system did not recover (meaningful null)
+        "error_rate": f"{metrics['error_rate']:.4f}" if metrics.get('error_rate') is not None else "",
+        "throughput_loss": f"{metrics['throughput_loss']:.4f}" if metrics.get('throughput_loss') is not None else "",
+        "real_blast_radius": f"{metrics['real_blast_radius']:.4f}" if metrics.get('real_blast_radius') is not None else "",  # "" = no leg observable (measurement gap)
+        "leg_failure_rates": ";".join(f"{svc}:{rate:.4f}" for svc, rate in (metrics.get('leg_failure_rates') or {}).items()),  # raw per-leg rates; "" = none observed
+        "precondition_ok": metrics.get("precondition_ok", ""),
+        "precondition_fail_reason": metrics.get("precondition_fail_reason", ""),
+        "readiness_wait_s": f"{metrics['readiness_wait_s']:.3f}" if metrics.get('readiness_wait_s') is not None else "",
+        "cb_state_pre": metrics.get("cb_state_pre", ""),
+        "buffered_calls_pre": metrics.get("buffered_calls_pre", ""),
+        "warmup_requests": metrics.get("warmup_requests", ""),
+        "warmup_duration_s": f"{metrics['warmup_duration_s']:.3f}" if metrics.get('warmup_duration_s') is not None else "",
+        "run_order_seed": metrics.get("run_order_seed", ""),
+        "run_index": metrics.get("run_index", ""),
+        "lambda_target": f"{metrics['lambda_target']:.4f}" if metrics.get('lambda_target') is not None else "",
+        "lambda_achieved": f"{metrics['lambda_achieved']:.4f}" if metrics.get('lambda_achieved') is not None else "",
+        "lambda_cv": f"{metrics['lambda_cv']:.4f}" if metrics.get('lambda_cv') is not None else "",
+        "lambda_deviation_flag": metrics.get("lambda_deviation_flag") if metrics.get("lambda_deviation_flag") is not None else "",
+        "effective_horizon": f"{metrics['effective_horizon']:.4f}" if metrics.get('effective_horizon') is not None else "",
+        "excluded_reason": "",  # always empty at write time; only analysis/quarantine.py fills it
+    }
+    if mode == "sweep":
+        row["injected_toxicity"] = f"{metrics['injected_toxicity']:.4f}" if metrics.get('injected_toxicity') is not None else ""
+    elif mode == "occupancy":
+        n_min = config.get("minimumNumberOfCalls", CB_MINIMUM_CALLS)
+        occupancy_ratio = compute_occupancy_ratio(
+            config["slidingWindowType"], config["slidingWindowSize"],
+            n_min, metrics.get("lambda_achieved"))
+        row["occupancy_ratio"] = f"{occupancy_ratio:.4f}" if occupancy_ratio is not None else ""
+        # inert: observed signal -- True when the breaker never opened AND the lambda
+        # measurement is trustworthy. Blank when lambda_deviation_flag is set (rate
+        # measurement unreliable) or unmeasured (aborted run) -- never fabricated from an
+        # untrustworthy or missing rate. This is what H2's inertness boundary (does
+        # `inert` flip to True at occupancy_ratio*=1?) is regressed against.
+        lambda_deviation_flag = metrics.get("lambda_deviation_flag")
+        if lambda_deviation_flag is None or lambda_deviation_flag:
+            row["inert"] = ""
+        else:
+            row["inert"] = time_to_open is None
 
-        writer.writerow([
-            experiment_id,
-            topology.upper(),
-            fault_type.upper(),
-            config["slidingWindowType"],
-            config["failureRateThreshold"],
-            config["slidingWindowSize"],
-            config["waitDurationInOpenState"],
-            config.get("permittedCallsInHalfOpenState", 5),
-            ENVIRONMENT,
-            mode,
-            replicate,
-            time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            f"{metrics.get('blast_radius', ''):.4f}" if metrics.get('blast_radius') is not None else "",
-            time_to_open if time_to_open is not None else "",   # "" = CB never opened (meaningful null)
-            time_to_recover if time_to_recover is not None else "",  # "" = system did not recover (meaningful null)
-            f"{metrics['error_rate']:.4f}" if metrics.get('error_rate') is not None else "",
-            f"{metrics['throughput_loss']:.4f}" if metrics.get('throughput_loss') is not None else "",
-            f"{metrics['real_blast_radius']:.4f}" if metrics.get('real_blast_radius') is not None else "",  # "" = no leg observable (measurement gap)
-            ";".join(f"{svc}:{rate:.4f}" for svc, rate in (metrics.get('leg_failure_rates') or {}).items()),  # raw per-leg rates; "" = none observed
-            metrics.get("precondition_ok", ""),
-            metrics.get("precondition_fail_reason", ""),
-            f"{metrics['readiness_wait_s']:.3f}" if metrics.get('readiness_wait_s') is not None else "",
-            metrics.get("cb_state_pre", ""),
-            metrics.get("buffered_calls_pre", ""),
-            metrics.get("warmup_requests", ""),
-            f"{metrics['warmup_duration_s']:.3f}" if metrics.get('warmup_duration_s') is not None else "",
-            metrics.get("run_order_seed", ""),
-            metrics.get("run_index", ""),
-            f"{metrics['lambda_target']:.4f}" if metrics.get('lambda_target') is not None else "",
-            f"{metrics['lambda_achieved']:.4f}" if metrics.get('lambda_achieved') is not None else "",
-            f"{metrics['lambda_cv']:.4f}" if metrics.get('lambda_cv') is not None else "",
-            metrics.get("lambda_deviation_flag") if metrics.get("lambda_deviation_flag") is not None else "",
-            f"{metrics['effective_horizon']:.4f}" if metrics.get('effective_horizon') is not None else "",
-            "",  # excluded_reason -- always empty at write time; only analysis/quarantine.py fills it
-        ])
+    append_row(dataset_path, row, headers)
+    completed_runs.add((experiment_id, str(replicate)))
     print(f"Saved run metrics to {dataset_path}")
 
 def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
-                        run_order_seed=None, run_index=None):
+                        run_order_seed=None, run_index=None, toxicity=1.0):
     """Orchestrates a single configuration and fault run.
 
     run_order_seed/run_index describe this run's place in the sweep's shuffled
@@ -991,6 +1092,7 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
             "readiness_wait_s": readiness_wait_s,
             "run_order_seed": run_order_seed,
             "run_index": run_index,
+            "injected_toxicity": toxicity,
         }, replicate)
         return False
 
@@ -1013,6 +1115,7 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
             "buffered_calls_pre": _serialize_cb_map(precondition["buffered_calls"]),
             "run_order_seed": run_order_seed,
             "run_index": run_index,
+            "injected_toxicity": toxicity,
         }, replicate)
         return False
 
@@ -1037,8 +1140,11 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
 
     # 4. Inject fault into Toxiproxy
     fault_injected_at = _now_iso()
+    # Sweep mode retargets crash to inventory-service-proxy (the same target latency
+    # uses) so mechanism, not service position, is the only thing varying.
+    crash_target = "inventory-service-proxy" if mode == "sweep" else None
     try:
-        inject_fault(fault_type)
+        inject_fault(fault_type, toxicity=toxicity, crash_target=crash_target)
     except Exception as e:
         print(f"Fault injection failed: {e} — skipping run.", file=sys.stderr)
         toxiproxy.reset_all()
@@ -1047,7 +1153,9 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
     # 5. Size the fault load per window type so TIME_BASED windows can actually fill
     #    (Task 1). Snapshot per-leg CB call counters just before the fault window so the
     #    real (request-level) blast radius is a clean delta over the window (Task 2).
-    plan = compute_load_plan(config, topology=topology)
+    #    config['targetRps'] only exists for mode="occupancy" configs; every other mode
+    #    falls back to compute_load_plan's own LOAD_RATE_RPS default, unchanged.
+    plan = compute_load_plan(config, target_rps=config.get("targetRps", LOAD_RATE_RPS), topology=topology)
     print(f"Load plan ({config['slidingWindowType']}): {plan['requests_count']} requests "
           f"over ~{plan['duration_s']:.0f}s @ {plan['target_rps']} req/s")
     cb_calls_before = snapshot_cb_calls()
@@ -1074,7 +1182,7 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
                 blast_radius_container[0] = result
                 cb_open_at[0] = time.time()   # record when we first saw an open CB
                 return
-        # Final read after the deadline: for latency/throttle faults, each request
+        # Final read after the deadline: for latency faults, each request
         # can take 3-5s, so the CB may not trip until after the 12s poll window.
         # If this read finds a nonzero blast radius, stamp cb_open_at here too —
         # otherwise we'd write a row with blast_radius > 0 but time_to_open = null,
@@ -1116,10 +1224,11 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
     # filled -- distinct from, and a likely cause of, a spuriously "safe" reading.
     effective_horizon = compute_effective_horizon(
         config["slidingWindowType"], config["slidingWindowSize"], lambda_achieved)
-    if effective_horizon is not None and effective_horizon < CB_MINIMUM_CALLS:
+    n_min_for_horizon = config.get("minimumNumberOfCalls", CB_MINIMUM_CALLS)
+    if effective_horizon is not None and effective_horizon < n_min_for_horizon:
         print(
             f"WARNING: effective horizon {effective_horizon:.2f} calls < "
-            f"CB_MINIMUM_CALLS ({CB_MINIMUM_CALLS}) -- the sliding window likely never "
+            f"minimumNumberOfCalls ({n_min_for_horizon}) -- the sliding window likely never "
             "filled enough to evaluate the breaker during this run.",
             file=sys.stderr,
         )
@@ -1201,6 +1310,25 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
         # If we exit the loop without recovering, time_to_recover stays None
         # (meaningful null: system did not return to baseline within the window).
 
+        # The loop above exits ~2s after the breaker leaves OPEN (blast_radius flips to
+        # 0.0 the instant it's no longer OPEN -- caveat 1 above), which is nowhere near
+        # enough of its own light traffic (1 request/iteration) to exercise all
+        # PERMITTED_CALLS_HALF_OPEN probes before we stop watching. Confirmed on real
+        # data: precise_open_to_half_open lands almost exactly at wait_duration with
+        # n_half_open_bounces=0 for nearly every row, and precise_recovered is False
+        # for 100% of them -- the sidecar never got a chance to see HALF_OPEN resolve
+        # either way. Drive a few more real requests now, purely so those probes
+        # actually get attempted, then give the resulting transition event(s) a moment
+        # to land before collect_new_transitions() reads them below.
+        for _ in range(PERMITTED_CALLS_HALF_OPEN + 2):
+            try:
+                with urllib.request.urlopen(endpoint, timeout=5) as res:
+                    res.read()
+            except Exception:
+                pass
+            time.sleep(0.3)
+        time.sleep(2)
+
     # 8. Save results
     throughput_loss = max(0.0, 1.0 - (throughput / baseline_throughput))
     metrics = {
@@ -1226,6 +1354,7 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
         "lambda_cv": lambda_cv,
         "lambda_deviation_flag": lambda_deviation_flag,
         "effective_horizon": effective_horizon,
+        "injected_toxicity": toxicity,
     }
     log_results(config, fault_type, mode, topology, metrics, replicate)
 
@@ -1240,10 +1369,48 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
     )
     return True
 
+def generate_occupancy_combinations():
+    """Occupancy-ratio study (D7 -- lambda is a variable the theory is about, not a
+    single fixed value). Isolated from the main matrix: LINEAR + LATENCY only (set by
+    the CLI, not this function); failureRateThreshold and waitDurationInOpenState held
+    fixed since they aren't part of the occupancy story -- only window_size x
+    minimumNumberOfCalls x targetRps (lambda) vary.
+
+    54 unique configs: 36 TIME_BASED cells (3 lambda x 3 window x 4 n_min) + 18
+    COUNT_BASED control cells (2 lambda x 3 window x 3 n_min). COUNT_BASED already
+    fills/trips regardless of arrival rate (its window is calls, not wall-clock time),
+    so it's swept narrower here purely as a negative control on H2's inertness claim,
+    not as a symmetric arm."""
+    combos = []
+    fixed_threshold = 50
+    fixed_wait = 15
+    # TIME_BASED phase grid: lambda x window x n_min = 3*3*4 = 36 cells
+    for rps in (5, 10, 20):
+        for window in (5, 10, 20):
+            for n_min in (5, 50, 100, 200):
+                combos.append({
+                    "failureRateThreshold": fixed_threshold, "slidingWindowSize": window,
+                    "waitDurationInOpenState": fixed_wait, "slidingWindowType": "TIME_BASED",
+                    "minimumNumberOfCalls": n_min, "targetRps": rps,
+                })
+    # COUNT_BASED control arm: lambda x window x n_min = 2*3*3 = 18 cells
+    for rps in (5, 20):
+        for window in (5, 10, 20):
+            for n_min in (5, 50, 200):
+                combos.append({
+                    "failureRateThreshold": fixed_threshold, "slidingWindowSize": window,
+                    "waitDurationInOpenState": fixed_wait, "slidingWindowType": "COUNT_BASED",
+                    "minimumNumberOfCalls": n_min, "targetRps": rps,
+                })
+    return combos
+
 def generate_combinations(mode):
     """Generates configuration combinations depending on the mode."""
+    if mode == "occupancy":
+        return generate_occupancy_combinations()
+
     configs = []
-    
+
     if mode == "canary":
         # 5 representative configs spanning the parameter space (aggressive, conservative, midpoint)
         configs = [
@@ -1256,8 +1423,18 @@ def generate_combinations(mode):
             # Midpoint config
             {"failureRateThreshold": 50, "slidingWindowSize": 10, "waitDurationInOpenState": 15, "slidingWindowType": "COUNT_BASED"},
         ]
+    elif mode == "sweep":
+        # Crash toxicity sweep: window_type/window_size/wait fixed at the canonical
+        # midpoint config so toxicity is the only thing varying run-to-run; only
+        # failureRateThreshold varies here (the second swept factor, alongside
+        # --toxicity). [20, 40, 60, 80] is provisional -- confirm before the real
+        # Phase 4 run.
+        configs = [
+            {"failureRateThreshold": t, "slidingWindowSize": 10, "waitDurationInOpenState": 15, "slidingWindowType": "COUNT_BASED"}
+            for t in [20, 40, 60, 80]
+        ]
     else:
-        # Full Sweep: 3*3*3*2 = 54 configs per fault × 3 faults × 3 replicates = 486 total runs
+        # Full Sweep: 3*3*3*2 = 54 configs per fault × 2 faults × 3 replicates = 324 total runs
         for threshold in PARAM_VALUES["failureRateThreshold"]:
             for window in PARAM_VALUES["slidingWindowSize"]:
                 for wait in PARAM_VALUES["waitDurationInOpenState"]:
@@ -1304,11 +1481,21 @@ def apply_run_limit(run_list, limit):
 
 def main():
     parser = argparse.ArgumentParser(description="CascadeShield Parameter Sweep Automation Runner")
-    parser.add_argument("--mode", choices=["canary", "full"], default="canary", help="canary (5 configs × 3 replicates = 15 runs) or full (54 configs × 3 replicates = 162 runs per fault type; 486 total across 3 faults)")
-    parser.add_argument("--fault", choices=["latency", "crash", "throttle", "none"], default="latency",
+    parser.add_argument("--mode", choices=["canary", "full", "sweep", "occupancy"], default="canary",
+                         help="canary (5 configs × 3 replicates = 15 runs), full (54 configs × 3 replicates "
+                              "= 162 runs per fault type; 324 total across 2 faults), sweep (crash toxicity "
+                              "sweep -- writes to data/crash_toxicity_sweep.csv, not master; use with "
+                              "--fault crash --toxicity), or occupancy (D7 lambda-sweep, 54 configs × "
+                              "replicates -- writes to data/occupancy_dataset.csv, not master; use with "
+                              "--fault latency --topology linear)")
+    parser.add_argument("--fault", choices=["latency", "crash", "none"], default="latency",
                          help="Fault type to inject. 'none' is the no-fault control condition -- "
                               f"requires --replicates >= {MIN_NONE_FAULT_REPLICATES} (see MIN_NONE_FAULT_REPLICATES).")
     parser.add_argument("--topology", choices=["linear", "fanout", "mesh"], default="linear", help="Service mesh topology pattern")
+    parser.add_argument("--toxicity", type=float, default=1.0,
+                         help="Fraction of connections affected by the crash fault's reset_peer toxic "
+                              "(0.0-1.0). Only meaningful for --fault crash. Default 1.0 matches today's "
+                              "full-outage crash behavior.")
     parser.add_argument("--replicates", type=int, default=N_REPLICATES, help=f"Number of replicates per config (default: {N_REPLICATES})")
     parser.add_argument("--seed", type=int, default=None,
                          help="Seed for the run-order shuffle (default: a fresh random seed each "
@@ -1352,6 +1539,23 @@ def main():
     total_runs = len(configs) * args.replicates
     print(f"Generated {len(configs)} configs × {args.replicates} replicates = {total_runs} total runs.")
 
+    # Resumability (D9): load whatever (experiment_id, replicate) pairs the dataset file
+    # already has, once, up front. A header mismatch raises SystemExit here -- loudly,
+    # before any run starts -- rather than log_results() silently refusing every write
+    # while the loop keeps reporting "progress" (the bug that ate the occupancy run).
+    global completed_runs
+    dataset_path = get_dataset_path(args.mode)
+    if args.mode == "sweep":
+        dataset_headers = SWEEP_DATASET_HEADERS
+    elif args.mode == "occupancy":
+        dataset_headers = OCCUPANCY_DATASET_HEADERS
+    else:
+        dataset_headers = DATASET_HEADERS
+    completed_runs = load_completed(dataset_path, dataset_headers)
+    if completed_runs:
+        print(f"Resuming {dataset_path}: {len(completed_runs)} (experiment_id, replicate) "
+              "cell(s) already recorded and will be skipped.")
+
     # Randomize run order (see build_shuffled_run_list): sequential execution of a long
     # sweep on one host confounds treatment (config) with thermal/memory drift over the
     # sweep's wall-clock duration -- later configs would systematically run on a
@@ -1379,9 +1583,17 @@ def main():
         "phase": "running", "started_at": started_at, "updated_at": started_at,
     })
 
+    skipped_runs = 0
     for run_index, (i, config, rep) in enumerate(run_list, start=1):
         run_number = run_index  # execution sequence position, not config/replicate order
         print(f"\nProgress: Run {run_number} of {total_runs} (config {i+1}/{len(configs)}, replicate {rep}/{args.replicates})")
+
+        experiment_id = make_experiment_id(args.topology, args.fault, config)
+        if is_done(experiment_id, rep, completed_runs):
+            print(f"Skipping run {run_number}: {experiment_id} replicate {rep} already in {dataset_path}.")
+            skipped_runs += 1
+            continue
+
         write_status({
             "mode": args.mode, "fault_type": args.fault, "topology": args.topology,
             "replicates": args.replicates, "total_configs": len(configs), "total_runs": total_runs,
@@ -1390,7 +1602,8 @@ def main():
             "phase": "running", "started_at": started_at, "updated_at": _now_iso(),
         })
         success = run_experiment_run(config, args.fault, args.mode, args.topology, replicate=rep,
-                                      run_order_seed=run_order_seed, run_index=run_index)
+                                      run_order_seed=run_order_seed, run_index=run_index,
+                                      toxicity=args.toxicity)
         if success:
             success_runs += 1
         else:
@@ -1404,7 +1617,8 @@ def main():
         })
 
     print("\n" + "="*60)
-    print(f"SWEEP COMPLETED: {success_runs}/{total_runs} runs executed successfully.")
+    print(f"SWEEP COMPLETED: {success_runs}/{total_runs} runs executed successfully "
+          f"({skipped_runs} skipped as already-recorded on resume).")
     print(f"Master dataset: {get_dataset_path(args.mode)}")
     print("="*60)
     write_status({
@@ -1412,7 +1626,7 @@ def main():
         "replicates": args.replicates, "total_configs": len(configs), "total_runs": total_runs,
         "run_number": total_runs, "config_index": len(configs) - 1 if configs else None,
         "current_config": None, "replicate": None,
-        "success_runs": success_runs, "failed_runs": failed_runs,
+        "success_runs": success_runs, "failed_runs": failed_runs, "skipped_runs": skipped_runs,
         "phase": "completed", "started_at": started_at, "updated_at": _now_iso(),
     })
 

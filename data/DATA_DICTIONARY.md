@@ -60,12 +60,27 @@ See `docs/paper/leak-audit.md` for how each verdict was reached.
 
 **Status:** Defined (Week 1). **Lock target:** end of Week 2 — no column changes after that.
 **Primary file:** `data/master_dataset_schema.csv` (header-only skeleton; experiments append rows).
-**Planning file:** `data/experiment_matrix.csv` (486 fault-bearing configurations —
-`LATENCY`/`CRASH`/`THROTTLE` — plus 162 `NONE` no-fault control configurations, 648 total).
+**Planning file:** `data/experiment_matrix.csv` (324 fault-bearing configurations —
+`LATENCY`/`CRASH` — plus 162 `NONE` no-fault control configurations, 486 total). `THROTTLE`
+was dropped from the plan: it never produced usable data in any archive (only the
+unusable pre-timing `v1_prefix` sweep has it), and its effect was judged redundant with
+`LATENCY`'s slow-call mechanism.
+
+**Auxiliary sweep modes** write to their own isolated files, each with a small header
+extension kept out of this master schema by design (`get_dataset_path`/`log_results` in
+`experiments/runner.py`), and — like `injected_toxicity` before them — are not
+documented column-by-column here to avoid a second, driftable copy of the schema; see
+the mode's own code comments in `runner.py` for the exact columns:
+- `data/crash_toxicity_sweep.csv` (`--mode sweep`) — adds `injected_toxicity`.
+- `data/occupancy_dataset.csv` (`--mode occupancy`, **D7**: sweeps λ ∈ {5, 10, 20} against
+  `minimumNumberOfCalls` and `window_size`, since H2's crossover-λ* claim needs λ to
+  actually vary) — adds `occupancy_ratio` (how full the sliding window was relative to
+  `minimumNumberOfCalls`) and `inert` (observed: did the breaker ever open, given a
+  trustworthy `lambda_achieved` measurement).
 
 > 🔄 **SWEEP IN PROGRESS — current `master_dataset.csv` is a partial rebuild.**
 > After the blast-radius metric change the dataset was reseeded from empty, and collection is
-> still underway: **80 rows, `LINEAR` / `LATENCY` only** — one cell of the planned 486-config
+> still underway: **80 rows, `LINEAR` / `LATENCY` only** — one cell of the planned 324-config
 > matrix. Because that cell has not yet produced a run with zero tripped subjects, every row
 > currently labels `unsafe` and the classifier target is **single-class, so the Decision Tree
 > classifier is not trainable yet**. This is sweep incompleteness, not a threshold problem —
@@ -85,10 +100,10 @@ See `docs/paper/leak-audit.md` for how each verdict was reached.
 A single row = **one execution** of one configuration in one environment.
 
 The unique key is the triple **(`experiment_id`, `environment`, `replicate`)**, *not* `experiment_id`
-alone. There are **486 unique configurations**; with environments and replicates the table grows
-past 486 (e.g. 486 configs × 2 environments × 3 replicates = 2,916 rows).
+alone. There are **324 unique configurations**; with environments and replicates the table grows
+past 324 (e.g. 324 configs × 2 environments × 3 replicates = 1,944 rows).
 
-`486 = 3 (topology) × 3 (fault_type) × 2 (window_type) × 3 (threshold) × 3 (window_size) × 3 (wait_duration)`
+`324 = 3 (topology) × 2 (fault_type) × 2 (window_type) × 3 (threshold) × 3 (window_size) × 3 (wait_duration)`
 
 ---
 
@@ -105,7 +120,7 @@ past 486 (e.g. 486 configs × 2 environments × 3 replicates = 2,916 rows).
 | Column | Type | Valid values | Unit | ML encoding |
 |--------|------|--------------|------|-------------|
 | `topology` | categorical | `LINEAR` (planned: `FAN_OUT`, `SHARED_DEP_MESH`) | — | one-hot |
-| `fault_type` | categorical | `LATENCY`, `CRASH`, `THROTTLE`, `NONE` | — | one-hot (`NONE` excluded — see note below) |
+| `fault_type` | categorical | `LATENCY`, `CRASH`, `NONE` | — | one-hot (`NONE` excluded — see note below) |
 | `window_type` | categorical (binary) | `COUNT_BASED`, `TIME_BASED` | — | binary (0/1) — **the primary novelty variable** |
 | `threshold` | int | `{30, 50, 70}` (range 1–100) | percent | numeric |
 | `window_size` | int | `{5, 10, 20}` (range 1–1000) | **calls if COUNT_BASED, seconds if TIME_BASED** | numeric (see note) |
@@ -422,11 +437,11 @@ before the fault and diffs it after the run, writing one JSON line per run to
 `data/cb_transitions.jsonl` (`data/canary_cb_transitions.jsonl` in canary mode):
 
 ```json
-{"experiment_id": "...", "topology": "LINEAR", "fault_type": "THROTTLE",
+{"experiment_id": "...", "topology": "LINEAR", "fault_type": "LATENCY",
  "window_type": "COUNT_BASED", "environment": "LOCAL", "mode": "full", "replicate": 1,
  "fault_injected_at": "...", "fault_cleared_at": "...",
  "transitions": [
-   {"service": "order", "breaker": "sharedDbCB", "state_transition": "CLOSED_TO_OPEN", "creation_time": "..."},
+   {"service": "order", "breaker": "inventoryServiceCB", "state_transition": "CLOSED_TO_OPEN", "creation_time": "..."},
    ...
  ]}
 ```

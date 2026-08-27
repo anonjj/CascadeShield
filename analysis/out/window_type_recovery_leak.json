@@ -1,0 +1,465 @@
+{
+  "dataset": "current",
+  "coarse": {
+    "n_rows": 79,
+    "n_count": 41,
+    "n_time": 38,
+    "match_keys": {
+      "requested": [
+        "topology",
+        "fault_type",
+        "window_size",
+        "threshold",
+        "wait_duration",
+        "lambda_target"
+      ],
+      "used": [
+        "topology",
+        "fault_type",
+        "window_size",
+        "threshold",
+        "wait_duration"
+      ],
+      "missing": [
+        "lambda_target"
+      ]
+    },
+    "time_to_recover": {
+      "by_wait_duration": [
+        {
+          "wait_duration": 5.0,
+          "n_count": 17,
+          "n_time": 15,
+          "median_count": 6.557,
+          "median_time": 24.125,
+          "ratio_time_over_count": 3.6792740582583496,
+          "cliffs_delta": {
+            "delta": 1.0,
+            "magnitude": "large",
+            "n_a": 15,
+            "n_b": 17
+          },
+          "ci_count": {
+            "n_rows": 17,
+            "n_groups": 5,
+            "point": 6.583705882352941,
+            "lo": 6.43107142857143,
+            "hi": 6.715260869565217
+          },
+          "ci_time": {
+            "n_rows": 15,
+            "n_groups": 5,
+            "point": 27.38553333333333,
+            "lo": 23.892823529411764,
+            "hi": 35.58469230769231
+          }
+        },
+        {
+          "wait_duration": 15.0,
+          "n_count": 12,
+          "n_time": 12,
+          "median_count": 16.490000000000002,
+          "median_time": 35.2285,
+          "ratio_time_over_count": 2.136355366889023,
+          "cliffs_delta": {
+            "delta": 1.0,
+            "magnitude": "large",
+            "n_a": 12,
+            "n_b": 12
+          },
+          "ci_count": {
+            "n_rows": 12,
+            "n_groups": 4,
+            "point": 16.434500000000003,
+            "lo": 16.098166666666664,
+            "hi": 16.770833333333332
+          },
+          "ci_time": {
+            "n_rows": 12,
+            "n_groups": 4,
+            "point": 39.651833333333336,
+            "lo": 35.00275,
+            "hi": 48.78708333333333
+          }
+        },
+        {
+          "wait_duration": 30.0,
+          "n_count": 12,
+          "n_time": 11,
+          "median_count": 31.655,
+          "median_time": 65.09,
+          "ratio_time_over_count": 2.0562312430895595,
+          "cliffs_delta": {
+            "delta": 1.0,
+            "magnitude": "large",
+            "n_a": 11,
+            "n_b": 12
+          },
+          "ci_count": {
+            "n_rows": 12,
+            "n_groups": 4,
+            "point": 31.54991666666667,
+            "lo": 31.241416666666666,
+            "hi": 31.754833333333327
+          },
+          "ci_time": {
+            "n_rows": 11,
+            "n_groups": 4,
+            "point": 65.03018181818183,
+            "lo": 64.87733333333333,
+            "hi": 65.1256
+          }
+        }
+      ],
+      "ratios": [
+        3.6792740582583496,
+        2.136355366889023,
+        2.0562312430895595
+      ],
+      "median_ratio": 2.136355366889023,
+      "min_ratio": 2.0562312430895595,
+      "max_ratio": 3.6792740582583496,
+      "consistent_time_slower": true,
+      "consistent_count_slower": false
+    },
+    "time_to_open_anchor": {
+      "by_wait_duration": [
+        {
+          "wait_duration": 5.0,
+          "n_count": 17,
+          "n_time": 15,
+          "median_count": 3.49,
+          "median_time": 6.523,
+          "ratio_time_over_count": 1.8690544412607448,
+          "cliffs_delta": {
+            "delta": 0.7725490196078432,
+            "magnitude": "large",
+            "n_a": 15,
+            "n_b": 17
+          },
+          "ci_count": {
+            "n_rows": 17,
+            "n_groups": 5,
+            "point": 3.8085882352941174,
+            "lo": 3.406333333333334,
+            "hi": 4.91275
+          },
+          "ci_time": {
+            "n_rows": 15,
+            "n_groups": 5,
+            "point": 5.9234,
+            "lo": 5.090823529411765,
+            "hi": 7.111363636363637
+          }
+        },
+        {
+          "wait_duration": 15.0,
+          "n_count": 12,
+          "n_time": 12,
+          "median_count": 3.411,
+          "median_time": 6.4695,
+          "ratio_time_over_count": 1.8966578715919085,
+          "cliffs_delta": {
+            "delta": 0.7777777777777778,
+            "magnitude": "large",
+            "n_a": 12,
+            "n_b": 12
+          },
+          "ci_count": {
+            "n_rows": 12,
+            "n_groups": 4,
+            "point": 4.162916666666667,
+            "lo": 3.3176666666666663,
+            "hi": 5.5365
+          },
+          "ci_time": {
+            "n_rows": 12,
+            "n_groups": 4,
+            "point": 5.806416666666667,
+            "lo": 4.953333333333333,
+            "hi": 6.659500000000001
+          }
+        },
+        {
+          "wait_duration": 30.0,
+          "n_count": 12,
+          "n_time": 11,
+          "median_count": 3.4695,
+          "median_time": 6.503,
+          "ratio_time_over_count": 1.8743334774463178,
+          "cliffs_delta": {
+            "delta": 0.7878787878787878,
+            "magnitude": "large",
+            "n_a": 11,
+            "n_b": 12
+          },
+          "ci_count": {
+            "n_rows": 12,
+            "n_groups": 4,
+            "point": 4.14325,
+            "lo": 3.3799166666666665,
+            "hi": 5.586833333333334
+          },
+          "ci_time": {
+            "n_rows": 11,
+            "n_groups": 4,
+            "point": 5.930727272727273,
+            "lo": 5.411833333333333,
+            "hi": 6.553400000000001
+          }
+        }
+      ],
+      "ratios": [
+        1.8690544412607448,
+        1.8966578715919085,
+        1.8743334774463178
+      ],
+      "median_ratio": 1.8743334774463178,
+      "min_ratio": 1.8690544412607448,
+      "max_ratio": 1.8966578715919085,
+      "consistent_time_slower": true,
+      "consistent_count_slower": false
+    },
+    "excess_over_wait_duration": {
+      "by_wait_duration": [
+        {
+          "wait_duration": 5.0,
+          "n_count": 17,
+          "n_time": 15,
+          "median_count": 1.5570000000000004,
+          "median_time": 19.125,
+          "ratio_time_over_count": 12.28323699421965,
+          "cliffs_delta": {
+            "delta": 1.0,
+            "magnitude": "large",
+            "n_a": 15,
+            "n_b": 17
+          },
+          "ci_count": {
+            "n_rows": 17,
+            "n_groups": 5,
+            "point": 1.5837058823529413,
+            "lo": 1.4310714285714285,
+            "hi": 1.7152608695652174
+          },
+          "ci_time": {
+            "n_rows": 15,
+            "n_groups": 5,
+            "point": 22.38553333333333,
+            "lo": 18.892823529411764,
+            "hi": 30.584692307692308
+          }
+        },
+        {
+          "wait_duration": 15.0,
+          "n_count": 12,
+          "n_time": 12,
+          "median_count": 1.4900000000000002,
+          "median_time": 20.2285,
+          "ratio_time_over_count": 13.576174496644294,
+          "cliffs_delta": {
+            "delta": 1.0,
+            "magnitude": "large",
+            "n_a": 12,
+            "n_b": 12
+          },
+          "ci_count": {
+            "n_rows": 12,
+            "n_groups": 4,
+            "point": 1.4344999999999999,
+            "lo": 1.0981666666666667,
+            "hi": 1.7708333333333333
+          },
+          "ci_time": {
+            "n_rows": 12,
+            "n_groups": 4,
+            "point": 24.651833333333332,
+            "lo": 20.002749999999995,
+            "hi": 33.787083333333335
+          }
+        },
+        {
+          "wait_duration": 30.0,
+          "n_count": 12,
+          "n_time": 11,
+          "median_count": 1.6549999999999994,
+          "median_time": 35.09,
+          "ratio_time_over_count": 21.202416918429012,
+          "cliffs_delta": {
+            "delta": 1.0,
+            "magnitude": "large",
+            "n_a": 11,
+            "n_b": 12
+          },
+          "ci_count": {
+            "n_rows": 12,
+            "n_groups": 4,
+            "point": 1.5499166666666664,
+            "lo": 1.2414166666666666,
+            "hi": 1.7548333333333328
+          },
+          "ci_time": {
+            "n_rows": 11,
+            "n_groups": 4,
+            "point": 35.030181818181816,
+            "lo": 34.87733333333333,
+            "hi": 35.125600000000006
+          }
+        }
+      ],
+      "ratios": [
+        12.28323699421965,
+        13.576174496644294,
+        21.202416918429012
+      ],
+      "median_ratio": 13.576174496644294,
+      "min_ratio": 12.28323699421965,
+      "max_ratio": 21.202416918429012,
+      "consistent_time_slower": true,
+      "consistent_count_slower": false
+    },
+    "paired": {
+      "n_pairs": 13,
+      "median_paired_ratio": 2.1675949993811114,
+      "share_time_slower": 1.0,
+      "rows": [
+        {
+          "topology": "LINEAR",
+          "fault_type": "LATENCY",
+          "window_size": 5,
+          "threshold": 30,
+          "wait_duration": 5,
+          "COUNT": 6.781000000000001,
+          "TIME": 24.125,
+          "ratio": 3.5577348473676444
+        },
+        {
+          "topology": "LINEAR",
+          "fault_type": "LATENCY",
+          "window_size": 5,
+          "threshold": 30,
+          "wait_duration": 15,
+          "COUNT": 16.762,
+          "TIME": 35.287,
+          "ratio": 2.1051783796682972
+        },
+        {
+          "topology": "LINEAR",
+          "fault_type": "LATENCY",
+          "window_size": 5,
+          "threshold": 30,
+          "wait_duration": 30,
+          "COUNT": 31.641,
+          "TIME": 64.588,
+          "ratio": 2.0412755601908916
+        },
+        {
+          "topology": "LINEAR",
+          "fault_type": "LATENCY",
+          "window_size": 5,
+          "threshold": 50,
+          "wait_duration": 5,
+          "COUNT": 6.391,
+          "TIME": 23.869,
+          "ratio": 3.7347832890001564
+        },
+        {
+          "topology": "LINEAR",
+          "fault_type": "LATENCY",
+          "window_size": 5,
+          "threshold": 50,
+          "wait_duration": 15,
+          "COUNT": 16.162,
+          "TIME": 34.925,
+          "ratio": 2.160933052839995
+        },
+        {
+          "topology": "LINEAR",
+          "fault_type": "LATENCY",
+          "window_size": 5,
+          "threshold": 50,
+          "wait_duration": 30,
+          "COUNT": 31.095,
+          "TIME": 65.181,
+          "ratio": 2.0961890979257114
+        },
+        {
+          "topology": "LINEAR",
+          "fault_type": "LATENCY",
+          "window_size": 10,
+          "threshold": 30,
+          "wait_duration": 5,
+          "COUNT": 6.557,
+          "TIME": 24.034,
+          "ratio": 3.665395760256214
+        },
+        {
+          "topology": "LINEAR",
+          "fault_type": "LATENCY",
+          "window_size": 10,
+          "threshold": 30,
+          "wait_duration": 15,
+          "COUNT": 16.158,
+          "TIME": 35.024,
+          "ratio": 2.1675949993811114
+        },
+        {
+          "topology": "LINEAR",
+          "fault_type": "LATENCY",
+          "window_size": 10,
+          "threshold": 30,
+          "wait_duration": 30,
+          "COUNT": 31.816,
+          "TIME": 65.1365,
+          "ratio": 2.047287528287654
+        },
+        {
+          "topology": "LINEAR",
+          "fault_type": "LATENCY",
+          "window_size": 10,
+          "threshold": 50,
+          "wait_duration": 5,
+          "COUNT": 6.476,
+          "TIME": 25.679,
+          "ratio": 3.9652563310685607
+        },
+        {
+          "topology": "LINEAR",
+          "fault_type": "LATENCY",
+          "window_size": 20,
+          "threshold": 30,
+          "wait_duration": 5,
+          "COUNT": 6.6655,
+          "TIME": 40.627,
+          "ratio": 6.095116645412948
+        },
+        {
+          "topology": "LINEAR",
+          "fault_type": "LATENCY",
+          "window_size": 20,
+          "threshold": 30,
+          "wait_duration": 15,
+          "COUNT": 16.783,
+          "TIME": 53.14,
+          "ratio": 3.1662992313650715
+        },
+        {
+          "topology": "LINEAR",
+          "fault_type": "LATENCY",
+          "window_size": 20,
+          "threshold": 30,
+          "wait_duration": 30,
+          "COUNT": 31.669,
+          "TIME": 65.09,
+          "ratio": 2.055322239413938
+        }
+      ]
+    }
+  },
+  "precise": {
+    "status": "SKIPPED_NO_SIDECAR",
+    "note": "data/cb_transitions.jsonl is real-runs-only and gitignored; it does not exist in this checkout. The precise HALF_OPEN->CLOSED metric cannot be computed until a run of experiments/runner.py retains it. This script's join logic is exercised by --self-test against a synthetic fixture only.",
+    "result": null
+  },
+  "verdict": "MECHANISM_UNTESTED_NO_SIDECAR"
+}

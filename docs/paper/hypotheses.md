@@ -63,7 +63,7 @@ whole design turns on the Day-2 canary.
 |---|---|---|---|
 | **H1** | At matched horizon $H$, COUNT and TIME have indistinguishable **mean** $t_{\text{open}}$ but significantly different **variance** | Not yet tested. The existing contrast (TIME 9.43 ± 5.41 vs COUNT 5.22 ± 2.19) is at *nominal* window size — the comparison §2.1 argues is invalid | Day 2 canary |
 | **H2** | There exists a crossover $\lambda^*$ below which TIME_BASED cannot trip within the fault window | New. Nothing in the repo varies $\lambda$ | Day 2 canary |
-| **H3** | Window parameters drive $t_{\text{open}}$ and not $t_{\text{rec}}$; $D_w$ drives $t_{\text{rec}}$ and not $t_{\text{open}}$ (double dissociation) | Evidence in hand ($t_{\text{rec}}$ = 16.95 / 27.85 / 49.31 s across $D_w$ = 5/15/30, negative control on $t_{\text{open}}$ at 7.39 / 7.35 / 7.49). Leak audit clears it — see §4 | Day 3 analysis |
+| **H3** | Window parameters drive $t_{\text{open}}$ and not $t_{\text{rec}}$; $D_w$ drives $t_{\text{rec}}$ and not $t_{\text{open}}$ (double dissociation) | Evidence in hand ($t_{\text{rec}}$ = 16.95 / 27.85 / 49.31 s across $D_w$ = 5/15/30, negative control on $t_{\text{open}}$ at 7.39 / 7.35 / 7.49). Leak audit clears it — see §4. Additionally stress-tested directly against window_type, see §4.1 (`analysis/out/window_type_recovery_leak.json`) | Day 3 analysis |
 | **H4** | Competing containment definitions rank configurations differently ($\tau_{\text{Kendall}} < 1$, significantly) | **Supported on Day 1** from the persisted leg vectors, with no new runs — see §5 | ✅ Day 1 |
 | **H5** | Blast-radius resolution is topology-dependent: $\text{Var}(B) = 0$ on chain topologies, $> 0$ where parallel reachable subjects exist | Half proven. The LINEAR half is done and the mechanism is now explicit (§5.3). Needs the FAN_OUT contrast | Day 4 sweep |
 | **H6** | A uniformly configured edge breaker suppresses interior breaker engagement (gateway shadowing) | Evidence exists in the archived 162-run data (gateway leg 0.70–1.00 in every row, interior legs 0.0000 in 154 of 162) but the condition was **removed** by the `measurement-plane` isolation block | Day 3, if time |
@@ -118,6 +118,56 @@ Two findings displaced it, and both matter more:
 2. **`blast_radius` in the v3 archive is a constant.** 95.7% of its rows report a subject OPEN
    whose own leg recorded zero failures — one subject reading degraded in every run. This is the
    real reason `validate_gate.py` passed at Cramér's V = 0.196: the label was near-constant.
+
+### 4.1 H3's negative control, stress-tested directly against window_type (D12)
+
+H3's published numbers ($t_{\text{rec}}$ = 16.95/27.85/49.31 s across $D_w$ = 5/15/30) show a
+$D_w$ effect — they do not, by themselves, rule out window_type also contaminating
+$t_{\text{rec}}$. `analysis/window_type_recovery_leak.py` runs that check directly ("D12" is
+this investigation's own working label, distinct from this section's `D-00X` decision-log
+numbering and from the unrelated "Day N" sprint-day shorthand used elsewhere in the repo).
+
+**Coarse check** (`time_to_recover` as currently collected — OPEN to left-OPEN, not OPEN to
+CLOSED; see the script's docstring for why): TIME's median $t_{\text{rec}}$ is 2.06–3.68x
+COUNT's at every matched $D_w$ on the current archive (79 rows), and the same shape
+reproduces on `master_dataset_v2_latency_5svc.csv` (2.07–3.52x) and
+`master_dataset_v3_gateway_not_rebuilt.csv` (2.06–3.70x) — real and consistent, not noise
+from one sweep.
+
+Decomposing $t_{\text{rec}}$ into $t_{\text{open}}$ (anchor) and excess ($t_{\text{rec}} -
+D_w$) separates two effects: TIME opens ~3s later than COUNT at every $D_w$ (a flat anchor
+shift — plausible and non-buggy, since TIME_BASED windows accumulate over wall-clock seconds
+rather than a fixed call count, so trip timing can legitimately differ from COUNT_BASED under
+identical load). But TIME's excess **grows** with $D_w$ (19.1s → 20.2s → 35.1s across
+$D_w$=5/15/30 on the current archive) while COUNT's stays flat (~1.5–1.7s, pure poll
+overhead) — a pattern a constant anchor shift alone cannot produce.
+
+**Precise check** (true HALF_OPEN→CLOSED duration, from `data/cb_transitions.jsonl`'s real
+Resilience4j state transitions): **computed for the first time on 2026-08-27**, after two
+harness bugs that were silently suppressing this exact metric got fixed (`CB_EVENT_BUFFER_SIZE`
+50→5000 — the shared per-breaker event ring was being flooded and evicting the original
+`CLOSED_TO_OPEN` event by ordinary `NOT_PERMITTED` traffic during long `waitDurationInOpenState`
+periods; and a ~4s post-recovery-loop probe-driving extension — the loop was breaking ~2s after
+the breaker left OPEN, before its `HALF_OPEN` probes had a chance to resolve either way).
+`analysis/window_type_recovery_leak.py`'s verdict is **`LEAK_CONFIRMED_ON_HALF_OPEN_LEG`**: TIME's
+median precise HALF_OPEN→CLOSED duration is **8.9x–14.3x** COUNT's at every matched $D_w$ (2.15s
+vs 19.03s at $D_w$=5; 2.16s vs 20.87s at $D_w$=15; 2.48s vs 35.35s at $D_w$=30) — monotonically
+increasing with $D_w$, the same shape as the coarse excess decomposition above, but on the
+metric that actually isolates the HALF_OPEN leg from the detection-anchor shift.
+
+**Caveat, stated plainly rather than oversold:** this is real signal, not yet a settled result —
+every one of those medians comes from **n=1 TIME_BASED row per $D_w$ bucket** (`n_count` is 1/3/3).
+The direction, magnitude ordering, and consistency with the independently-measured coarse trend
+all argue this is real, but a single observation per cell is not enough to close the question.
+**Status: strong preliminary confirmation, pending a modest replicate top-up (not a full
+re-sweep) before treating $D-006$ as closed.**
+
+(The mechanism originally suspected — "HALF_OPEN re-evaluation goes back through the TIME_BASED
+window" — is still not architecturally plausible for Resilience4j 2.2.0, the version this repo
+pins: HALF_OPEN always uses its own fixed-size ring buffer sized
+`permittedNumberOfCallsInHalfOpenState`, independent of `slidingWindowType`. A real effect now
+shows up on this leg, so the actual mechanism is something else — not yet identified — and is
+the next open question, not "TIME_BASED windows leaking into HALF_OPEN's evaluation.")
 
 ---
 

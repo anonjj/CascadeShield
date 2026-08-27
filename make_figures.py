@@ -33,7 +33,7 @@ plt.rcParams.update({
     "axes.linewidth": 0.6,
 })
 
-FAULT_ORDER = ["LATENCY", "CRASH", "THROTTLE"]
+FAULT_ORDER = ["LATENCY", "CRASH"]
 WIN_ORDER = ["COUNT_BASED", "TIME_BASED"]
 WIN_LABEL = {"COUNT_BASED": "COUNT", "TIME_BASED": "TIME"}
 

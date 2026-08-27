@@ -244,3 +244,45 @@ Resilience4j 2.2.0, so *something else* is causing this), but too thin to close 
 **Status stays "re-opened, preliminary" until a modest replicate top-up** (not a full re-sweep
 — a handful more `TIME_BASED` runs at each $D_w$) raises `n_time` per bucket above 1.
 
+---
+
+## D14 · `machine_id` is added to the canonical schema, before `excluded_reason`
+
+**Date:** 27 Aug 2026 · **Status:** final
+
+**Decision.** `machine_id` is added to the canonical schema as a nullable string: a free-form
+label for the machine or Codespace that produced the row (e.g. `codespace-abc123`). Blank —
+never `0`, never a sentinel — when the harness did not record one, per D8's blank rule. It is
+provenance, never a feature: `preprocessing.py`'s `FEATURE_COLUMNS` is an explicit allow-list,
+so an unlisted column cannot reach a model. Note it is **not yet** added to that module's
+`PROVENANCE_COLUMNS` either — today it simply rides along unreferenced, which is safe but
+means `machine_id` is not currently loaded for the D6 grouping that motivates it.
+
+**Why:** D6's cross-machine calibration compares runs collected on different hosts. Splitting a
+sweep across machines confounds host with treatment, and nothing in the existing 47 columns
+recovers which host wrote a given row after the fact — `environment` only distinguishes
+`LOCAL` from `AWS`, not one Codespace from another. Without this column the calibration is
+not computable from the artifact alone.
+
+**Position:** immediately **before** `excluded_reason`, making it column 47 of 48. D8 keeps
+`excluded_reason` last on purpose — it is assigned post-hoc by `analysis/quarantine.py`, so a
+column appended after it would be shifted by a re-quarantine. Every header now ends with
+`excluded_reason`: `runner.DATASET_HEADERS` and both derived headers splice their extra
+columns in before it via `_with_extra_columns()`. That also corrects a pre-existing case of the
+same fault — `injected_toxicity` (sweep mode) and `occupancy_ratio`/`inert` (occupancy mode)
+were previously appended *after* `excluded_reason`.
+
+**Rejected:** appending `machine_id` last, which is where it first landed — simpler, but it
+breaks the D8 invariant this entry exists to protect. **Also rejected:** making it non-nullable
+(rows already collected have no host to attribute, and back-filling a guess would be fabrication).
+
+**Consequence:** the canonical schema goes 47 → 48 columns. No row-writing logic changed:
+`log_results` builds a dict and writes through `resumable_runner.append_row`'s
+`DictWriter(restval="", extrasaction="ignore")`, so a row that omits `machine_id` writes it
+blank. The already-collected `data/master_dataset.csv` (20 columns on disk, 80 rows) will now
+fail `load_completed()`'s header guard loudly, as designed — the next sweep starts a fresh file
+rather than padding historical rows.
+
+**Revisit if:** every run lands on one host again and the cross-machine comparison D6 needs is
+retired — the column stays in the schema regardless (removing it would re-fork the header), but
+it can stop being populated.

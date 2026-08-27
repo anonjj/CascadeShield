@@ -106,6 +106,12 @@ DATASET_HEADERS = [
     # a precondition_ok=False row, and blank for TIME_BASED when lambda_achieved
     # itself is blank (see compute_effective_horizon).
     "effective_horizon",
+    # Which machine/Codespace produced this row. Nullable string, blank when the harness
+    # didn't record one. Added for D6 cross-machine calibration: runs split across hosts
+    # otherwise confound host with treatment, and there is no way to recover which host a
+    # row came from after the fact. Sits immediately BEFORE excluded_reason -- see the
+    # note below on why that column stays last (D14).
+    "machine_id",
     # Quarantine marker, written by analysis/quarantine.py -- NOT by a run. Empty means the
     # row is analysable; anything else is a "+"-joined list of exclusion codes (see
     # data/DATA_DICTIONARY.md). Rows are marked rather than deleted so a reviewer can see
@@ -120,18 +126,31 @@ DATASET_HEADERS = [
     "excluded_reason",
 ]
 
-# Crash toxicity sweep (mode="sweep"): same 34 columns as master, plus the configured
+
+def _with_extra_columns(extra):
+    """DATASET_HEADERS with `extra` spliced in immediately before excluded_reason.
+
+    excluded_reason is deliberately the last column of every header (D8, D14): it is
+    assigned post-hoc by analysis/quarantine.py, so anything appended after it would
+    shift the one column a re-quarantine writes. Mode-specific additions therefore go
+    before it, not on the end.
+    """
+    cut = DATASET_HEADERS.index("excluded_reason")
+    return DATASET_HEADERS[:cut] + list(extra) + DATASET_HEADERS[cut:]
+
+
+# Crash toxicity sweep (mode="sweep"): same 35 columns as master, plus the configured
 # toxicity setpoint. A separate header/file so a new column never touches the master
 # schema -- see get_dataset_path/log_results.
-SWEEP_DATASET_HEADERS = DATASET_HEADERS + ["injected_toxicity"]
+SWEEP_DATASET_HEADERS = _with_extra_columns(["injected_toxicity"])
 
 # Occupancy-ratio sweep (mode="occupancy", D7 -- lambda is a variable, not a single
-# fixed value): same 34 columns as master, plus the occupancy diagnostic pair. A
+# fixed value): same 35 columns as master, plus the occupancy diagnostic pair. A
 # separate header/file for the same reason as SWEEP_DATASET_HEADERS above -- adding
 # these directly to the shared DATASET_HEADERS would retroactively 36-column-mismatch
 # the already-collected 34-column data/master_dataset.csv (exactly the incident
 # resumable_runner.py's load_completed() now fails loudly on instead of silently).
-OCCUPANCY_DATASET_HEADERS = DATASET_HEADERS + ["occupancy_ratio", "inert"]
+OCCUPANCY_DATASET_HEADERS = _with_extra_columns(["occupancy_ratio", "inert"])
 
 # (experiment_id, str(replicate)) pairs already written to the current run's dataset
 # file -- populated once at the top of main() via resumable_runner.load_completed(),

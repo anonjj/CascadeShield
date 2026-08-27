@@ -91,7 +91,7 @@ the mode's own code comments in `runner.py` for the exact columns:
 > 🔄 **RESTRUCTURE (26 Aug 2026) — the sweep above is superseded, not continued.**
 > Both the LINEAR Paper-B dataset (188/163 rows) and the FAN_OUT dataset were discarded
 > outright as part of a project restructure. `master_dataset.csv` is being rebuilt from
-> empty under the D8 47-column schema (see below), covering LINEAR + FAN_OUT and
+> empty under the D8 48-column schema (see below), covering LINEAR + FAN_OUT and
 > LATENCY + CRASH from the start. Nothing analysable currently exists in this file — do
 > not cite counts or class balance from before this line until the re-run lands.
 
@@ -176,6 +176,7 @@ past 324 (e.g. 324 configs × 2 environments × 3 replicates = 1,944 rows).
 | `mode` | categorical | `full` (this sweep); e.g. `canary` | Run mode/batch label. Carried for provenance; **excluded from features**. |
 | `replicate` | int | `1..R` (R ≥ 3 recommended) | Repeat index. Enables mean ± variance per config instead of a single noisy run. |
 | `run_timestamp` | string (ISO 8601) | `2026-06-21T14:32:05Z` | Provenance. Never used as a model feature. |
+| `machine_id` | string | free-form host label, e.g. `codespace-abc123`; **nullable** (blank when the harness didn't record one) | Identifies which machine/Codespace produced this row, used for D6 cross-machine calibration. Provenance only; **excluded from features**. |
 
 > **29-column schema.** Beyond the original 15-column skeleton the schema now carries:
 > `permitted_calls_half_open` and `mode` (operational); `real_blast_radius` and
@@ -198,7 +199,7 @@ past 324 (e.g. 324 configs × 2 environments × 3 replicates = 1,944 rows).
 > `effective_horizon`, plus `flap_count` and the pinned image digest set. Each needs a
 > dictionary entry in the commit that adds it.
 
-> **47-column schema (D8, post-restructure).** Supersedes the 29/34/36/38-column fork
+> **48-column schema (D8, post-restructure).** Supersedes the 29/34/36/38-column fork
 > across `linear_schema.csv` / `fanout_schema.csv` / `master_dataset_schema.csv` /
 > `occupancy_dataset.csv` — see `docs/paper/decision-log.md` D8. One canonical header
 > for every mode; a mode that doesn't measure a column leaves it blank, never zero.
@@ -207,8 +208,10 @@ past 324 (e.g. 324 configs × 2 environments × 3 replicates = 1,944 rows).
 > `inert` are first-class (were occupancy-file-only); `error_rate`,
 > `precondition_fail_reason`, `readiness_wait_s`, `cb_state_pre`, `buffered_calls_pre`,
 > `warmup_requests`, `warmup_duration_s`, `run_order_seed`, `run_index` folded in from the
-> master/occupancy branch. Full header + nullable-by-mode map: `master_dataset_schema.csv`;
-> the freeze rationale is `docs/paper/decision-log.md` D8.
+> master/occupancy branch. Added after the freeze: `machine_id` (column 47 of 48, immediately
+> before `excluded_reason`, which stays last) — see the IV/metadata table below and
+> `docs/paper/decision-log.md` D14. Full header + nullable-by-mode map:
+> `master_dataset_schema.csv`; the freeze rationale is `docs/paper/decision-log.md` D8.
 > `runner.DATASET_HEADERS` must match this exactly.
 
 ### Dependent variables — measured outcomes → **targets / Isolation Forest inputs**

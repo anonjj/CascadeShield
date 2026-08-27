@@ -36,14 +36,21 @@ import sys
 
 import pandas as pd
 
-from common import bootstrap_ci_grouped, cliffs_delta, write_json
+from common import MAGNITUDE_RANK, bootstrap_ci_grouped, cliffs_delta, write_json
 
 TIMING_DVS = ["time_to_open", "time_to_recover"]
 
 
 def load_calibration(paths):
-    """Load one or two CSVs, coerce timing columns numeric (blank = null, never 0.0 --
-    same convention as every other DV in this repo), and require >=2 machine_id values."""
+    """Load zero, one, or two CSVs, coerce timing columns numeric (blank = null, never
+    0.0 -- same convention as every other DV in this repo). Zero paths (no calibration
+    data given at all) returns an empty DataFrame rather than crashing on frames[0] --
+    machine_effect()'s own "machine_id" column check already turns that into the
+    correct SKIPPED_NO_CALIBRATION_DATA status through the normal path, so main() has
+    exactly one payload shape regardless of how it was invoked, not a second bespoke
+    one for the no-args case."""
+    if not paths:
+        return pd.DataFrame()
     frames = [pd.read_csv(p) for p in paths]
     df = pd.concat(frames, ignore_index=True) if len(frames) > 1 else frames[0]
     for col in TIMING_DVS:
@@ -62,7 +69,6 @@ def machine_effect(df):
 
     machines = df["machine_id"].value_counts().index[:2].tolist()
     by_dv = {}
-    max_magnitude_rank = {"negligible": 0, "small": 1, "medium": 2, "large": 3}
     worst = "negligible"
     undefined_dvs = []
     for dv in TIMING_DVS:
@@ -81,11 +87,11 @@ def machine_effect(df):
         mag = delta["magnitude"]
         # "undefined" (one machine has zero non-null observations for this DV) is NOT
         # the same as "negligible" -- it means the comparison was never actually made.
-        # Tracked separately rather than folded into max_magnitude_rank's walk, so it
+        # Tracked separately rather than folded into MAGNITUDE_RANK's walk, so it
         # can never silently pass through as if it were the mildest real magnitude.
         if mag == "undefined":
             undefined_dvs.append(dv)
-        elif max_magnitude_rank[mag] > max_magnitude_rank[worst]:
+        elif MAGNITUDE_RANK[mag] > MAGNITUDE_RANK[worst]:
             worst = mag
 
     if undefined_dvs:
@@ -181,15 +187,10 @@ if __name__ == "__main__":
     if "--self-test" in sys.argv:
         self_test()
     else:
+        # No special-cased "no args" branch: load_calibration([]) returns an empty
+        # DataFrame, and machine_effect()'s own "machine_id" column check already
+        # produces SKIPPED_NO_CALIBRATION_DATA through the same path (and therefore
+        # the same n_rows/sources/status/reason payload shape) as every other
+        # invocation -- one shape, not a bespoke 2-key one for this case alone.
         args = [a for a in sys.argv[1:] if a != "--self-test"]
-        if not args:
-            print("[machine_calibration] no calibration CSV provided -- reporting "
-                  "SKIPPED_NO_CALIBRATION_DATA (expected: no real dual-machine run exists yet)")
-            write_json("machine_calibration.json", {
-                "status": "SKIPPED_NO_CALIBRATION_DATA",
-                "reason": "no calibration data path given; run --self-test for the fixture "
-                          "check, or pass one CSV (>=2 machine_id values) or two CSVs "
-                          "(one per machine) once a real calibration block has been run.",
-            })
-        else:
-            main(args)
+        main(args)

@@ -1,4 +1,6 @@
 {
+  "n_rows": 0,
+  "sources": [],
   "status": "SKIPPED_NO_CALIBRATION_DATA",
-  "reason": "no calibration data path given; run --self-test for the fixture check, or pass one CSV (>=2 machine_id values) or two CSVs (one per machine) once a real calibration block has been run."
+  "reason": "fewer than 2 distinct machine_id values in the data provided"
 }

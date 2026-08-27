@@ -119,7 +119,10 @@ def _ratio_table(df, value_col):
             "median_count": cm,
             "median_time": tm,
             "ratio_time_over_count": ratio,
-            "cliffs_delta": cliffs_delta(t.values, c.values),
+            # (COUNT, TIME) order -- matches canary_readout.py and order_leg_containment.py's
+            # convention for this same conceptual comparison; keep it consistent so `delta`'s
+            # sign means the same thing across every script's JSON output.
+            "cliffs_delta": cliffs_delta(c.values, t.values),
             "ci_count": bootstrap_ci_grouped(g[g[COL_WINDOW] == "COUNT"], value_col),
             "ci_time": bootstrap_ci_grouped(g[g[COL_WINDOW] == "TIME"], value_col),
         })

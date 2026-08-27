@@ -519,19 +519,23 @@ def compute_effective_horizon(window_type, window_size, lambda_achieved):
     return None
 
 
-def compute_occupancy_ratio(window_type, window_size, min_calls, lambda_achieved):
+def compute_occupancy_ratio(effective_horizon, min_calls):
     """Occupancy ratio rho: how full the sliding window was relative to the minimum
     evaluation threshold (minimumNumberOfCalls) -- rho = effective_horizon / min_calls.
     rho >= 1 means the window had enough calls to even evaluate the breaker; rho < 1
     means it structurally could not, regardless of failure rate. This is the quantity
     H2's inertness boundary is tested against (D7 -- does `inert` flip to True at
-    rho* = 1?). Delegates to compute_effective_horizon so the COUNT/TIME branching
-    logic exists in exactly one place. Returns None when that horizon can't be
-    computed (TIME_BASED with no measured lambda_achieved)."""
-    horizon = compute_effective_horizon(window_type, window_size, lambda_achieved)
-    if horizon is None:
+    rho* = 1?).
+
+    Takes the already-computed effective_horizon directly rather than recomputing it
+    from window_type/window_size/lambda_achieved -- run_experiment_run already calls
+    compute_effective_horizon once per run and stores it in metrics; this is the only
+    call site, so there's no reuse case served by a second internal computation of the
+    same value from the same inputs. Returns None when the horizon itself is None
+    (TIME_BASED with no measured lambda_achieved)."""
+    if effective_horizon is None:
         return None
-    return horizon / min_calls
+    return effective_horizon / min_calls
 
 
 def generate_load(endpoint_url, requests_count=50, concurrency=5, interval_s=0.05):
@@ -1096,9 +1100,7 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
         row["injected_toxicity"] = f"{metrics['injected_toxicity']:.4f}" if metrics.get('injected_toxicity') is not None else ""
     elif mode == "occupancy":
         n_min = config.get("minimumNumberOfCalls", CB_MINIMUM_CALLS)
-        occupancy_ratio = compute_occupancy_ratio(
-            config["slidingWindowType"], config["slidingWindowSize"],
-            n_min, metrics.get("lambda_achieved"))
+        occupancy_ratio = compute_occupancy_ratio(metrics.get("effective_horizon"), n_min)
         row["occupancy_ratio"] = f"{occupancy_ratio:.4f}" if occupancy_ratio is not None else ""
         # inert: observed signal -- True when the breaker never opened AND the lambda
         # measurement is trustworthy. Blank when lambda_deviation_flag is set (rate

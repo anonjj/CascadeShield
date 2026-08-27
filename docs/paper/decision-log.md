@@ -182,13 +182,113 @@ needs its own decision-log entry in the same commit that adds the column.
 
 ---
 
+## D-007 · $B$ (blast_radius, quartized) is retired; `order_leg` is the reported containment signal
+
+**Date:** 2026-08-26 (ad hoc D3 investigation, outside the Day 1–5 cadence) · **Decided
+by:** Jay · **Status:** final
+
+**Decision.** The quartized containment metric — legacy `blast_radius` (CB-state) and
+`real_blast_radius` at any pinned $\tau_{\text{leg}}$ — is retired as a reported outcome. It
+is not fixed (no threshold is re-pinned) and not replaced by a new binarized definition; it
+is dropped to §7 threats-to-validity with an honest paragraph on why. `order_leg` — the raw,
+continuous `leg_failure_rates["order-service"]` value, the one leg that ever fires on the
+data collected so far — becomes the reported containment DV (hypotheses.md §5.4, §6). The
+legacy CB-state `blast_radius` column itself needs no further code fix: it has been
+structurally correct since the gateway-isolation change (§7); it stays in the schema for
+reference but is cited nowhere as evidence.
+
+**Numbers** (`analysis/out/order_leg_containment.json`, `current` archive, 79 rows): 32
+distinct `order_leg` values (vs. 2 for the quartized metric on the same rows); COUNT_BASED
+means monotonic in `window_size` (0.2798 / 0.3330 / 0.4160 at $W$ = 5/10/20, pooled 95% CI
+[0.293, 0.355]); TIME_BASED tightly banded (0.4688 / 0.4665 / 0.4708, pooled 95% CI [0.461,
+0.476]); clean separation with no overlap — COUNT_BASED max 0.4167 < TIME_BASED min 0.4500,
+Cliff's $\delta = -1.0$ (large, $n_a$=41, $n_b$=38).
+
+**Rejected:** re-pinning $\tau_{\text{leg}}$ inside D-001's informative band ($\tau \in
+[0.25, 0.45]$). It would restore some resolution and rank configurations non-degenerately,
+but keeps a researcher-chosen threshold that `order_leg` does not need at all — the
+continuous value already separates window_type with zero overlap and moves monotonically
+with a swept parameter.
+
+**Consequence — the tension this decision surfaces.** Isolating the gateway (necessary to
+kill the gateway-CB confound) also removed the only propagation path a chain topology can
+expose: §5.3 shows exactly one leg (order-service) ever fires on LINEAR, structurally, not
+by calibration accident. Cascade (more than one leg degraded at once) is therefore
+unobservable on LINEAR by construction. Confirmed via topology counts: every row in
+`current`, `v2_latency_5svc`, and `v3_gateway_not_rebuilt` is LINEAR — zero FAN_OUT rows
+exist in any archive. `--topology fanout` is implemented in `experiments/runner.py`
+(argparse choice) but has never been swept. Every cascade-shaped claim (H5 beyond its
+LINEAR half, H6) depends on that sweep.
+
+**Revisit if:** a FAN_OUT sweep is run. Re-derive the same table — check whether a second
+leg firing changes `order_leg`'s clean separation or monotonicity, and whether the
+quartized metric becomes informative again now that more than two node-sets are reachable
+(in which case this decision's "retire" call should be revisited, not assumed to still
+hold).
+
+---
+
+## D-008 · Cross-machine confounding — calibrate before splitting the topology sweep across boxes
+
+**Date:** 2026-08-26 (ad hoc D6 investigation, outside the Day 1–5 cadence) · **Decided
+by:** Jay · **Status:** final (protocol + interim rule), pending the calibration run itself
+
+**Decision.** The plan to run LINEAR on one machine and FAN_OUT on another reintroduces the
+exact shared-VM timing confound already refused once for splitting a single sweep across
+two boxes — except now machine is perfectly aligned with topology, so a LINEAR-vs-FAN_OUT
+contrast on any timing DV cannot separate topology from machine. Confirmed by reading the
+schema, not assumed: `environment` (`experiments/runner.py`) is already committed to the
+LOCAL-vs-AWS divergence claim and both boxes here would read `LOCAL` — **there was no way to
+tell which physical machine produced a row at all**, which is exactly what made this
+confound easy to miss.
+
+Two changes, both effective immediately:
+
+1. **Instrumentation.** Every row is now stamped with `machine_id`
+   (`socket.gethostname()`, auto-captured — no flag to remember, since forgetting one is
+   how this stayed unnoticed). Distinct from `environment`; see `data/DATA_DICTIONARY.md`.
+2. **Protocol, option (c) primary, (b) interim default.** Run an identical ~10-run LINEAR
+   calibration block on both machines before or alongside the topology split — reuse
+   `--mode canary --topology linear --limit 10` (canary already exists for exactly this;
+   no new CLI mode needed) — then run `analysis/machine_calibration.py` against the two
+   resulting CSVs. **Until that verdict exists, option (b) is the binding default:** no
+   claim in this paper compares `time_to_open` or `time_to_recover` across topology. This
+   protects the paper now, not only after the ~2–3h calibration is actually run.
+
+**Numbers:** none yet — `analysis/machine_calibration.py --self-test` passes (3/3 fixture
+checks: negligible-offset pair reads `MACHINE_EFFECT_NEGLIGIBLE`, ~3s-offset pair reads
+`MACHINE_EFFECT_DETECTED`, single-machine input reads `SKIPPED_NO_CALIBRATION_DATA` rather
+than a fabricated verdict). No real calibration data exists in this environment — neither
+machine is available here.
+
+**Rejected:** (a) same box, sequential — throws away the two machines' wall-clock
+parallelism for no stated benefit once (c) costs ~2–3h and the analysis to read it already
+exists and is self-tested.
+
+**Scope boundary:** `order_leg` / blast-radius-style ratios (D-007) are **not** gated by
+this rule — treated as low machine-sensitivity per the original framing, only the timing
+DVs are restricted.
+
+**Consequence:** `machine_id`'s addition to `DATASET_HEADERS` header-mismatches the
+existing 80-row `data/master_dataset.csv`. That file already needs a fresh restart once a
+FAN_OUT/dual-machine sweep begins (LINEAR-only today, per D-007's topology-count check) —
+this is the same restart happening for one more reason, not new breakage.
+
+**Revisit if:** the calibration block is run and `analysis/machine_calibration.py` returns
+`MACHINE_EFFECT_NEGLIGIBLE` — cross-topology timing claims may then proceed, citing the
+JSON. If it returns `MACHINE_EFFECT_DETECTED`, the paper either applies the measured
+per-machine offset as a stated correction or keeps option (b) permanently for that DV pair.
+
+---
+
 ## D-009 · H3's recovery-side negative control is downgraded to untested, pending the
 transition sidecar
 
 > Renumbered from this branch's original D-006 during the pre-sweep consolidation merge
 > (2026-08-27) — D-006 was independently used on `main` for the 47-column schema freeze
 > above. Content unchanged; number reassigned to D-009 so it lands after D-007/D-008
-> (blast_radius retirement, cross-machine confounding) once those merge in too.
+> (blast_radius retirement, cross-machine confounding), which were decided earlier
+> (2026-08-26) but merge in at this point.
 
 **Date:** 2026-08-25 (ad hoc D12 investigation, outside the Day 1–5 cadence) · **Decided
 by:** Jay · **Status:** re-opened 2026-08-27 — see Update below; real signal found, not yet

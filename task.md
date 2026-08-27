@@ -1,5 +1,63 @@
 # Tasks
 
+## D6 — Cross-machine confounding (instrumented + ruled; calibration run itself blocked)
+
+- [x] **`machine_id` now stamped on every row.** `experiments/runner.py` auto-captures
+      `socket.gethostname()` (override via `MACHINE_ID` env var, mirroring the existing
+      `ENVIRONMENT` pattern) — no flag to remember, since forgetting one is exactly how
+      this confound stayed unnoticed. Distinct from `environment` (LOCAL/AWS network
+      provenance, already spoken for). Added to `DATASET_HEADERS`; inherited automatically
+      by the sweep/occupancy header extensions. `data/DATA_DICTIONARY.md` updated,
+      including a fix to the now-stale "unique key" note (`experiment_id`, `environment`,
+      `replicate` alone no longer identifies a row once a deliberate cross-machine
+      calibration reruns that same triple on a second box).
+
+- [x] **`analysis/machine_calibration.py` — built and self-tested, no real data yet.**
+      Given an identical LINEAR calibration block run on two machines, computes Cliff's
+      delta + bootstrap CI on `time_to_open`/`time_to_recover` between them and returns
+      `MACHINE_EFFECT_NEGLIGIBLE` or `MACHINE_EFFECT_DETECTED` — never fabricates a
+      verdict (`SKIPPED_NO_CALIBRATION_DATA` when fewer than 2 machines are present, which
+      is every dataset that exists today). 3/3 self-test fixtures pass.
+
+- [x] **Interim rule adopted in the paper now, not contingent on the run happening.**
+      `docs/paper/decision-log.md` D-008 and `hypotheses.md` §7: no claim in this paper
+      compares `time_to_open`/`time_to_recover` across topology unless
+      `machine_calibration.py` reads `MACHINE_EFFECT_NEGLIGIBLE`. `order_leg`/blast-radius
+      -style comparisons (D-007) are unaffected — only the timing DVs are gated.
+
+- [ ] **Not yet done: the actual calibration run.** Needs both real machines (Jay's and
+      Soham's Codespaces) — unavailable here. Next step: on each machine, run
+      `python3 experiments/runner.py --mode canary --topology linear --limit 10`, save off
+      each machine's `data/canary_runs.csv` separately (it's overwritten on the next
+      canary run), then `python3 analysis/machine_calibration.py <machine_a>.csv
+      <machine_b>.csv` and read the verdict. ~2–3h of compute; buys either a clean
+      cross-topology timing claim or a quantified correction.
+
+## D3 — blast_radius: fix, replace, or retire? (done)
+
+- [x] **Retired, not fixed.** `analysis/order_leg_containment.py` (new) confirms the
+      continuous signal behind the quartized metric — `order_leg` =
+      `leg_failure_rates["order-service"]`, the one leg that ever fires on LINEAR — has
+      32 distinct values (vs. 2 for the quartized `blast_radius`/`real_blast_radius`),
+      means monotonic in `window_size` under COUNT_BASED (0.28/0.33/0.42), and a clean
+      COUNT/TIME split with zero overlap (COUNT max 0.4167 < TIME min 0.45, Cliff's delta
+      = -1.0). Decision **D-007** in `docs/paper/decision-log.md`: quartized $B$ retired
+      to `hypotheses.md` §7 threats-to-validity, `order_leg` promoted to the reported
+      containment DV (§5.4, §6). Legacy `blast_radius` column needs no code fix (already
+      correct since the gateway-isolation change), stays in the schema for reference only.
+      `data/DATA_DICTIONARY.md` corrected (was stale-labeled "Primary outcome"). ML's
+      separate `blast_radius`-thresholded safe/unsafe label deliberately left untouched —
+      out of scope, its own engineering choice. Pushed to `retire/d3-blast-radius-metric`.
+
+- [x] **LINEAR/FAN_OUT tension stated explicitly, not left for a reviewer.** Confirmed via
+      topology counts: every row in every archive (`current`, `v2_latency_5svc`,
+      `v3_gateway_not_rebuilt`) is LINEAR — zero FAN_OUT rows exist anywhere, even though
+      `--topology fanout` is already implemented in `experiments/runner.py`. Isolating the
+      gateway (the right call for confound control) also removed the only propagation path
+      a chain topology can expose, so cascade is unobservable on LINEAR by construction.
+      Every cascade-shaped claim (H5 beyond its LINEAR half, H6) depends on a FAN_OUT sweep
+      that hasn't happened yet — now stated as a limitation in `hypotheses.md` §7, D-007.
+
 ## D7 — λ is a single value, and it is the variable your theory is about (in progress)
 
 - [x] **Code ported and wired up.** `--mode occupancy` added to `experiments/runner.py`:

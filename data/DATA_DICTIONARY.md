@@ -10,7 +10,7 @@
 | Class | Columns | Rule |
 |---|---|---|
 | **Primary DVs** | `time_to_open`, `time_to_recover` | Every reported mean carries a bootstrap CI. |
-| **Secondary DVs** | `leg_failure_rates` (continuous severity), `blast_radius` / `real_blast_radius` (quartized), `throughput_loss`, p95/p99 client latency *(pending)* | $B_{\text{real}}$ is reported **as a function of $\tau_{\text{leg}}$**, never at one pinned threshold — see `analysis/tau_sweep.py` and decision D-001. |
+| **Secondary DVs** | `leg_failure_rates` (continuous severity), `blast_radius` / `real_blast_radius` (quartized), `throughput_loss`, p95/p99 client latency *(pending)* | $B_{\text{real}}$ is reported **as a function of $\tau_{\text{leg}}$**, never at one pinned threshold — see `analysis/tau_sweep.py` and decision D-001. **Since retired (D-007):** the quartized `blast_radius`/`real_blast_radius` pair is no longer a reported outcome at all — the continuous `order_leg` value (`leg_failure_rates["order-service"]`) is, per `analysis/order_leg_containment.py`. |
 | **Control DVs** *(mandatory)* | $\phi$ false-trip rate (from `fault_type = NONE` rows ✅), missed-detection rate, `flap_count` *(pending, Jay)* | Without $\phi$ no configuration in this paper may be described as safe. |
 | **Provenance** | `experiment_id`, `environment`, `mode`, `replicate`, `run_timestamp`, `permitted_calls_half_open`, `run_index` ✅, `run_order_seed` ✅, image digests *(pending, Jay)* | Never model features. |
 | **Validity** | `excluded_reason` ✅, `precondition_ok` / `precondition_fail_reason` / `readiness_wait_s` / `cb_state_pre` / `buffered_calls_pre` ✅, `warmup_requests` / `warmup_duration_s` ✅ | Rows are marked, never deleted. `precondition_ok = False` means the run never happened; `excluded_reason` means it happened but is untrustworthy. Analyses drop both. |
@@ -103,6 +103,16 @@ The unique key is the triple **(`experiment_id`, `environment`, `replicate`)**, 
 alone. There are **324 unique configurations**; with environments and replicates the table grows
 past 324 (e.g. 324 configs × 2 environments × 3 replicates = 1,944 rows).
 
+> **`machine_id` is not part of the key above, by design — watch it when comparing across
+> machines.** The triple was scoped before D6/D-008 added `machine_id`, back when
+> `environment` was the only host-provenance column and every run for a given
+> `(experiment_id, environment, replicate)` came from the same box. A cross-machine
+> calibration block (D-008) deliberately runs the *same* `(experiment_id, environment,
+> replicate)` on two different machines — that's the point, it's what makes the machines
+> comparable — so the triple alone no longer identifies a row once such data exists.
+> `analysis/machine_calibration.py` groups by `machine_id` explicitly rather than relying
+> on the triple to have stayed unique.
+
 `324 = 3 (topology) × 2 (fault_type) × 2 (window_type) × 3 (threshold) × 3 (window_size) × 3 (wait_duration)`
 
 ---
@@ -173,6 +183,7 @@ past 324 (e.g. 324 configs × 2 environments × 3 replicates = 1,944 rows).
 |--------|------|--------------|-------|
 | `permitted_calls_half_open` | int | `{5}` in this sweep (range ≥ 1) | Half-open probe budget — a **fixed** CB knob, not swept. Carried for provenance; **excluded from features**. |
 | `environment` | categorical | `LOCAL`, `AWS` | **Required for the ±15% divergence claim** — that metric is a per-config LOCAL-vs-AWS comparison. |
+| `machine_id` | string | hostname (e.g. `codespace-abc123`) | **Added D6/D-008.** Physical-host identity, auto-captured (`socket.gethostname()`), distinct from `environment`'s network-topology meaning. Needed to detect/calibrate a cross-machine confound whenever a sweep is split across boxes — e.g. topology split across two Codespaces. Carried for provenance; **excluded from features**. |
 | `mode` | categorical | `full` (this sweep); e.g. `canary` | Run mode/batch label. Carried for provenance; **excluded from features**. |
 | `replicate` | int | `1..R` (R ≥ 3 recommended) | Repeat index. Enables mean ± variance per config instead of a single noisy run. |
 | `run_timestamp` | string (ISO 8601) | `2026-06-21T14:32:05Z` | Provenance. Never used as a model feature. |
@@ -214,7 +225,7 @@ past 324 (e.g. 324 configs × 2 environments × 3 replicates = 1,944 rows).
 
 | Column | Type | Range | Unit | Null when… |
 |--------|------|-------|------|------------|
-| `blast_radius` | float | `0.0–1.0` | fraction | never null. **Primary outcome.** Fraction of the **four CB-bearing downstream subject services** (order, inventory, payment, notification) with an open circuit breaker during the fault window → values in `{0, 0.25, 0.5, 0.75, 1.0}`. **Denominator = 4** (changed from 5): `shared-db-service` is dropped (leaf, no outbound calls / no `@CircuitBreaker`, can never trip, only dilutes), and `gateway-service` is excluded as the *measurement plane*, not a subject — an edge breaker sees the summed chain latency and would always trip first (the "gateway CB confound"). Emitted as a 0.0–1.0 fraction: `BlastRadiusService` returns 0–100 and `runner.py`'s `get_blast_radius()` normalises before writing — `preprocessing.py` does not rescale again (`BLAST_RADIUS_SCALE = 1.0`). **Not comparable** to the archived `master_dataset_v2_latency_5svc.csv` (5-service denominator). |
+| `blast_radius` | float | `0.0–1.0` | fraction | never null. **Retired as a reported outcome (D-007) — kept for reference, not cited as evidence in the paper.** Fraction of the **four CB-bearing downstream subject services** (order, inventory, payment, notification) with an open circuit breaker during the fault window → values in `{0, 0.25, 0.5, 0.75, 1.0}`. **Denominator = 4** (changed from 5): `shared-db-service` is dropped (leaf, no outbound calls / no `@CircuitBreaker`, can never trip, only dilutes), and `gateway-service` is excluded as the *measurement plane*, not a subject — an edge breaker sees the summed chain latency and would always trip first (the "gateway CB confound"). Emitted as a 0.0–1.0 fraction: `BlastRadiusService` returns 0–100 and `runner.py`'s `get_blast_radius()` normalises before writing — `preprocessing.py` does not rescale again (`BLAST_RADIUS_SCALE = 1.0`). **Not comparable** to the archived `master_dataset_v2_latency_5svc.csv` (5-service denominator). |
 | `time_to_open` | float | `≥ 0` | seconds | CB never opened (threshold not reached / fault too mild) → **null is meaningful, not missing** |
 | `time_to_recover` | float | `≥ 0` | seconds | system did not return to baseline within the observation window → null is meaningful |
 | `error_rate` | float | `0.0–1.0` | fraction | never null. Peak error rate across the mesh during the fault. |

@@ -416,6 +416,16 @@ def inject_fault(fault_type, toxicity=1.0, inject_point=None):
     else:
         print(f"No fault injected. Type '{fault_type}' is unknown.", file=sys.stderr)
 
+
+def resolve_inject_point(inject_point, mode):
+    """The actual injection point a run will use, given an explicit --inject-point
+    (which always wins) and the mode-specific default otherwise. Factored out of
+    run_experiment_run so main()'s resumability check (make_experiment_id) and the
+    real fault injection agree on the same value -- computing this twice, once per
+    call site, is exactly the kind of duplicated-derivation risk that already bit
+    effective_horizon elsewhere in this file."""
+    return inject_point or ("inventory-service-proxy" if mode == "sweep" else None)
+
 def compute_load_plan(config, target_rps=LOAD_RATE_RPS, topology=None):
     """Sizes the offered load per window type so both COUNT_BASED and TIME_BASED windows
     get a fair chance to fill, trip, sit OPEN, and transition to HALF_OPEN.
@@ -944,8 +954,15 @@ def compute_real_blast_radius(before, after, tau=REAL_BLAST_LEG_ERROR_THRESHOLD)
     compute_leg_failure_rates so the scalar and the persisted raw column never disagree."""
     return real_blast_radius_from_rates(compute_leg_failure_rates(before, after), tau)
 
-def make_experiment_id(topology, fault_type, config):
-    """Builds a deterministic ID matching experiment_matrix.csv e.g. LIN-LAT-CNT-T50-W10-D15."""
+def make_experiment_id(topology, fault_type, config, toxicity=1.0, inject_point=None):
+    """Builds a deterministic ID matching experiment_matrix.csv e.g. LIN-LAT-CNT-T50-W10-D15.
+
+    toxicity/inject_point default to the values every historical run implicitly used
+    (full toxicity, no override), so every existing ID is byte-identical unless a
+    caller explicitly varies one of these -- same "appended conditionally" contract
+    as the -M/-L suffixes below. Passing the real per-run values here (not just for
+    display) is what makes resumability's (experiment_id, replicate) key actually
+    distinguish e.g. two crash-toxicity-sweep invocations at different --toxicity."""
     topo_map  = {"linear": "LIN", "fanout": "FAN", "mesh": "MSH"}
     fault_map = {"latency": "LAT", "crash": "CRS", "none": "NON"}
     wtype_map = {"COUNT_BASED": "CNT", "TIME_BASED": "TIM"}
@@ -962,6 +979,14 @@ def make_experiment_id(topology, fault_type, config):
         experiment_id += f"-M{config['minimumNumberOfCalls']}"
     if "targetRps" in config:
         experiment_id += f"-L{int(config['targetRps'])}"
+    # -X only when toxicity deviates from every historical run's implicit 1.0 (full
+    # outage) -- e.g. distinct --toxicity 0.3 vs 0.6 crash-sweep invocations.
+    if toxicity != 1.0:
+        experiment_id += f"-X{toxicity}"
+    # -I only when an explicit/effective inject_point overrides the fault-type default
+    # (see resolve_inject_point) -- short-code matches the topo/fault/wtype 3-letter style.
+    if inject_point is not None:
+        experiment_id += f"-I{inject_point[:3].upper()}"
     return experiment_id
 
 def _now_iso():
@@ -1011,9 +1036,10 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
     (loud, before any run starts) instead of this function silently refusing
     to write per-row (the bug that ate the occupancy-ratio run: a stale
     on-disk header made every call here a no-op while the sweep kept
-    "succeeding"). Every successful write here also records the row's
-    (experiment_id, replicate) into completed_runs so a restarted run skips
-    it (see is_done() in main())."""
+    "succeeding"). A row is only added to completed_runs when
+    precondition_ok is True -- an aborted run (READINESS_TIMEOUT,
+    PRECONDITION_FAIL) carries no real measurement and must stay eligible
+    for a real attempt on the next resume, not get permanently stuck."""
     dataset_path = get_dataset_path(mode)
     if mode == "sweep":
         headers = SWEEP_DATASET_HEADERS
@@ -1023,7 +1049,9 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
         headers = DATASET_HEADERS
     os.makedirs(os.path.dirname(dataset_path), exist_ok=True)
 
-    experiment_id = make_experiment_id(topology, fault_type, config)
+    experiment_id = make_experiment_id(
+        topology, fault_type, config,
+        metrics.get("injected_toxicity", 1.0), metrics.get("inject_point"))
     time_to_open = metrics.get("time_to_open")
     time_to_recover = metrics.get("time_to_recover")
 
@@ -1084,7 +1112,8 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
             row["inert"] = time_to_open is None
 
     append_row(dataset_path, row, headers)
-    completed_runs.add((experiment_id, str(replicate)))
+    if metrics.get("precondition_ok") is True:
+        completed_runs.add((experiment_id, str(replicate)))
     print(f"Saved run metrics to {dataset_path}")
 
 def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
@@ -1099,7 +1128,13 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
     print(f"STARTING EXPERIMENT: Mode={mode}, Topology={topology}, Fault={fault_type}, Replicate={replicate}")
     print(f"Config: {config}")
     print("="*60)
-    
+
+    # Resolved once, up front -- pure function of (inject_point, mode), no I/O -- so
+    # every log_results call below (both abort paths and the success path) records
+    # the same effective value make_experiment_id needs for resumability to actually
+    # distinguish runs at a non-default inject point.
+    effective_inject_point = resolve_inject_point(inject_point, mode)
+
     # 1. Update environments
     write_env_file(config)
     if not update_containers():
@@ -1119,6 +1154,7 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
             "run_order_seed": run_order_seed,
             "run_index": run_index,
             "injected_toxicity": toxicity,
+            "inject_point": effective_inject_point,
         }, replicate)
         return False
 
@@ -1142,6 +1178,7 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
             "run_order_seed": run_order_seed,
             "run_index": run_index,
             "injected_toxicity": toxicity,
+            "inject_point": effective_inject_point,
         }, replicate)
         return False
 
@@ -1169,7 +1206,7 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
     # Sweep mode retargets crash to inventory-service-proxy (the same target latency
     # uses) so mechanism, not service position, is the only thing varying -- unless the
     # caller explicitly asked for a different --inject-point, which wins over that default.
-    effective_inject_point = inject_point or ("inventory-service-proxy" if mode == "sweep" else None)
+    # (effective_inject_point resolved once, near the top of this function.)
     try:
         inject_fault(fault_type, toxicity=toxicity, inject_point=effective_inject_point)
     except Exception as e:
@@ -1382,6 +1419,7 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
         "lambda_deviation_flag": lambda_deviation_flag,
         "effective_horizon": effective_horizon,
         "injected_toxicity": toxicity,
+        "inject_point": effective_inject_point,
     }
     log_results(config, fault_type, mode, topology, metrics, replicate)
 
@@ -1598,11 +1636,32 @@ def main():
     print(f"Run order shuffled with seed {run_order_seed} ({len(run_list)} runs). "
           f"Pass --seed {run_order_seed} to reproduce this exact order.")
 
+    # Resumability filter runs BEFORE --limit, not after: filtering post-truncation
+    # means an already-partly-done sweep's --limit N can pick N slots that are mostly
+    # already-completed, silently executing fewer than N (sometimes 0) new runs while
+    # still reporting success. Filtering first guarantees --limit N always means "up
+    # to N new runs," matching what the flag says on the tin.
+    effective_inject_point = resolve_inject_point(args.inject_point, args.mode)
+    pending = []
+    skipped_runs = 0
+    for i, config, rep in run_list:
+        experiment_id = make_experiment_id(args.topology, args.fault, config,
+                                            args.toxicity, effective_inject_point)
+        if is_done(experiment_id, rep, completed_runs):
+            print(f"Skipping: {experiment_id} replicate {rep} already in {dataset_path}.")
+            skipped_runs += 1
+        else:
+            pending.append((i, config, rep))
+    run_list = pending
+
     if args.limit is not None:
         run_list = apply_run_limit(run_list, args.limit)
         total_runs = len(run_list)
-        print(f"--limit {args.limit}: truncated to {total_runs} run(s) (post-shuffle, so this "
-              f"does not bias which config gets run).")
+        print(f"--limit {args.limit}: truncated to {total_runs} new run(s) (post-shuffle, "
+              f"post-resume-filter, so this does not bias which config gets run and always "
+              f"means up to {args.limit} NEW runs, not {args.limit} raw slots).")
+    else:
+        total_runs = len(run_list)
 
     started_at = _now_iso()
     success_runs = 0
@@ -1615,16 +1674,9 @@ def main():
         "phase": "running", "started_at": started_at, "updated_at": started_at,
     })
 
-    skipped_runs = 0
     for run_index, (i, config, rep) in enumerate(run_list, start=1):
         run_number = run_index  # execution sequence position, not config/replicate order
         print(f"\nProgress: Run {run_number} of {total_runs} (config {i+1}/{len(configs)}, replicate {rep}/{args.replicates})")
-
-        experiment_id = make_experiment_id(args.topology, args.fault, config)
-        if is_done(experiment_id, rep, completed_runs):
-            print(f"Skipping run {run_number}: {experiment_id} replicate {rep} already in {dataset_path}.")
-            skipped_runs += 1
-            continue
 
         write_status({
             "mode": args.mode, "fault_type": args.fault, "topology": args.topology,

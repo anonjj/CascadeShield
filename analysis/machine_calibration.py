@@ -64,6 +64,7 @@ def machine_effect(df):
     by_dv = {}
     max_magnitude_rank = {"negligible": 0, "small": 1, "medium": 2, "large": 3}
     worst = "negligible"
+    undefined_dvs = []
     for dv in TIMING_DVS:
         if dv not in df.columns:
             by_dv[dv] = {"status": "SKIPPED_NO_COLUMN"}
@@ -78,12 +79,25 @@ def machine_effect(df):
         delta = cliffs_delta(a, b)
         by_dv[dv] = {"machines": machines, "ci_by_machine": ci_by_machine, "cliffs_delta": delta}
         mag = delta["magnitude"]
-        if mag in max_magnitude_rank and max_magnitude_rank[mag] > max_magnitude_rank[worst]:
+        # "undefined" (one machine has zero non-null observations for this DV) is NOT
+        # the same as "negligible" -- it means the comparison was never actually made.
+        # Tracked separately rather than folded into max_magnitude_rank's walk, so it
+        # can never silently pass through as if it were the mildest real magnitude.
+        if mag == "undefined":
+            undefined_dvs.append(dv)
+        elif max_magnitude_rank[mag] > max_magnitude_rank[worst]:
             worst = mag
 
-    verdict = "MACHINE_EFFECT_NEGLIGIBLE" if worst in ("negligible", "small") \
-        else "MACHINE_EFFECT_DETECTED"
-    return {"status": "COMPUTED", "verdict": verdict, "worst_magnitude": worst, "by_dv": by_dv}
+    if undefined_dvs:
+        # D-008's gate covers time_to_open and time_to_recover as one blanket rule, not
+        # per-DV -- if either couldn't be measured on one machine, the calibration as a
+        # whole can't clear the gate, regardless of what the other DV shows.
+        verdict = "MACHINE_EFFECT_UNDETERMINED"
+    else:
+        verdict = "MACHINE_EFFECT_NEGLIGIBLE" if worst in ("negligible", "small") \
+            else "MACHINE_EFFECT_DETECTED"
+    return {"status": "COMPUTED", "verdict": verdict, "worst_magnitude": worst,
+            "undefined_dvs": undefined_dvs, "by_dv": by_dv}
 
 
 def main(paths):
@@ -103,8 +117,13 @@ def main(paths):
             print("{}: column not present, skipped".format(dv))
             continue
         d = entry["cliffs_delta"]
-        print("{}: Cliff's delta = {:.3f} ({}), n_a={}, n_b={}".format(
-            dv, d["delta"], d["magnitude"], d["n_a"], d["n_b"]))
+        if d["magnitude"] == "undefined":
+            print("{}: Cliff's delta UNDEFINED (n_a={}, n_b={}) -- at least one machine has "
+                  "zero valid observations for this DV, comparison never actually ran".format(
+                      dv, d["n_a"], d["n_b"]))
+        else:
+            print("{}: Cliff's delta = {:.3f} ({}), n_a={}, n_b={}".format(
+                dv, d["delta"], d["magnitude"], d["n_a"], d["n_b"]))
     print("\nVERDICT: {} (worst magnitude: {})".format(result["verdict"], result["worst_magnitude"]))
     return payload
 
@@ -144,7 +163,18 @@ def self_test():
     r3 = machine_effect(one_machine)
     assert r3["status"] == "SKIPPED_NO_CALIBRATION_DATA"
 
-    print("self-test: 3/3 checks OK")
+    # 4. Two machines present, but host-b's time_to_recover is entirely blank (e.g. the
+    #    harness crashed before recovery could be measured on that box). time_to_open is
+    #    fine on both. Must NOT silently read as MACHINE_EFFECT_NEGLIGIBLE -- that DV was
+    #    never actually compared.
+    partial = make_df([5.0, 5.2, 4.9, 5.1, 5.0], [5.1, 4.9, 5.0, 5.2, 4.8])
+    partial.loc[partial["machine_id"] == "host-b", "time_to_recover"] = np.nan
+    r4 = machine_effect(partial)
+    assert r4["status"] == "COMPUTED"
+    assert r4["verdict"] == "MACHINE_EFFECT_UNDETERMINED", r4["verdict"]
+    assert r4["undefined_dvs"] == ["time_to_recover"], r4["undefined_dvs"]
+
+    print("self-test: 4/4 checks OK")
 
 
 if __name__ == "__main__":

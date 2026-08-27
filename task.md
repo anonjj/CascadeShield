@@ -55,26 +55,40 @@
       actual 486-row size were left alone — that's a fact about an archive, not the
       live design. Pushed to `remove/d11-throttle-fault-type`.
 
-## D12 — window_type -> recovery leak (open)
+## D12 — window_type -> recovery leak (preliminary confirm, thin sample)
 
-- [ ] **The Aug-15 leak is real.** `analysis/window_type_recovery_leak.py` confirms
-      TIME's `time_to_recover` runs 2.06-3.68x COUNT's at every matched `wait_duration`,
-      reproducing near-identically across all three archived datasets. Decomposing into
-      anchor (`time_to_open`) vs. excess shows TIME's excess grows with `wait_duration`
-      (19 -> 35s) while COUNT's stays flat (~1.5s) — not explainable by the
-      anchor-timing shift alone.
+- [x] **The Aug-15 leak is real, coarse metric.** `analysis/window_type_recovery_leak.py`
+      confirms TIME's `time_to_recover` runs 2.04-3.90x COUNT's at every matched
+      `wait_duration`, reproducing near-identically across all archived datasets and the
+      fresh real sweep collected this session. Decomposing into anchor (`time_to_open`)
+      vs. excess shows TIME's excess grows with `wait_duration` while COUNT's stays flat
+      — not explainable by the anchor-timing shift alone.
 
-- [ ] **But it can't be pinned down yet.** The precise HALF_OPEN->CLOSED metric needed
-      to isolate the actual mechanism requires `data/cb_transitions.jsonl`, which
-      doesn't exist in any checked-in archive. `hypotheses.md` §4.1 and decision-log
-      entry `D-006` now say so honestly, downgrading H3's negative control from
-      "cleared" to "untested pending the transition sidecar," instead of leaving a
-      claim that was never actually tested.
+- [x] **Precise HALF_OPEN->CLOSED metric computed for the first time (2026-08-27),
+      after fixing two harness bugs that were silently suppressing it:**
+      1. `CB_EVENT_BUFFER_SIZE` 50 -> 5000 (commit `0494dd0`) — the shared per-breaker
+         actuator event ring was being flooded by ordinary `NOT_PERMITTED` traffic
+         during long `waitDurationInOpenState` periods (load is deliberately sustained
+         through the whole wait, by design), evicting the original `CLOSED_TO_OPEN`
+         event before collection at `wait_duration >= 15`.
+      2. Recovery-loop probe extension (commit `cb7f9d7`) — the loop was exiting ~2s
+         after the breaker left OPEN (blast_radius proxy flips to 0.0 on leaving OPEN,
+         not on reaching CLOSED) and collecting transitions immediately, before
+         HALF_OPEN's probes had any chance to resolve. Added ~4s of real traffic +
+         settle time after the loop exits, only when the breaker opened.
 
-      **Next step:** re-run `experiments/runner.py` in a way that retains
-      `data/cb_transitions.jsonl` (a sweep spanning both window types at matched
-      `wait_duration`), then re-run `python analysis/window_type_recovery_leak.py
-      current` — it picks up the sidecar automatically and produces a real verdict
-      (`LEAK_CONFIRMED_ON_HALF_OPEN_LEG` / `CONFIRMED_ANCHOR_SHIFT_ONLY_DISSOCIATION_HOLDS`
-      / `AMBIGUOUS`) instead of `MECHANISM_UNTESTED_NO_SIDECAR`. Then fill in the
-      `hypotheses.md` §4.1 / `D-006` placeholders with the real result.
+      Verdict: **`LEAK_CONFIRMED_ON_HALF_OPEN_LEG`** — TIME's median precise
+      HALF_OPEN->CLOSED duration is 8.9x-14.3x COUNT's, growing with `wait_duration`
+      (2.15s->19.03s at D_w=5; 2.16s->20.87s at D_w=15; 2.48s->35.35s at D_w=30).
+      Written into `hypotheses.md` §4.1 and decision-log `D-006`'s 2026-08-27 update.
+
+- [ ] **Not yet "final confirmed": every precise median above is n=1 TIME_BASED row per
+      `wait_duration` bucket.** Real, directionally consistent, but too thin to close.
+      The originally-suspected mechanism ("HALF_OPEN re-evaluation goes back through the
+      TIME_BASED window") stays architecturally ruled out for Resilience4j 2.2.0 — so
+      whatever's actually causing this is still unidentified.
+
+      **Next step:** a modest replicate top-up (not a full re-sweep) targeting more
+      `TIME_BASED` runs specifically at each `wait_duration`, then re-run
+      `python analysis/window_type_recovery_leak.py current` and check `n_time` in the
+      `half_open_to_closed` block is above 1 per bucket before treating D-006 as closed.

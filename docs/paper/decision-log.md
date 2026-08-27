@@ -146,7 +146,8 @@ artifact alone.
 transition sidecar
 
 **Date:** 2026-08-25 (ad hoc D12 investigation, outside the Day 1–5 cadence) · **Decided
-by:** Jay · **Status:** final (downgrade), revisit conditional on new data
+by:** Jay · **Status:** re-opened 2026-08-27 — see Update below; real signal found, not yet
+confirmed at adequate sample size
 
 **Decision.** H3's §4 leak-audit clearance never actually tested `window_type` as a factor
 on $t_{\text{rec}}$ — it tested for breaker state carrying over between replicates, a
@@ -172,3 +173,33 @@ a genuine recovery-side effect.
 **Revisit if:** a future `experiments/runner.py` invocation retains `data/cb_transitions.jsonl`
 for a sweep spanning both window types at matched $D_w$ — re-run
 `analysis/window_type_recovery_leak.py` against it and read the `precise` block's verdict.
+
+---
+
+**Update (2026-08-27).** The revisit condition above is met. Along the way, two harness bugs
+were found and fixed that had been silently preventing the precise metric from ever being
+computed (see commits `0494dd0`, `cb7f9d7` on `worktree-session-handoff`):
+
+1. `CB_EVENT_BUFFER_SIZE` was 50 — too small once traffic is deliberately sustained through
+   the full `waitDurationInOpenState` (by design, so a HALF_OPEN probe fires): every rejected
+   call during that period emits its own `NOT_PERMITTED` event into the *same* shared
+   per-breaker ring buffer as `STATE_TRANSITION` events, and at $D_w \geq 15$ this reliably
+   evicted the original `CLOSED_TO_OPEN` event before collection. Fixed: 50 → 5000.
+2. The recovery-polling loop was breaking ~2s after the breaker left OPEN for HALF_OPEN
+   (`blast_radius` flips to 0.0 the instant it leaves OPEN, not when it reaches CLOSED — a
+   limitation the loop's own comment already documented), then collecting transitions
+   immediately — never giving HALF_OPEN's probe calls a chance to resolve either way. Fixed:
+   ~4s of additional real traffic + settle time after the loop exits, before collection.
+
+With both fixed, `analysis/window_type_recovery_leak.py` returns
+**`LEAK_CONFIRMED_ON_HALF_OPEN_LEG`**: TIME's median precise HALF_OPEN→CLOSED duration is
+**8.9x–14.3x** COUNT's, monotonically increasing with $D_w$ (2.15s→19.03s at $D_w$=5;
+2.16s→20.87s at $D_w$=15; 2.48s→35.35s at $D_w$=30) — the same shape as the coarse excess
+decomposition, now on the metric that actually isolates the HALF_OPEN leg.
+
+**Not yet promoting this to "final confirmed"**: every median above is **n=1 TIME_BASED row
+per $D_w$ bucket** (`n_count` 1/3/3) — real, directionally consistent, mechanistically
+unexplained (the originally-suspected mechanism is still architecturally ruled out for
+Resilience4j 2.2.0, so *something else* is causing this), but too thin to close the question.
+**Status stays "re-opened, preliminary" until a modest replicate top-up** (not a full re-sweep
+— a handful more `TIME_BASED` runs at each $D_w$) raises `n_time` per bucket above 1.

@@ -143,21 +143,31 @@ $D_w$=5/15/30 on the current archive) while COUNT's stays flat (~1.5–1.7s, pur
 overhead) — a pattern a constant anchor shift alone cannot produce.
 
 **Precise check** (true HALF_OPEN→CLOSED duration, from `data/cb_transitions.jsonl`'s real
-Resilience4j state transitions): **not computable on data in hand.**
-`data/cb_transitions.jsonl` is real-runs-only and gitignored, and was not retained from the
-sweep behind the current archive (or the v2/v3 archives). The script's join/derivation logic
-is fully implemented and exercised via `--self-test` against a synthetic fixture, but produces
-no real verdict until a `experiments/runner.py` run retains the sidecar.
+Resilience4j state transitions): **computed for the first time on 2026-08-27**, after two
+harness bugs that were silently suppressing this exact metric got fixed (`CB_EVENT_BUFFER_SIZE`
+50→5000 — the shared per-breaker event ring was being flooded and evicting the original
+`CLOSED_TO_OPEN` event by ordinary `NOT_PERMITTED` traffic during long `waitDurationInOpenState`
+periods; and a ~4s post-recovery-loop probe-driving extension — the loop was breaking ~2s after
+the breaker left OPEN, before its `HALF_OPEN` probes had a chance to resolve either way).
+`analysis/window_type_recovery_leak.py`'s verdict is **`LEAK_CONFIRMED_ON_HALF_OPEN_LEG`**: TIME's
+median precise HALF_OPEN→CLOSED duration is **8.9x–14.3x** COUNT's at every matched $D_w$ (2.15s
+vs 19.03s at $D_w$=5; 2.16s vs 20.87s at $D_w$=15; 2.48s vs 35.35s at $D_w$=30) — monotonically
+increasing with $D_w$, the same shape as the coarse excess decomposition above, but on the
+metric that actually isolates the HALF_OPEN leg from the detection-anchor shift.
 
-**H3's negative control on $t_{\text{rec}}$ is downgraded from "cleared" to "untested against
-this specific mechanism, pending a re-run that retains the transition sidecar."** The coarse
-ratio above is consistent with either a genuine recovery-side leak or a pure detection-anchor
-shift, and the two cannot be told apart without the precise metric. (The mechanism originally
-suspected — "HALF_OPEN re-evaluation goes back through the TIME_BASED window" — is not
-architecturally plausible for Resilience4j 2.2.0, the version this repo pins: HALF_OPEN always
-uses its own fixed-size ring buffer sized `permittedNumberOfCallsInHalfOpenState`, independent
-of `slidingWindowType`. If the precise metric ever finds a real HALF_OPEN→CLOSED effect, it is
-a different mechanism than the one originally suspected.)
+**Caveat, stated plainly rather than oversold:** this is real signal, not yet a settled result —
+every one of those medians comes from **n=1 TIME_BASED row per $D_w$ bucket** (`n_count` is 1/3/3).
+The direction, magnitude ordering, and consistency with the independently-measured coarse trend
+all argue this is real, but a single observation per cell is not enough to close the question.
+**Status: strong preliminary confirmation, pending a modest replicate top-up (not a full
+re-sweep) before treating $D-006$ as closed.**
+
+(The mechanism originally suspected — "HALF_OPEN re-evaluation goes back through the TIME_BASED
+window" — is still not architecturally plausible for Resilience4j 2.2.0, the version this repo
+pins: HALF_OPEN always uses its own fixed-size ring buffer sized
+`permittedNumberOfCallsInHalfOpenState`, independent of `slidingWindowType`. A real effect now
+shows up on this leg, so the actual mechanism is something else — not yet identified — and is
+the next open question, not "TIME_BASED windows leaking into HALF_OPEN's evaluation.")
 
 ---
 

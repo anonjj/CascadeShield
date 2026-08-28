@@ -86,9 +86,19 @@ def load(name, apply_exclusions=True):
     df["dataset"] = name
     df["legs"] = df.get("leg_failure_rates", pd.Series([""] * len(df))).map(parse_legs)
     df["blast_frac"] = pd.to_numeric(df["blast_radius"], errors="coerce") / spec["blast_scale"]
-    if apply_exclusions and "excluded_reason" in df.columns:
-        df = df[df["excluded_reason"].isna() | (df["excluded_reason"].astype(str).str.strip() == "")]
+    if apply_exclusions:
+        df = drop_excluded(df)
     return df.reset_index(drop=True)
+
+
+def drop_excluded(df):
+    """Drop quarantined rows (a non-empty `excluded_reason`). A no-op if the column
+    isn't present. Shared so every caller agrees on what "excluded" means -- see
+    canary_readout.py::load_canary, which loads a differently-shaped CSV than the
+    DATASETS this module owns and so can't just call load() itself."""
+    if "excluded_reason" not in df.columns:
+        return df
+    return df[df["excluded_reason"].isna() | (df["excluded_reason"].astype(str).str.strip() == "")]
 
 
 def parse_legs(raw):

@@ -37,9 +37,9 @@ resilience4j:
         # scores 0% failure rate but 100% slow-call rate).
         event-consumer-buffer-size: ${CB_EVENT_BUFFER_SIZE:50}
         record-exceptions:
-          - com.cascadeshield.gateway.exception.DownstreamUnavailableException
+          - com.cascadeshield.common.exception.DownstreamUnavailableException
         ignore-exceptions:
-          - com.cascadeshield.gateway.exception.DownstreamRejectedException
+          - com.cascadeshield.common.exception.DownstreamRejectedException
       # ---- measurement-plane -------------------------------------------------
       # The gateway is the MEASUREMENT PLANE, not an experimental subject. An edge
       # breaker observes the SUMMED latency of the whole downstream chain

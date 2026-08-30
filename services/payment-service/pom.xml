@@ -11,4 +11,11 @@
     </parent>
     <artifactId>payment-service</artifactId>
     <name>payment-service</name>
+    <dependencies>
+        <dependency>
+            <groupId>com.cascadeshield</groupId>
+            <artifactId>cascadeshield-common</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+    </dependencies>
 </project>

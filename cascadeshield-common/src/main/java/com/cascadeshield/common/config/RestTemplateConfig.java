@@ -1,4 +1,4 @@
-package com.cascadeshield.order.config;
+package com.cascadeshield.common.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

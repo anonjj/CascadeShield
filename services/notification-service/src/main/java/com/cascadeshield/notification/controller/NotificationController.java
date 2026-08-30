@@ -1,7 +1,7 @@
 package com.cascadeshield.notification.controller;
 
-import com.cascadeshield.notification.exception.DownstreamRejectedException;
-import com.cascadeshield.notification.exception.DownstreamUnavailableException;
+import com.cascadeshield.common.exception.DownstreamRejectedException;
+import com.cascadeshield.common.exception.DownstreamUnavailableException;
 import com.cascadeshield.notification.service.NotificationDownstreamService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;

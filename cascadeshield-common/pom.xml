@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.cascadeshield</groupId>
+        <artifactId>cascadeshield-parent</artifactId>
+        <version>1.0.0</version>
+        <relativePath>../cascadeshield-parent/pom.xml</relativePath>
+    </parent>
+    <artifactId>cascadeshield-common</artifactId>
+    <name>cascadeshield-common</name>
+    <description>
+        Shared downstream-call classification (DownstreamRejectedException/
+        DownstreamUnavailableException/GlobalExceptionHandler) and RestTemplate config, used
+        by all 5 CB-bearing services (gateway/order/inventory/payment/notification).
+        shared-db-service has no outbound calls and does not depend on this module.
+    </description>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <!-- This is a library jar, not an executable one: no main class to
+                     repackage. Skip the inherited repackage goal rather than let it run
+                     against a jar with nothing to repackage. -->
+                <configuration>
+                    <skip>true</skip>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

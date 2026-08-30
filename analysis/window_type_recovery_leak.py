@@ -119,7 +119,10 @@ def _ratio_table(df, value_col):
             "median_count": cm,
             "median_time": tm,
             "ratio_time_over_count": ratio,
-            "cliffs_delta": cliffs_delta(t.values, c.values),
+            # (COUNT, TIME) order -- matches canary_readout.py and order_leg_containment.py's
+            # convention for this same conceptual comparison; keep it consistent so `delta`'s
+            # sign means the same thing across every script's JSON output.
+            "cliffs_delta": cliffs_delta(c.values, t.values),
             "ci_count": bootstrap_ci_grouped(g[g[COL_WINDOW] == "COUNT"], value_col),
             "ci_time": bootstrap_ci_grouped(g[g[COL_WINDOW] == "TIME"], value_col),
         })
@@ -184,10 +187,13 @@ def coarse_ratio_check(df):
 # ------------------------------------------------------------------------ (b) precise
 
 def load_transition_index(path):
-    """{(experiment_id, replicate, mode, environment): record}. Joins on all four keys
-    (the docstring in runner.py recommends the first three; environment is added here
-    to rule out a cross-environment collision). If a key repeats, the last line in the
-    file wins -- an append-only log's most recent write is the authoritative one."""
+    """{(experiment_id, replicate, mode, environment, machine_id): record}. Joins on all
+    five keys (the docstring in runner.py recommends the first three; environment and
+    machine_id are added here to rule out cross-environment/cross-machine collisions --
+    D16's calibration protocol runs the identical experiment_id/replicate/mode/
+    environment on two different machines by design, so machine_id is load-bearing, not
+    defensive). If a key repeats, the last line in the file wins -- an append-only log's
+    most recent write is the authoritative one."""
     index = {}
     with open(path) as f:
         for line in f:
@@ -195,7 +201,8 @@ def load_transition_index(path):
             if not line:
                 continue
             rec = json.loads(line)
-            key = (rec["experiment_id"], str(rec["replicate"]), rec["mode"], rec["environment"])
+            key = (rec["experiment_id"], str(rec["replicate"]), rec["mode"], rec["environment"],
+                   rec["machine_id"])
             index[key] = rec
     return index
 
@@ -252,7 +259,8 @@ def precise_row_for(row, index):
         return {"status": "SKIPPED_UNMAPPED_TOPOLOGY_FAULT"}
     service, breakers = watch
 
-    key = (row["experiment_id"], str(row["replicate"]), row["mode"], row["environment"])
+    key = (row["experiment_id"], str(row["replicate"]), row["mode"], row["environment"],
+           row["machine_id"])
     rec = index.get(key)
     if rec is None:
         return {"status": "SKIPPED_NO_MATCHING_RECORD"}
@@ -428,18 +436,20 @@ def self_test():
                 "creation_time": ts(seconds)}
 
     def row(experiment_id, replicate, window_type, wait_duration,
-             topology="LINEAR", fault_type="LATENCY", mode="full", environment="LOCAL"):
+            topology="LINEAR", fault_type="LATENCY", mode="full", environment="LOCAL",
+            machine_id="host-a"):
         return pd.Series({
             "experiment_id": experiment_id, "replicate": replicate, "mode": mode,
-            "environment": environment, "topology": topology, "fault_type": fault_type,
-            "window_type": window_type, "wait_duration": wait_duration,
+            "environment": environment, "machine_id": machine_id, "topology": topology,
+            "fault_type": fault_type, "window_type": window_type,
+            "wait_duration": wait_duration,
         })
 
     index = {}
 
     # 1. Clean COUNT run: opens at t=0, half-open at t=5 (wait_duration), closed at t=7.
     r1 = row("LIN-LAT-CNT-A", 1, "COUNT_BASED", 5)
-    index[("LIN-LAT-CNT-A", "1", "full", "LOCAL")] = {
+    index[("LIN-LAT-CNT-A", "1", "full", "LOCAL", "host-a")] = {
         "transitions": [
             transition("order", "inventoryServiceCB", "CLOSED_TO_OPEN", 0),
             transition("order", "inventoryServiceCB", "OPEN_TO_HALF_OPEN", 5),
@@ -450,7 +460,7 @@ def self_test():
     # 2. Clean TIME run: same wait_duration, but HALF_OPEN->CLOSED takes far longer
     #    (15s instead of 2s) -- this is the shape a real leak would produce.
     r2 = row("LIN-LAT-TIM-A", 1, "TIME_BASED", 5)
-    index[("LIN-LAT-TIM-A", "1", "full", "LOCAL")] = {
+    index[("LIN-LAT-TIM-A", "1", "full", "LOCAL", "host-a")] = {
         "transitions": [
             transition("order", "inventoryServiceCB", "CLOSED_TO_OPEN", 0),
             transition("order", "inventoryServiceCB", "OPEN_TO_HALF_OPEN", 5),
@@ -460,7 +470,7 @@ def self_test():
 
     # 3. HALF_OPEN bounce: probe fails once, re-opens, then eventually closes.
     r3 = row("LIN-LAT-CNT-B", 1, "COUNT_BASED", 5)
-    index[("LIN-LAT-CNT-B", "1", "full", "LOCAL")] = {
+    index[("LIN-LAT-CNT-B", "1", "full", "LOCAL", "host-a")] = {
         "transitions": [
             transition("order", "inventoryServiceCB", "CLOSED_TO_OPEN", 0),
             transition("order", "inventoryServiceCB", "OPEN_TO_HALF_OPEN", 5),
@@ -472,7 +482,7 @@ def self_test():
 
     # 4. Never recovered: opens, goes half-open, bounces back open, record ends there.
     r4 = row("LIN-LAT-CNT-C", 1, "COUNT_BASED", 5)
-    index[("LIN-LAT-CNT-C", "1", "full", "LOCAL")] = {
+    index[("LIN-LAT-CNT-C", "1", "full", "LOCAL", "host-a")] = {
         "transitions": [
             transition("order", "inventoryServiceCB", "CLOSED_TO_OPEN", 0),
             transition("order", "inventoryServiceCB", "OPEN_TO_HALF_OPEN", 5),
@@ -488,7 +498,27 @@ def self_test():
 
     # 7. Breaker never opened (empty transitions list for the watched breakers).
     r7 = row("LIN-LAT-CNT-E", 1, "COUNT_BASED", 5)
-    index[("LIN-LAT-CNT-E", "1", "full", "LOCAL")] = {"transitions": []}
+    index[("LIN-LAT-CNT-E", "1", "full", "LOCAL", "host-a")] = {"transitions": []}
+
+    # 8. Two machines colliding on every OTHER key (D16's calibration protocol runs
+    #    identical experiment_id/replicate/mode/environment on both boxes by design) --
+    #    machine_id must keep them distinct in the index, not last-write-wins overwrite.
+    r8a = row("LIN-LAT-CNT-F", 1, "COUNT_BASED", 5, machine_id="host-a")
+    r8b = row("LIN-LAT-CNT-F", 1, "COUNT_BASED", 5, machine_id="host-b")
+    index[("LIN-LAT-CNT-F", "1", "full", "LOCAL", "host-a")] = {
+        "transitions": [
+            transition("order", "inventoryServiceCB", "CLOSED_TO_OPEN", 0),
+            transition("order", "inventoryServiceCB", "OPEN_TO_HALF_OPEN", 5),
+            transition("order", "inventoryServiceCB", "HALF_OPEN_TO_CLOSED", 7),
+        ]
+    }
+    index[("LIN-LAT-CNT-F", "1", "full", "LOCAL", "host-b")] = {
+        "transitions": [
+            transition("order", "inventoryServiceCB", "CLOSED_TO_OPEN", 0),
+            transition("order", "inventoryServiceCB", "OPEN_TO_HALF_OPEN", 5),
+            transition("order", "inventoryServiceCB", "HALF_OPEN_TO_CLOSED", 25),
+        ]
+    }
 
     res1 = precise_row_for(r1, index)
     assert res1["status"] == "OK" and res1["precise_recovered"] is True
@@ -521,7 +551,13 @@ def self_test():
     res7 = precise_row_for(r7, index)
     assert res7["status"] == "NEVER_OPENED"
 
-    print("self-test: 7/7 fixtures OK")
+    res8a = precise_row_for(r8a, index)
+    res8b = precise_row_for(r8b, index)
+    assert res8a["status"] == "OK" and res8b["status"] == "OK"
+    assert res8a["precise_half_open_to_closed"] == 2.0, "host-a's own record, not host-b's"
+    assert res8b["precise_half_open_to_closed"] == 20.0, "host-b's own record, not host-a's"
+
+    print("self-test: 8/8 fixtures OK")
 
 
 if __name__ == "__main__":

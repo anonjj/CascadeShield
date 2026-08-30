@@ -47,8 +47,8 @@ def _parse_event(event) -> dict:
     """Accept an API Gateway proxy event (body is a JSON string) or a direct dict."""
     if isinstance(event, str):
         return json.loads(event or "{}")
-    if isinstance(event, dict) and "body" in event and not ("topology" in event):
-        body = event["body"]
+    if isinstance(event, dict) and ("httpMethod" in event or "requestContext" in event):
+        body = event.get("body")
         return json.loads(body) if isinstance(body, str) else (body or {})
     return event or {}
 

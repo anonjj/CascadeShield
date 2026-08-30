@@ -949,7 +949,7 @@ def _fmt(metrics, key, decimals=4):
     return f"{val:.{decimals}f}" if val is not None else ""
 
 
-def log_results(config, fault_type, mode, topology, metrics, replicate):
+def log_results(config, fault_type, mode, topology, metrics, replicate, machine_id=""):
     """Appends experiment run results to master_dataset.csv (full mode), canary_runs.csv
     (canary mode), crash_toxicity_sweep.csv (sweep mode -- DATASET_HEADERS plus
     injected_toxicity), or occupancy_dataset.csv (occupancy mode -- DATASET_HEADERS plus
@@ -964,6 +964,15 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
     run_index are the two exceptions expected on every row regardless of
     outcome -- a run's position in the shuffled execution order is known the
     moment it starts, independent of what happens during it.
+
+    machine_id (D14) is the same kind of exception, but arrives as an argument
+    rather than through metrics: it comes from --machine-id and describes the
+    host, not the run, so it is known before the run starts and is written on
+    abort rows too. Passed explicitly rather than left to append_row's
+    restval="" blank-fill -- but an omitted flag is not left blank either: it
+    falls back to MACHINE_ID's own auto-detection (D6), so a row only goes
+    blank if MACHINE_ID's own hostname lookup fails too, never merely because
+    --machine-id wasn't passed.
 
     The header-mismatch guard now lives in resumable_runner.load_completed(),
     called once at the top of main() -- a mismatch there raises SystemExit
@@ -988,6 +997,11 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
         metrics.get("injected_toxicity", 1.0), metrics.get("inject_point"), mode)
     time_to_open = metrics.get("time_to_open")
     time_to_recover = metrics.get("time_to_recover")
+    # --machine-id wins when passed; omitting it falls back to MACHINE_ID's own
+    # auto-detection (env var or hostname, see MACHINE_ID's definition) rather than
+    # going blank -- a bare "" here would silently defeat the whole point of
+    # auto-detecting in the first place (D6/D14).
+    effective_machine_id = machine_id or MACHINE_ID
 
     row = {
         "experiment_id": experiment_id,
@@ -999,7 +1013,6 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
         "wait_duration": config["waitDurationInOpenState"],
         "permitted_calls_half_open": PERMITTED_CALLS_HALF_OPEN,
         "environment": ENVIRONMENT,
-        "machine_id": MACHINE_ID,
         "mode": mode,
         "replicate": replicate,
         "run_timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -1024,6 +1037,7 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
         "lambda_cv": _fmt(metrics, "lambda_cv"),
         "lambda_deviation_flag": metrics.get("lambda_deviation_flag") if metrics.get("lambda_deviation_flag") is not None else "",
         "effective_horizon": _fmt(metrics, "effective_horizon"),
+        "machine_id": effective_machine_id,  # --machine-id if passed, else auto-detected MACHINE_ID (D14/D6)
         "excluded_reason": "",  # always empty at write time; only analysis/quarantine.py fills it
     }
     if mode == "sweep":
@@ -1048,13 +1062,16 @@ def log_results(config, fault_type, mode, topology, metrics, replicate):
     print(f"Saved run metrics to {dataset_path}")
 
 def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
-                        run_order_seed=None, run_index=None, toxicity=1.0, inject_point=None):
+                        run_order_seed=None, run_index=None, toxicity=1.0,
+                        machine_id="", inject_point=None):
     """Orchestrates a single configuration and fault run.
 
     run_order_seed/run_index describe this run's place in the sweep's shuffled
     execution order (see main()) -- attached to every log_results call in this
     function, including both abort paths, so a run's position is recoverable
-    even when it never got far enough to produce an outcome."""
+    even when it never got far enough to produce an outcome. machine_id (D14)
+    is threaded the same way and for the same reason: which host produced a row
+    is exactly as recoverable on an aborted run as on a completed one."""
     print("\n" + "="*60)
     print(f"STARTING EXPERIMENT: Mode={mode}, Topology={topology}, Fault={fault_type}, Replicate={replicate}")
     print(f"Config: {config}")
@@ -1082,11 +1099,10 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
             "precondition_ok": False,
             "precondition_fail_reason": "READINESS_TIMEOUT",
             "readiness_wait_s": readiness_wait_s,
-            "run_order_seed": run_order_seed,
+                        "run_order_seed": run_order_seed,
             "run_index": run_index,
             "injected_toxicity": toxicity,
-            "inject_point": effective_inject_point,
-        }, replicate)
+        }, replicate, machine_id=machine_id)
         return False
 
     # 2b. Breaker-state-reset precondition (see the "Breaker-state-reset precondition"
@@ -1106,11 +1122,10 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
             "readiness_wait_s": readiness_wait_s,
             "cb_state_pre": _serialize_cb_map(precondition["cb_state"]),
             "buffered_calls_pre": _serialize_cb_map(precondition["buffered_calls"]),
-            "run_order_seed": run_order_seed,
+                        "run_order_seed": run_order_seed,
             "run_index": run_index,
             "injected_toxicity": toxicity,
-            "inject_point": effective_inject_point,
-        }, replicate)
+        }, replicate, machine_id=machine_id)
         return False
 
     # Snapshot each interior breaker's actuator ring buffer before the fault, via
@@ -1302,7 +1317,7 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
         "injected_toxicity": toxicity,
         "inject_point": effective_inject_point,
     }
-    log_results(config, fault_type, mode, topology, metrics, replicate)
+    log_results(config, fault_type, mode, topology, metrics, replicate, machine_id=machine_id)
 
     # transitions already collected above (observer.observe_recovery), regardless of
     # what blast_radius/cb_opened concluded -- catching the case where the aggregate
@@ -1488,6 +1503,11 @@ def main():
                          help="Cap the (already shuffled) run list to the first N runs -- e.g. "
                               "--limit 1 for a single-run smoke test instead of a full sweep. "
                               "Applied after shuffling, so it does not bias which config runs.")
+    parser.add_argument("--machine-id", default="",
+                         help="Label identifying which machine/Codespace produced this run's rows, "
+                              "e.g. 'soham-codespace' or 'soham-local'. Written to the machine_id "
+                              "column; falls back to MACHINE_ID's own auto-detection if omitted "
+                              "(env var or hostname), not left blank.")
 
     args = parser.parse_args()
 
@@ -1592,7 +1612,8 @@ def main():
             run_number=run_number, config_index=i, current_config=config, replicate=rep))
         success = run_experiment_run(config, args.fault, args.mode, args.topology, replicate=rep,
                                       run_order_seed=run_order_seed, run_index=run_index,
-                                      toxicity=args.toxicity, inject_point=args.inject_point)
+                                      toxicity=args.toxicity, machine_id=args.machine_id,
+                                      inject_point=args.inject_point)
         if success:
             success_runs += 1
         else:

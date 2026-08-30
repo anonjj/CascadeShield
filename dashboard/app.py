@@ -15,6 +15,7 @@ import matplotlib
 matplotlib.use("Agg")
 from matplotlib.figure import Figure
 from flask import Flask, render_template, request
+import pandas as pd
 
 import data_loader as dl
 
@@ -43,18 +44,10 @@ def render_heatmap(pivot, title, fmt="{:.2f}", cmap="Reds"):
     for i in range(pivot.shape[0]):
         for j in range(pivot.shape[1]):
             val = pivot.values[i, j]
-            text = "n/a" if pd_isna(val) else fmt.format(val)
+            text = "n/a" if pd.isna(val) else fmt.format(val)
             ax.text(j, i, text, ha="center", va="center", color="black")
     fig.colorbar(im, ax=ax, shrink=0.8)
     return fig_to_base64(fig)
-
-
-def pd_isna(val):
-    import math
-    try:
-        return math.isnan(val)
-    except TypeError:
-        return False
 
 
 def render_distribution(count_based_df):
@@ -126,7 +119,8 @@ def results():
     fig1_median = render_heatmap(dl.blast_pivot(filtered, "median"), "Median blast radius (0–1 fraction)")
     fig1_mean = render_heatmap(dl.blast_pivot(filtered, "mean"), "Mean blast radius (0–1 fraction)")
     fig2 = render_heatmap(dl.trip_rate_pivot(filtered), "Breaker trip rate (time_to_open non-null)", cmap="Blues")
-    fig3 = render_distribution(dl.count_based_blast(filtered)) if not dl.count_based_blast(filtered).empty else None
+    cb_blast = dl.count_based_blast(filtered)
+    fig3 = render_distribution(cb_blast) if not cb_blast.empty else None
     summary_table = dl.compute_summary_stats(filtered).round(4).to_html(index=False, classes="summary-table")
 
     return render_template(

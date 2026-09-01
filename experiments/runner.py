@@ -1484,6 +1484,18 @@ def main():
                          help="Label identifying which machine/Codespace produced this run's rows, "
                               "e.g. 'soham-codespace' or 'soham-local'. Written to the machine_id "
                               "column. Blank if omitted.")
+    parser.add_argument("--only-ids", default=None,
+                         help="Targeted replicate top-up (post-sweep MDE power-check follow-up): "
+                              "path to a text file of experiment_id values (one per line, '#' "
+                              "comments allowed), OR a comma-separated inline list. When given, "
+                              "generate_combinations()'s config list is filtered down to only the "
+                              "configs whose make_experiment_id(args.topology, args.fault, config) "
+                              "appears in this set -- everything else in the pipeline (resumability, "
+                              "--replicates, --limit, logging) is unchanged, so raising --replicates "
+                              "to e.g. 5 with this filter runs ONLY replicates 4-5 for the listed IDs "
+                              "instead of for the whole grid. IDs for the other --topology/--fault "
+                              "combination are silently ignored (not an error) -- run once per "
+                              "topology/fault combination as usual, pointing the same file at each.")
 
     args = parser.parse_args()
 
@@ -1509,6 +1521,22 @@ def main():
         sys.exit(1)
         
     configs = generate_combinations(args.mode)
+    if args.only_ids:
+        if os.path.isfile(args.only_ids):
+            with open(args.only_ids) as f:
+                wanted = {line.split("#", 1)[0].strip() for line in f}
+        else:
+            wanted = {tok.strip() for tok in args.only_ids.split(",")}
+        wanted.discard("")
+        before = len(configs)
+        configs = [c for c in configs
+                   if make_experiment_id(args.topology, args.fault, c) in wanted]
+        print(f"--only-ids filter: {before} configs -> {len(configs)} matching "
+              f"'{args.topology}'/'{args.fault}' (of {len(wanted)} IDs listed).")
+        if not configs:
+            print("No configs matched -- check the ID prefixes against --topology/--fault, "
+                  "or this file has no IDs for this combination (that's expected if you're "
+                  "running it once per topology/fault as usual).", file=sys.stderr)
     if args.mode == "canary" and CANARY_DATASET_PATH.exists():
         CANARY_DATASET_PATH.unlink()
         print(f"Cleared previous canary run data at {CANARY_DATASET_PATH}")

@@ -70,6 +70,22 @@ DATASETS = {
                 "correct for it) and were carried forward into 'current' unchanged, with "
                 "load_concurrency backfilled to 5 (the true, known value) rather than left blank.",
     },
+    "v5_soham_linear_presweep": {
+        "path": DATA_DIR / "master_dataset_v5_soham_linear_presweep.csv",
+        "n_expected": 324,
+        "blast_scale": 1.0,
+        "blast_denominator": 4,
+        "leg_node_set": "4",
+        "note": "Soham's independent full LINEAR sweep (commit a957e5a, 2026-08-30, machine_id "
+                "'soham-codespace') -- 162 CRASH + 162 LATENCY rows, collected on the Stage 4 "
+                "branch before the LOAD_CONCURRENCY fix or DATASET_PATH_OVERRIDE existed, merged "
+                "back into main only as this archive (PR #32's own version of master_dataset.csv "
+                "was superseded during the merge, not silently dropped -- see git history). "
+                "26/162 LATENCY rows already carry lambda_deviation_flag=True (16%, consistent "
+                "with v4_flat_concurrency's ~14% on the same cell). Superseded by the D6 "
+                "calibration LINEAR+LATENCY redo and 'current''s own retained CRASH rows -- kept "
+                "for audit/history, not intended as a live analysis input.",
+    },
     "current": {
         "path": DATA_DIR / "master_dataset.csv",
         "n_expected": 704,   # 380 retained CRASH rows + 324 re-collected LATENCY rows (162/topology)

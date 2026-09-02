@@ -1,14 +1,9 @@
 package com.cascadeshield.notification.service;
 
-import com.cascadeshield.common.exception.DownstreamRejectedException;
-import com.cascadeshield.common.exception.DownstreamUnavailableException;
+import com.cascadeshield.common.client.DownstreamCaller;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.web.client.HttpServerErrorException;
-import org.springframework.web.client.ResourceAccessException;
-import org.springframework.web.client.RestTemplate;
 
 /**
  * CB-wrapped outbound call from notification-service to shared-db-service.
@@ -19,25 +14,17 @@ import org.springframework.web.client.RestTemplate;
 @Service
 public class NotificationDownstreamService {
 
-    private final RestTemplate restTemplate;
+    private final DownstreamCaller downstreamCaller;
 
     @Value("${downstream.shared-db-service-url}")
     private String sharedDbServiceUrl;
 
-    public NotificationDownstreamService(RestTemplate restTemplate) {
-        this.restTemplate = restTemplate;
+    public NotificationDownstreamService(DownstreamCaller downstreamCaller) {
+        this.downstreamCaller = downstreamCaller;
     }
 
     @CircuitBreaker(name = "sharedDbCB")
     public Object callSharedDb() {
-        try {
-            return restTemplate.getForObject(sharedDbServiceUrl + "/api/v1/shared-db", Object.class);
-        } catch (HttpClientErrorException ex) {
-            throw new DownstreamRejectedException(ex.getStatusCode(), ex.getResponseBodyAsString());
-        } catch (HttpServerErrorException ex) {
-            throw new DownstreamUnavailableException("shared-db-service unreachable", ex);
-        } catch (ResourceAccessException ex) {
-            throw new DownstreamUnavailableException("shared-db-service unreachable", ex);
-        }
+        return downstreamCaller.get(sharedDbServiceUrl + "/api/v1/shared-db", "shared-db-service");
     }
 }

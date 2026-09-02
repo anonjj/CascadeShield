@@ -1,5 +1,6 @@
 package com.cascadeshield.common.config;
 
+import com.cascadeshield.common.client.DownstreamCaller;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -14,5 +15,10 @@ public class RestTemplateConfig {
         factory.setConnectTimeout(3_000);
         factory.setReadTimeout(8_000);
         return new RestTemplate(factory);
+    }
+
+    @Bean
+    public DownstreamCaller downstreamCaller(RestTemplate restTemplate) {
+        return new DownstreamCaller(restTemplate);
     }
 }

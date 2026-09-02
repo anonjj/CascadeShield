@@ -25,10 +25,11 @@ Always exits 0 on a successful read (this is a report, not a pass/fail gate --
 see validate_gate.py for that). Exits 2 if the dataset file itself is missing,
 1 if it has no usable fault_type=NONE rows at all.
 """
-import csv
 import sys
 from collections import defaultdict
 from pathlib import Path
+
+from csv_gate_utils import load_rows, safe_float
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_CSV = BASE_DIR / "data" / "master_dataset.csv"
@@ -38,11 +39,6 @@ DEFAULT_CSV = BASE_DIR / "data" / "master_dataset.csv"
 # ml/preprocessing.py's DEFAULT_TAU with a comment instead of importing it -- keep
 # these two in sync if the floor ever changes.
 MIN_NONE_FAULT_REPLICATES = 10
-
-
-def load_rows(path):
-    with open(path, newline="") as f:
-        return list(csv.DictReader(f))
 
 
 def is_valid_none_row(row):
@@ -61,13 +57,8 @@ def tripped(row):
     opening under a no-fault run is a false trip. Blank (a measurement gap,
     e.g. the gateway was unreachable) is treated as not tripped, matching
     validate_gate.py's is_unsafe() convention for blank blast_radius."""
-    raw = row.get("blast_radius", "")
-    if raw in ("", "None"):
-        return False
-    try:
-        return float(raw) > 0.0
-    except ValueError:
-        return False
+    val = safe_float(row.get("blast_radius", ""))
+    return val is not None and val > 0.0
 
 
 def compute_phi(rows):

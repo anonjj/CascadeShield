@@ -58,20 +58,11 @@ import pandas as pd
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 from preprocessing import (  # noqa: E402
-    FAULT_TYPES, THRESHOLDS, TOPOLOGIES, WAIT_DURATIONS, WINDOW_SIZES, WINDOW_TYPES,
+    FAULT_TYPES, SCHEMA_COLUMNS, THRESHOLDS, TOPOLOGIES, WAIT_DURATIONS, WINDOW_SIZES,
+    WINDOW_TYPES,
 )
 
 DATA_DIR = SCRIPT_DIR.parent / "data"
-
-# ---- the 17-column master schema (must stay identical to runner.py DATASET_HEADERS) ----
-SCHEMA_COLUMNS = [
-    "experiment_id", "topology", "fault_type", "window_type",
-    "threshold", "window_size", "wait_duration",
-    "permitted_calls_half_open",          # fixed knob; not a sweep dim, not an ML feature
-    "environment", "mode", "replicate", "run_timestamp",
-    "blast_radius", "time_to_open", "time_to_recover",
-    "error_rate", "throughput_loss",
-]
 
 # Short codes for experiment_id generation, matching runner.py's make_experiment_id
 # naming style (e.g. LIN-LAT-CNT-T30-W10-D5).

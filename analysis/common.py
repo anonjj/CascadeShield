@@ -54,14 +54,48 @@ DATASETS = {
         "note": "Gateway container was not rebuilt for this batch; treat as a transitional "
                 "archive, not a result set.",
     },
+    "v4_flat_concurrency": {
+        "path": DATA_DIR / "master_dataset_v4_flat_concurrency.csv",
+        "n_expected": 798,
+        "blast_scale": 1.0,
+        "blast_denominator": 4,
+        "leg_node_set": "4",
+        "note": "Full pre-fix snapshot of 'current', kept for audit before the LATENCY rows "
+                "were removed from the live file and re-collected. LOAD_CONCURRENCY was a flat "
+                "constant (5) regardless of fault type, so every FANOUT+LATENCY row here (214/214, "
+                "100%) and 28/204 LINEAR+LATENCY rows carry lambda_deviation_flag=True -- see "
+                "LAMBDA_DEVIATION in the quarantine exclusion-codes table, DATA_DICTIONARY.md. "
+                "The 380 CRASH rows (192 FANOUT + 188 LINEAR) are NOT affected (crash's own "
+                "worst-case latency is ~0s, so the flat concurrency=5 happened to already be "
+                "correct for it) and were carried forward into 'current' unchanged, with "
+                "load_concurrency backfilled to 5 (the true, known value) rather than left blank.",
+    },
+    "v5_soham_linear_presweep": {
+        "path": DATA_DIR / "master_dataset_v5_soham_linear_presweep.csv",
+        "n_expected": 324,
+        "blast_scale": 1.0,
+        "blast_denominator": 4,
+        "leg_node_set": "4",
+        "note": "Soham's independent full LINEAR sweep (commit a957e5a, 2026-08-30, machine_id "
+                "'soham-codespace') -- 162 CRASH + 162 LATENCY rows, collected on the Stage 4 "
+                "branch before the LOAD_CONCURRENCY fix or DATASET_PATH_OVERRIDE existed, merged "
+                "back into main only as this archive (PR #32's own version of master_dataset.csv "
+                "was superseded during the merge, not silently dropped -- see git history). "
+                "26/162 LATENCY rows already carry lambda_deviation_flag=True (16%, consistent "
+                "with v4_flat_concurrency's ~14% on the same cell). Superseded by the D6 "
+                "calibration LINEAR+LATENCY redo and 'current''s own retained CRASH rows -- kept "
+                "for audit/history, not intended as a live analysis input.",
+    },
     "current": {
         "path": DATA_DIR / "master_dataset.csv",
-        "n_expected": 80,
+        "n_expected": 704,   # 380 retained CRASH rows + 324 re-collected LATENCY rows (162/topology)
         "blast_scale": 1.0,
         "blast_denominator": 4,
         "leg_node_set": "4",
         "note": "Post-metric-change rebuild. blast_radius and the leg vector finally range "
-                "over the SAME four CB-bearing subjects, so cross-metric checks are exact.",
+                "over the SAME four CB-bearing subjects, so cross-metric checks are exact. "
+                "LATENCY rows were fully re-collected (both topologies) after the "
+                "LOAD_CONCURRENCY fix -- see v4_flat_concurrency above for the pre-fix archive.",
     },
 }
 
@@ -86,9 +120,19 @@ def load(name, apply_exclusions=True):
     df["dataset"] = name
     df["legs"] = df.get("leg_failure_rates", pd.Series([""] * len(df))).map(parse_legs)
     df["blast_frac"] = pd.to_numeric(df["blast_radius"], errors="coerce") / spec["blast_scale"]
-    if apply_exclusions and "excluded_reason" in df.columns:
-        df = df[df["excluded_reason"].isna() | (df["excluded_reason"].astype(str).str.strip() == "")]
+    if apply_exclusions:
+        df = drop_excluded(df)
     return df.reset_index(drop=True)
+
+
+def drop_excluded(df):
+    """Drop quarantined rows (a non-empty `excluded_reason`). A no-op if the column
+    isn't present. Shared so every caller agrees on what "excluded" means -- see
+    canary_readout.py::load_canary, which loads a differently-shaped CSV than the
+    DATASETS this module owns and so can't just call load() itself."""
+    if "excluded_reason" not in df.columns:
+        return df
+    return df[df["excluded_reason"].isna() | (df["excluded_reason"].astype(str).str.strip() == "")]
 
 
 def parse_legs(raw):

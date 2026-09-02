@@ -89,36 +89,19 @@ def effective_horizon(window_type, window_size, lam):
     return float(window_size) if window_type == "COUNT_BASED" else float(lam) * window_size
 
 
-def base_arm():
-    for lam in LAMBDAS:
-        for wt in WINDOW_TYPES:
-            for w in WINDOW_SIZES:
-                for rep in range(1, REPLICATES + 1):
-                    yield {
-                        "arm": "base",
-                        "experiment_id": experiment_id(wt, w, lam),
-                        "topology": TOPOLOGY,
-                        "fault_type": FAULT_TYPE,
-                        "window_type": wt,
-                        "threshold": THRESHOLD,
-                        "window_size": w,
-                        "wait_duration": WAIT_DURATION,
-                        "lambda_target": lam,
-                        "replicate": rep,
-                        "effective_horizon_nominal": effective_horizon(wt, w, lam),
-                        "matched_to_count_w": "",
-                        "feasible": 1,
-                        "infeasible_reason": "",
-                    }
-
-
-def _matched_row(arm_direction, wt, size, lam, horizon, partner, feasible, reason, rep):
+def _row(arm, wt, size, lam, horizon, rep, fault_type=FAULT_TYPE, direction="",
+         matched_to_count_w="", feasible=1, reason="", id_horizon=None):
+    """Shared row shape for base_arm/matched_horizon_arm/null_arm -- they differ only in
+    arm/fault_type/direction/matched_to_count_w/feasible/reason, and in whether the id
+    carries a "-MHxxx" horizon suffix (id_horizon; see experiment_id's docstring --
+    only the matched arm needs one, to disambiguate two different W rounding to the
+    same T)."""
     return {
-        "arm": "matched_horizon",
-        "direction": arm_direction,
-        "experiment_id": experiment_id(wt, size, lam, horizon=horizon),
+        "arm": arm,
+        "direction": direction,
+        "experiment_id": experiment_id(wt, size, lam, fault_type=fault_type, horizon=id_horizon),
         "topology": TOPOLOGY,
-        "fault_type": FAULT_TYPE,
+        "fault_type": fault_type,
         "window_type": wt,
         "threshold": THRESHOLD,
         "window_size": size,
@@ -126,10 +109,18 @@ def _matched_row(arm_direction, wt, size, lam, horizon, partner, feasible, reaso
         "lambda_target": lam,
         "replicate": rep,
         "effective_horizon_nominal": float(horizon),
-        "matched_to_count_w": partner,
+        "matched_to_count_w": matched_to_count_w,
         "feasible": feasible,
         "infeasible_reason": reason,
     }
+
+
+def base_arm():
+    for lam in LAMBDAS:
+        for wt in WINDOW_TYPES:
+            for w in WINDOW_SIZES:
+                for rep in range(1, REPLICATES + 1):
+                    yield _row("base", wt, w, lam, effective_horizon(wt, w, lam), rep)
 
 
 def matched_horizon_arm():
@@ -151,7 +142,8 @@ def matched_horizon_arm():
                 feasible, reason = 0, ("only {:.1f} calls arrive in T = {}s at lambda = {}, "
                                        "below n_min = {}".format(lam * t, t, lam, N_MIN))
             for rep in range(1, REPLICATES + 1):
-                yield _matched_row("T_from_W", "TIME_BASED", t, lam, w, w, feasible, reason, rep)
+                yield _row("matched_horizon", "TIME_BASED", t, lam, w, rep, direction="T_from_W",
+                           matched_to_count_w=w, feasible=feasible, reason=reason, id_horizon=w)
 
         # Direction 2: hold the TIME window, derive the COUNT window. This is the direction
         # that actually reaches high lambda, until W outruns the configurable ceiling.
@@ -164,7 +156,8 @@ def matched_horizon_arm():
             elif w < N_MIN:
                 feasible, reason = 0, ("W = lambda*T = {} calls is below n_min = {}".format(w, N_MIN))
             for rep in range(1, REPLICATES + 1):
-                yield _matched_row("W_from_T", "COUNT_BASED", w, lam, w, t, feasible, reason, rep)
+                yield _row("matched_horizon", "COUNT_BASED", w, lam, w, rep, direction="W_from_T",
+                           matched_to_count_w=t, feasible=feasible, reason=reason, id_horizon=w)
 
 
 def null_arm():
@@ -173,22 +166,8 @@ def null_arm():
         for wt in WINDOW_TYPES:
             for w in WINDOW_SIZES:
                 for rep in range(1, NULL_ARM_REPLICATES + 1):
-                    yield {
-                        "arm": "null_control",
-                        "experiment_id": experiment_id(wt, w, lam, fault_type="NONE"),
-                        "topology": TOPOLOGY,
-                        "fault_type": "NONE",
-                        "window_type": wt,
-                        "threshold": THRESHOLD,
-                        "window_size": w,
-                        "wait_duration": WAIT_DURATION,
-                        "lambda_target": lam,
-                        "replicate": rep,
-                        "effective_horizon_nominal": effective_horizon(wt, w, lam),
-                        "matched_to_count_w": "",
-                        "feasible": 1,
-                        "infeasible_reason": "",
-                    }
+                    yield _row("null_control", wt, w, lam, effective_horizon(wt, w, lam), rep,
+                               fault_type="NONE")
 
 
 FIELDS = ["run_index", "run_order_seed", "arm", "direction", "experiment_id", "topology",

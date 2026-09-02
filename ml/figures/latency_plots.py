@@ -10,6 +10,7 @@ Values are recomputed from the raw sweep CSV when available (so the figures can 
 regenerated after a re-sweep); otherwise the literals below -- taken from the
 162-run LATENCY sweep (master_dataset_v2_latency_5svc.csv) -- are used as a fallback.
 """
+import sys
 from pathlib import Path
 
 import matplotlib
@@ -19,14 +20,13 @@ import numpy as np
 import pandas as pd
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parent))  # ml/ -- so preprocessing.py is importable
+from preprocessing import WINDOW_TYPES, WINDOW_SIZES, WAIT_DURATIONS  # noqa: E402
+
 DATA_CANDIDATES = [
     HERE / ".." / ".." / "data" / "master_dataset_v2_latency_5svc.csv",
     HERE / ".." / ".." / "data" / "master_dataset.csv",
 ]
-
-WINDOW_TYPES = ["COUNT_BASED", "TIME_BASED"]   # x-axis order
-WINDOW_SIZES = [5, 10, 20]                     # y-axis order
-WAIT_DURATIONS = [5, 15, 30]
 
 # ---- Fallback literals (from the 162-run LATENCY sweep) -----------------------
 # detection[window_size][window_type] = mean time_to_open (s)

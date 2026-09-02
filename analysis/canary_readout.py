@@ -40,23 +40,20 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-from common import FIG_DIR, bootstrap_ci, cliffs_delta, holm_bonferroni, write_json
+from common import FIG_DIR, bootstrap_ci, cliffs_delta, drop_excluded, holm_bonferroni, write_json
 
 ALPHA = 0.05
 # A window type "reliably trips" above this share of runs, and "cannot trip" below it. The
 # crossover lambda* is the first lambda where TIME_BASED clears the upper bar.
 TRIP_RELIABLE = 0.80
 TRIP_FAILING = 0.20
-# |achieved - target| / target above this flags a run. Read from the harness rather than
-# redeclared, so the analysis layer cannot quietly disagree with the runner about what
-# counts as off-target -- both were independently written as 0.15 and that is exactly the
-# kind of duplicate constant that drifts apart at the worst possible moment.
-try:
-    import sys as _sys
-    _sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent.parent / "experiments"))
-    from runner import LAMBDA_DEVIATION_THRESHOLD as LAMBDA_TOLERANCE
-except Exception:      # runner imports Toxiproxy at module scope; fall back if unavailable
-    LAMBDA_TOLERANCE = 0.15
+# |achieved - target| / target above this flags a run. Read from experiments/constants.py
+# rather than redeclared, so the analysis layer cannot quietly disagree with the runner
+# about what counts as off-target. constants.py is stdlib-only (unlike runner.py, which
+# imports Toxiproxy at module scope), so no try/except fallback is needed here.
+import sys as _sys
+_sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent.parent / "experiments"))
+from constants import LAMBDA_DEVIATION_THRESHOLD as LAMBDA_TOLERANCE
 
 
 # ------------------------------------------------------------------------------ loading
@@ -67,9 +64,7 @@ def load_canary(path):
                 "effective_horizon", "lambda_cv"):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
-    if "excluded_reason" in df.columns:
-        keep = df["excluded_reason"].isna() | (df["excluded_reason"].astype(str).str.strip() == "")
-        df = df[keep]
+    df = drop_excluded(df)
     df["tripped"] = df["time_to_open"].notna()
     return df.reset_index(drop=True)
 

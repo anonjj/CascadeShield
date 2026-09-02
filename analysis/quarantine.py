@@ -12,6 +12,12 @@ STATE_LEAK_BLAST         more subjects OPEN than legs with any observed failure 
 RECOVERY_TIMEOUT_HANG    time_to_recover far outside the physical range of the protocol --
                          the 7540.5 s (2.1 h) row, where every other run in the file tops
                          out at 65.7 s. Step 8 of the run protocol now caps this at 120 s.
+LAMBDA_DEVIATION         runner.py's own lambda_deviation_flag fired (achieved arrival rate
+                         missed target by more than LAMBDA_DEVIATION_THRESHOLD) -- the
+                         detector was already correct, it just had no downstream effect: a
+                         flagged row was written to the dataset the same as any other and
+                         nothing here ever promoted the flag into an exclusion, so 242
+                         contaminated rows passed straight into analysis silently.
 
 Rows carrying a RECURRENT_MODE label from the audit are deliberately NOT excluded: a
 displacement that reproduces across configurations is a property of the instrument being
@@ -79,6 +85,14 @@ def classify(df):
     t_rec = pd.to_numeric(df.get("time_to_recover"), errors="coerce")
     for idx in df.index[t_rec > RECOVERY_CAP_S]:
         parts[idx].append("RECOVERY_TIMEOUT_HANG")
+
+    # runner.py already computes and writes this per row (see DATASET_HEADERS); it was never
+    # wired into an exclusion, so a flagged run's numbers entered analysis unmarked. Matches
+    # canary_readout.py's own str/lower/isin(["true", "1"]) parse of the same column.
+    if "lambda_deviation_flag" in df.columns:
+        flagged = df["lambda_deviation_flag"].astype(str).str.strip().str.lower().isin(["true", "1"])
+        for idx in df.index[flagged]:
+            parts[idx].append("LAMBDA_DEVIATION")
 
     return parts.map(lambda codes: "+".join(codes)), notes
 

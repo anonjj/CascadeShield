@@ -4,6 +4,7 @@ import time
 import argparse
 import subprocess
 import csv
+import math
 import random
 import socket
 import statistics
@@ -24,7 +25,13 @@ toxiproxy = ToxiproxyClient()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # CSV Dataset Schema
-DATASET_PATH = BASE_DIR / "data" / "master_dataset.csv"
+# DATASET_PATH_OVERRIDE (env var, same pattern as MACHINE_ID/ENVIRONMENT below) lets two
+# machines collecting the SAME (mode, fault, topology) grid in parallel -- e.g. a D6
+# cross-machine calibration run -- write to distinct files instead of racing to append to
+# one shared master_dataset.csv. Unset (the default) leaves every existing call site,
+# including resumable_runner's header check against the live research dataset, untouched.
+DATASET_PATH = Path(os.environ["DATASET_PATH_OVERRIDE"]) if os.environ.get("DATASET_PATH_OVERRIDE") \
+    else BASE_DIR / "data" / "master_dataset.csv"
 CANARY_DATASET_PATH = BASE_DIR / "data" / "canary_runs.csv"
 SWEEP_DATASET_PATH = BASE_DIR / "data" / "crash_toxicity_sweep.csv"
 OCCUPANCY_DATASET_PATH = BASE_DIR / "data" / "occupancy_dataset.csv"
@@ -77,6 +84,13 @@ DATASET_HEADERS = [
     # PRECONDITION_FAIL/READINESS_TIMEOUT aborts, has a definite position in the sequence.
     "run_order_seed",
     "run_index",
+    # Worker pool size (concurrency) the load generator used for this run's fault window,
+    # derived by compute_load_plan from target_rps and the fault's worst-case latency (see
+    # FAULT_MAX_LATENCY_S). This is an instrument SETTING, not a measurement -- recorded
+    # because without it, a lambda_achieved that falls short of lambda_target can only be
+    # explained by digging through the harness code, not by querying the dataset itself.
+    # Blank on aborted runs (the fault window never ran).
+    "load_concurrency",
     # Achieved-vs-requested arrival rate (lambda), measured at the gateway over the
     # fault window's generate_load() call, not the paced interval_s schedule the
     # dispatcher was asked to hit. A saturated thread pool (or a slow/crashing
@@ -247,7 +261,26 @@ CB_MINIMUM_CALLS = 5  # fixed baseline for full/canary/sweep modes (occupancy mo
 #                  seconds, so the trailing time-window fills and a HALF_OPEN probe fires.
 #   * COUNT_BASED: fire enough calls to turn the ring buffer over several times.
 LOAD_RATE_RPS = 10                 # steady offered request rate (requests/second)
-LOAD_CONCURRENCY = 5
+LOAD_CONCURRENCY_MIN = 5           # floor so a near-zero-latency fault (crash) doesn't
+                                   # collapse the worker pool to 1
+LOAD_CONCURRENCY_SAFETY = 1.5      # headroom over the Little's-Law minimum (workers >=
+                                   # rate * latency), so a config we haven't tried yet
+                                   # doesn't quietly land right at the edge
+# Worst-case per-request latency actually produced by each inject_fault() branch. Bug found
+# via the lambda-deviation table (242 flagged rows -- 100% of FANOUT+LATENCY, since fanout's
+# own internal fan-out to 3 downstream services multiplies demand on this same worker pool):
+# LOAD_CONCURRENCY was a flat constant (5) regardless of target_rps or which fault was
+# injected, so a high-rate config paired with the latency fault could queue every worker
+# behind a 3s response and silently under-offer the requested rate -- exactly the gap
+# lambda_deviation_flag was built to catch, but the harness let it keep happening instead of
+# sizing concurrency to make it structurally impossible. Values mirror inject_fault(): "latency"
+# is the fixed 3000ms delay; "crash" (reset_peer) resets the connection immediately (~0s
+# wait); "none" is the no-fault control.
+FAULT_MAX_LATENCY_S = {
+    "latency": 3.0,
+    "crash": 0.0,
+    "none": 0.0,
+}
 TIME_BASED_MARGIN_S = 10           # safety margin on top of window + wait duration
 COUNT_BASED_WINDOW_MULTIPLE = 3    # fire >= this * slidingWindowSize calls
 COUNT_BASED_MIN_REQUESTS = 40      # floor: keep error-rate estimate statistically stable
@@ -443,7 +476,7 @@ def resolve_inject_point(inject_point, mode):
     effective_horizon elsewhere in this file."""
     return inject_point or ("inventory-service-proxy" if mode == "sweep" else None)
 
-def compute_load_plan(config, target_rps=LOAD_RATE_RPS, topology=None):
+def compute_load_plan(config, target_rps=LOAD_RATE_RPS, topology=None, fault_type=None):
     """Sizes the offered load per window type so both COUNT_BASED and TIME_BASED windows
     get a fair chance to fill, trip, sit OPEN, and transition to HALF_OPEN.
 
@@ -451,6 +484,13 @@ def compute_load_plan(config, target_rps=LOAD_RATE_RPS, topology=None):
     LOAD_RATE_RPS inside this function, now an explicit parameter so a caller can vary
     the offered rate without touching the sizing logic itself. Defaults to LOAD_RATE_RPS,
     so the existing call site in run_experiment_run() is unaffected unless it opts in.
+
+    concurrency is derived from target_rps and fault_type (via FAULT_MAX_LATENCY_S), not
+    hardcoded: Little's Law says the worker pool needs at least rate * worst-case-latency
+    workers just to keep up, so a fixed LOAD_CONCURRENCY could under-provision for any
+    (rate, fault) pair without warning -- this makes that structurally impossible instead
+    of something to remember. fault_type=None (unrecognized/unknown) falls back to the
+    worst latency in the table, the safe direction to be wrong in.
 
     See the "Load fairness (Task 1)" comment block near the top of this module for the
     window-fill rationale. Returns dict(requests_count, interval_s, concurrency,
@@ -498,8 +538,12 @@ def compute_load_plan(config, target_rps=LOAD_RATE_RPS, topology=None):
         "topology": topology,
     }
 
+    max_expected_latency_s = FAULT_MAX_LATENCY_S.get(fault_type, max(FAULT_MAX_LATENCY_S.values()))
+    concurrency = max(LOAD_CONCURRENCY_MIN,
+                      math.ceil(target_rps * max_expected_latency_s * LOAD_CONCURRENCY_SAFETY))
+
     return {"requests_count": requests_count, "interval_s": interval_s,
-            "concurrency": LOAD_CONCURRENCY, "duration_s": duration_s,
+            "concurrency": concurrency, "duration_s": duration_s,
             "target_rps": target_rps, "gatling_profile": gatling_profile}
 
 
@@ -641,7 +685,7 @@ def generate_load(endpoint_url, requests_count=50, concurrency=5, interval_s=0.0
     return throughput, error_rate, avg_latency, lambda_achieved, lambda_cv
 
 def warmup_phase(endpoint_url, min_requests=WARMUP_MIN_REQUESTS, min_duration_s=WARMUP_MIN_DURATION_S,
-                  interval_s=1.0 / LOAD_RATE_RPS, concurrency=LOAD_CONCURRENCY):
+                  interval_s=1.0 / LOAD_RATE_RPS, concurrency=LOAD_CONCURRENCY_MIN):
     """Discard-phase requests to steady state, run before any measurement or fault
     injection (see the "JIT warmup" comment block above LOAD_RATE_RPS for why).
     Responses are read and thrown away -- this exists to warm the JIT, not to
@@ -1041,6 +1085,7 @@ def log_results(config, fault_type, mode, topology, metrics, replicate, machine_
         "warmup_duration_s": f"{metrics['warmup_duration_s']:.3f}" if metrics.get('warmup_duration_s') is not None else "",
         "run_order_seed": metrics.get("run_order_seed", ""),
         "run_index": metrics.get("run_index", ""),
+        "load_concurrency": metrics.get("load_concurrency", ""),
         "lambda_target": f"{metrics['lambda_target']:.4f}" if metrics.get('lambda_target') is not None else "",
         "lambda_achieved": f"{metrics['lambda_achieved']:.4f}" if metrics.get('lambda_achieved') is not None else "",
         "lambda_cv": f"{metrics['lambda_cv']:.4f}" if metrics.get('lambda_cv') is not None else "",
@@ -1177,7 +1222,8 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
     #    real (request-level) blast radius is a clean delta over the window (Task 2).
     #    config['targetRps'] only exists for mode="occupancy" configs; every other mode
     #    falls back to compute_load_plan's own LOAD_RATE_RPS default, unchanged.
-    plan = compute_load_plan(config, target_rps=config.get("targetRps", LOAD_RATE_RPS), topology=topology)
+    plan = compute_load_plan(config, target_rps=config.get("targetRps", LOAD_RATE_RPS),
+                             topology=topology, fault_type=fault_type)
     print(f"Load plan ({config['slidingWindowType']}): {plan['requests_count']} requests "
           f"over ~{plan['duration_s']:.0f}s @ {plan['target_rps']} req/s")
     cb_calls_before = snapshot_cb_calls()
@@ -1320,6 +1366,7 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
         "warmup_duration_s": warmup_duration_s,
         "run_order_seed": run_order_seed,
         "run_index": run_index,
+        "load_concurrency": plan["concurrency"],
         "lambda_target": lambda_target,
         "lambda_achieved": lambda_achieved,
         "lambda_cv": lambda_cv,

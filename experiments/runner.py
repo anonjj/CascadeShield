@@ -24,7 +24,13 @@ toxiproxy = ToxiproxyClient()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # CSV Dataset Schema
-DATASET_PATH = BASE_DIR / "data" / "master_dataset.csv"
+# DATASET_PATH_OVERRIDE (env var, same pattern as MACHINE_ID/ENVIRONMENT below) lets two
+# machines collecting the SAME (mode, fault, topology) grid in parallel -- e.g. a D6
+# cross-machine calibration run -- write to distinct files instead of racing to append to
+# one shared master_dataset.csv. Unset (the default) leaves every existing call site,
+# including resumable_runner's header check against the live research dataset, untouched.
+DATASET_PATH = Path(os.environ["DATASET_PATH_OVERRIDE"]) if os.environ.get("DATASET_PATH_OVERRIDE") \
+    else BASE_DIR / "data" / "master_dataset.csv"
 CANARY_DATASET_PATH = BASE_DIR / "data" / "canary_runs.csv"
 SWEEP_DATASET_PATH = BASE_DIR / "data" / "crash_toxicity_sweep.csv"
 OCCUPANCY_DATASET_PATH = BASE_DIR / "data" / "occupancy_dataset.csv"

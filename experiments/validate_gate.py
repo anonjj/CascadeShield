@@ -21,10 +21,11 @@ Usage:
     python experiments/validate_gate.py [path/to/dataset.csv]
 Exit code 0 if the gate passes, 1 if it fails (usable in CI).
 """
-import csv
 import math
 import sys
 from pathlib import Path
+
+from csv_gate_utils import load_rows, safe_float
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_CSV = BASE_DIR / "data" / "master_dataset.csv"
@@ -34,21 +35,11 @@ MIN_TIME_BASED_UNSAFE = 0.15    # criterion 1: > 15% of TIME_BASED runs unsafe
 MAX_CRAMERS_V = 0.30            # criterion 2: window_type vs is_safe association below this
 
 
-def load_rows(path):
-    with open(path, newline="") as f:
-        return list(csv.DictReader(f))
-
-
 def is_unsafe(row):
     """A run is unsafe if it recorded a blast_radius strictly above TAU.
     Blank blast_radius (a skipped/failed run) is treated as not-unsafe."""
-    raw = row.get("blast_radius", "")
-    if raw in ("", "None"):
-        return False
-    try:
-        return float(raw) > TAU
-    except ValueError:
-        return False
+    val = safe_float(row.get("blast_radius", ""))
+    return val is not None and val > TAU
 
 
 def cramers_v(rows):

@@ -15,6 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 from breaker_observer import BreakerObserver
 from fault_injector import ToxiproxyClient
 from resumable_runner import load_completed, is_done, append_row
+from constants import LAMBDA_DEVIATION_THRESHOLD
 
 # Toxiproxy Client
 toxiproxy = ToxiproxyClient()
@@ -256,10 +257,10 @@ INERTNESS_WINDOW_MULTIPLE = 10     # occupancy mode's TIME_BASED load duration =
                                     # needs several window passes' worth of load for calls to
                                     # accumulate, not just one.
 
-# Achieved-vs-requested arrival rate (see the "lambda_target/lambda_achieved" comment
-# block in DATASET_HEADERS). Flag a run when the measured rate misses the requested
-# one by more than this fraction -- 15% is a coarse tripwire, not a precision bound.
-LAMBDA_DEVIATION_THRESHOLD = 0.15
+# LAMBDA_DEVIATION_THRESHOLD (achieved-vs-requested arrival rate tripwire; see the
+# "lambda_target/lambda_achieved" comment block in DATASET_HEADERS) lives in
+# constants.py -- imported above -- so analysis/canary_readout.py can read the same
+# value without triggering this module's Toxiproxy import.
 # Below this many dispatched requests, span/interval-based rate and CV estimates are
 # too noisy to trust (e.g. a 2-request window has exactly one interval -- a CV of
 # either 0.0 or undefined depending on luck, not a real measurement). generate_load's

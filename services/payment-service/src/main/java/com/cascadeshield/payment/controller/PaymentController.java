@@ -1,7 +1,7 @@
 package com.cascadeshield.payment.controller;
 
-import com.cascadeshield.payment.exception.DownstreamRejectedException;
-import com.cascadeshield.payment.exception.DownstreamUnavailableException;
+import com.cascadeshield.common.exception.DownstreamRejectedException;
+import com.cascadeshield.common.exception.DownstreamUnavailableException;
 import com.cascadeshield.payment.service.PaymentDownstreamService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;

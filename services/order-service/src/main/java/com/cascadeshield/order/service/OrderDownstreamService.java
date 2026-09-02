@@ -1,7 +1,7 @@
 package com.cascadeshield.order.service;
 
-import com.cascadeshield.order.exception.DownstreamRejectedException;
-import com.cascadeshield.order.exception.DownstreamUnavailableException;
+import com.cascadeshield.common.exception.DownstreamRejectedException;
+import com.cascadeshield.common.exception.DownstreamUnavailableException;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;

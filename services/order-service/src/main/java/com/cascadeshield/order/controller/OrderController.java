@@ -1,7 +1,7 @@
 package com.cascadeshield.order.controller;
 
-import com.cascadeshield.order.exception.DownstreamRejectedException;
-import com.cascadeshield.order.exception.DownstreamUnavailableException;
+import com.cascadeshield.common.exception.DownstreamRejectedException;
+import com.cascadeshield.common.exception.DownstreamUnavailableException;
 import com.cascadeshield.order.service.OrderDownstreamService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;

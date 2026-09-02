@@ -1,7 +1,7 @@
 package com.cascadeshield.notification.service;
 
-import com.cascadeshield.notification.exception.DownstreamRejectedException;
-import com.cascadeshield.notification.exception.DownstreamUnavailableException;
+import com.cascadeshield.common.exception.DownstreamRejectedException;
+import com.cascadeshield.common.exception.DownstreamUnavailableException;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;

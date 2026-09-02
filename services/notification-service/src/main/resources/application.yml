@@ -33,9 +33,9 @@ resilience4j:
         # scores 0% failure rate but 100% slow-call rate).
         event-consumer-buffer-size: ${CB_EVENT_BUFFER_SIZE:50}
         record-exceptions:
-          - com.cascadeshield.notification.exception.DownstreamUnavailableException
+          - com.cascadeshield.common.exception.DownstreamUnavailableException
         ignore-exceptions:
-          - com.cascadeshield.notification.exception.DownstreamRejectedException
+          - com.cascadeshield.common.exception.DownstreamRejectedException
     instances:
       sharedDbCB:
         base-config: default

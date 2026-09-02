@@ -34,9 +34,9 @@ resilience4j:
         # scores 0% failure rate but 100% slow-call rate).
         event-consumer-buffer-size: ${CB_EVENT_BUFFER_SIZE:50}
         record-exceptions:
-          - com.cascadeshield.inventory.exception.DownstreamUnavailableException
+          - com.cascadeshield.common.exception.DownstreamUnavailableException
         ignore-exceptions:
-          - com.cascadeshield.inventory.exception.DownstreamRejectedException
+          - com.cascadeshield.common.exception.DownstreamRejectedException
     instances:
       paymentServiceCB:
         base-config: default

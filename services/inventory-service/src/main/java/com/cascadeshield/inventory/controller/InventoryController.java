@@ -1,7 +1,7 @@
 package com.cascadeshield.inventory.controller;
 
-import com.cascadeshield.inventory.exception.DownstreamRejectedException;
-import com.cascadeshield.inventory.exception.DownstreamUnavailableException;
+import com.cascadeshield.common.exception.DownstreamRejectedException;
+import com.cascadeshield.common.exception.DownstreamUnavailableException;
 import com.cascadeshield.inventory.service.InventoryDownstreamService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;

@@ -1,7 +1,11 @@
 package com.cascadeshield.gateway.controller;
 
+import com.cascadeshield.common.exception.DownstreamRejectedException;
+import com.cascadeshield.common.exception.DownstreamUnavailableException;
 import com.cascadeshield.gateway.service.BlastRadiusService;
 import com.cascadeshield.gateway.service.GatewayDownstreamService;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -29,14 +33,26 @@ public class GatewayController {
     /**
      * Linear chain: gateway -> order -> inventory -> payment -> notification
      * Fault propagates upstream through the chain.
+     *
+     * Classified per exception type (matching Order/Inventory/Payment/Notification's own
+     * controllers) rather than a single catch(Exception) -> 503: a downstream business
+     * rejection (DownstreamRejectedException) carries its own real status (e.g. 409) that
+     * a blanket 503 would discard, collapsing "the mesh is fine but this request was
+     * invalid" into "the mesh is down."
      */
     @GetMapping("/linear")
     public ResponseEntity<Map<String, Object>> linear() {
         try {
             Object result = downstreamService.callOrder();
             return ResponseEntity.ok(Map.of("topology", "linear", "result", result != null ? result : "ok"));
-        } catch (Exception e) {
-            return ResponseEntity.status(503).body(Map.of(
+        } catch (DownstreamRejectedException e) {
+            return ResponseEntity.status(e.getStatus()).body(Map.of(
+                "topology", "linear",
+                "error", "downstream_rejected",
+                "status", e.getStatus().value()
+            ));
+        } catch (CallNotPermittedException | DownstreamUnavailableException e) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Map.of(
                 "topology", "linear",
                 "error", "service_unavailable",
                 "cause", e.getClass().getSimpleName()

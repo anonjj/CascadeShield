@@ -36,9 +36,9 @@ resilience4j:
         # CRITICAL: only genuine infrastructure faults count toward the failure rate.
         # Business rejections (4xx) must never trip the breaker or they inflate blast radius.
         record-exceptions:
-          - com.cascadeshield.order.exception.DownstreamUnavailableException
+          - com.cascadeshield.common.exception.DownstreamUnavailableException
         ignore-exceptions:
-          - com.cascadeshield.order.exception.DownstreamRejectedException
+          - com.cascadeshield.common.exception.DownstreamRejectedException
     instances:
       inventoryServiceCB:
         base-config: default

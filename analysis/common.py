@@ -54,14 +54,32 @@ DATASETS = {
         "note": "Gateway container was not rebuilt for this batch; treat as a transitional "
                 "archive, not a result set.",
     },
+    "v4_flat_concurrency": {
+        "path": DATA_DIR / "master_dataset_v4_flat_concurrency.csv",
+        "n_expected": 798,
+        "blast_scale": 1.0,
+        "blast_denominator": 4,
+        "leg_node_set": "4",
+        "note": "Full pre-fix snapshot of 'current', kept for audit before the LATENCY rows "
+                "were removed from the live file and re-collected. LOAD_CONCURRENCY was a flat "
+                "constant (5) regardless of fault type, so every FANOUT+LATENCY row here (214/214, "
+                "100%) and 28/204 LINEAR+LATENCY rows carry lambda_deviation_flag=True -- see "
+                "LAMBDA_DEVIATION in the quarantine exclusion-codes table, DATA_DICTIONARY.md. "
+                "The 380 CRASH rows (192 FANOUT + 188 LINEAR) are NOT affected (crash's own "
+                "worst-case latency is ~0s, so the flat concurrency=5 happened to already be "
+                "correct for it) and were carried forward into 'current' unchanged, with "
+                "load_concurrency backfilled to 5 (the true, known value) rather than left blank.",
+    },
     "current": {
         "path": DATA_DIR / "master_dataset.csv",
-        "n_expected": 80,
+        "n_expected": 704,   # 380 retained CRASH rows + 324 re-collected LATENCY rows (162/topology)
         "blast_scale": 1.0,
         "blast_denominator": 4,
         "leg_node_set": "4",
         "note": "Post-metric-change rebuild. blast_radius and the leg vector finally range "
-                "over the SAME four CB-bearing subjects, so cross-metric checks are exact.",
+                "over the SAME four CB-bearing subjects, so cross-metric checks are exact. "
+                "LATENCY rows were fully re-collected (both topologies) after the "
+                "LOAD_CONCURRENCY fix -- see v4_flat_concurrency above for the pre-fix archive.",
     },
 }
 

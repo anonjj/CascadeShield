@@ -248,6 +248,7 @@ Exclusion codes:
 | `STATE_LEAK_EARLY_OPEN` | Breaker entered the run already OPEN. `time_to_open` under half its cell median and ≥ 1 s early, against a MAD-based scale pooled within window type. | `analysis/leak_audit.py` S1, SEVERE tier |
 | `STATE_LEAK_BLAST` | More subjects reported OPEN than there are legs with any observed failure — a breaker cannot sit OPEN while its own leg records zero failed-or-rejected calls. | `analysis/leak_audit.py` S2 |
 | `RECOVERY_TIMEOUT_HANG` | `time_to_recover` above the 120 s protocol cap. The archive's worst case is 7540.5 s (2.1 h) where every other row tops out at 65.7 s. | `analysis/quarantine.py` |
+| `LAMBDA_DEVIATION` | `lambda_deviation_flag` is `True` (achieved arrival rate missed target by more than `LAMBDA_DEVIATION_THRESHOLD`). Previously computed and written but never promoted into an exclusion — 242 rows in the archive (100% of FANOUT+LATENCY) were flagged and entered analysis unmarked before this code existed. | `analysis/quarantine.py` |
 
 Deliberately **not** excluded, and why:
 
@@ -350,10 +351,11 @@ happens to land on target.
 
 | Column | Type | Range | Notes |
 |--------|------|-------|-------|
+| `load_concurrency` | int | `≥ LOAD_CONCURRENCY_MIN` (5) | the worker pool size `compute_load_plan()` actually used, derived from `lambda_target` and the injected fault's worst-case per-request latency (`FAULT_MAX_LATENCY_S`) so under-provisioning is structurally impossible rather than a fixed guess. This is the instrument SETTING behind the λ columns below — recorded because a `lambda_achieved` shortfall is otherwise only explainable by reading the harness source, not by querying the CSV. Blank on a `precondition_ok=False` row. |
 | `lambda_target` | float | `> 0` | the requested rate for this run's fault-window load (`plan["target_rps"]`, defaults to `LOAD_RATE_RPS`). Blank on a `precondition_ok=False` row. |
 | `lambda_achieved` | float | `≥ 0` | the measured rate, from real dispatch timestamps over the fault-window `generate_load()` call. Blank when fewer than `LAMBDA_MIN_REQUESTS_FOR_RATE` (3) requests were dispatched, or on a `precondition_ok=False` row. |
 | `lambda_cv` | float | `≥ 0` | coefficient of variation across inter-dispatch intervals in that same window. `0` = perfectly even pacing; larger values mean burstier/uneven dispatch. Blank under the same conditions as `lambda_achieved`. |
-| `lambda_deviation_flag` | bool | `True`/`False` | `True` when `abs(lambda_achieved - lambda_target) / lambda_target > LAMBDA_DEVIATION_THRESHOLD` (0.15, i.e. 15%). Blank (not `False`) when `lambda_achieved` couldn't be measured — absence of a measurement is not evidence of no deviation. **Rows with this flag `True` should be treated with the same suspicion as `precondition_ok=False` rows when comparing configs at their nominal rate** — the load that config actually received didn't match what the sweep asked for. |
+| `lambda_deviation_flag` | bool | `True`/`False` | `True` when `abs(lambda_achieved - lambda_target) / lambda_target > LAMBDA_DEVIATION_THRESHOLD` (0.15, i.e. 15%). Blank (not `False`) when `lambda_achieved` couldn't be measured — absence of a measurement is not evidence of no deviation. `analysis/quarantine.py` promotes a `True` flag into `excluded_reason = LAMBDA_DEVIATION` (see the exclusion-codes table above) — before that code existed, a flagged row was written the same as any other and passed into analysis unmarked. |
 
 ### Effective horizon column
 

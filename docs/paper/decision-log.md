@@ -355,8 +355,9 @@ hold).
 > and `_with_extra_columns()` fix — this entry's calibration protocol and interim
 > no-cross-topology-timing-claim rule stand independently of that schema detail.
 
-**Date:** 2026-08-26 (ad hoc D6 investigation, outside the Day 1–5 cadence) · **Decided
-by:** Jay · **Status:** final (protocol + interim rule), pending the calibration run itself
+**Date:** 2026-08-26 (ad hoc D6 investigation, outside the Day 1–5 cadence), calibration
+run and read out 2026-09-02/03 · **Decided by:** Jay · **Status:** final —
+**MACHINE_EFFECT_NEGLIGIBLE**, option (c) succeeded, cross-topology timing claims may proceed
 
 **Decision.** The plan to run LINEAR on one machine and FAN_OUT on another reintroduces the
 exact shared-VM timing confound already refused once for splitting a single sweep across
@@ -380,11 +381,27 @@ Two changes, both effective immediately:
    claim in this paper compares `time_to_open` or `time_to_recover` across topology. This
    protects the paper now, not only after the ~2–3h calibration is actually run.
 
-**Numbers:** none yet — `analysis/machine_calibration.py --self-test` passes (3/3 fixture
-checks: negligible-offset pair reads `MACHINE_EFFECT_NEGLIGIBLE`, ~3s-offset pair reads
-`MACHINE_EFFECT_DETECTED`, single-machine input reads `SKIPPED_NO_CALIBRATION_DATA` rather
-than a fabricated verdict). No real calibration data exists in this environment — neither
-machine is available here.
+**Numbers** (`analysis/out/machine_calibration.json`, real run: soham-local's full
+LINEAR+LATENCY collection, n=159, 54 configs, vs. codespace's LINEAR overlap subset, n=18,
+6 configs — the codespace-side data comes from the overlap arm run alongside the FAN_OUT
+split, not a dedicated `--limit 10` canary block, but it's the same identical-LINEAR-on-both-
+machines comparison the protocol calls for):
+
+| DV | soham-local (95% CI) | codespace (95% CI) | Cliff's δ | magnitude |
+|---|---|---|---|---|
+| `time_to_open` | 5.55s [4.75, 6.43] | 5.12s [3.78, 6.68] | 0.021 | negligible |
+| `time_to_recover` | 31.52s [26.47, 36.74] | 25.52s [19.34, 31.73] | 0.023 | negligible |
+
+**VERDICT: `MACHINE_EFFECT_NEGLIGIBLE`** (worst magnitude across both DVs: negligible). The two
+machines' confidence intervals overlap heavily on both DVs, and Cliff's delta sits an order of
+magnitude below the "small" cutoff on both. Per this decision's own framework: **option (c)
+succeeded — cross-topology `time_to_open`/`time_to_recover` claims may proceed without a
+per-machine correction**, citing this JSON.
+
+Previously (`--self-test`, synthetic fixtures only): 3/3 checks passed (negligible-offset pair
+reads `MACHINE_EFFECT_NEGLIGIBLE`, ~3s-offset pair reads `MACHINE_EFFECT_DETECTED`,
+single-machine input reads `SKIPPED_NO_CALIBRATION_DATA` rather than a fabricated verdict) —
+that verified the script, not the system; the numbers above are the first real-mesh run.
 
 **Rejected:** (a) same box, sequential — throws away the two machines' wall-clock
 parallelism for no stated benefit once (c) costs ~2–3h and the analysis to read it already
@@ -394,13 +411,24 @@ exists and is self-tested.
 this rule — treated as low machine-sensitivity per the original framing, only the timing
 DVs are restricted.
 
+**A different DV shows a real machine effect — not gated by this decision, but worth
+knowing.** `lambda_achieved` (the offered arrival rate the harness's own load generator
+actually delivers) is NOT one of `TIMING_DVS` and this script doesn't test it. A separate,
+informal check across the same two machines' full primary+overlap LINEAR/FANOUT data
+(n=180/side) found codespace delivering ~99.6% of target rate vs. soham-local's ~91.7% —
+Welch's t ≈ 110–120, both directions, both topologies, consistent magnitude. This is a real,
+large, reproducible instrument-level difference; it just doesn't propagate into
+`time_to_open`/`time_to_recover` the way it might have. It matters directly for D7's
+occupancy-ratio work (`ρ` is computed from `lambda_achieved`, not `lambda_target`) and for
+`canary_matrix.py`'s `base` arm (H2's trip-rate-vs-λ curve) — both should be collected on one
+machine where possible, or explicitly disclose which machine produced which λ cell if split.
+
 **Consequence:** `machine_id`'s addition to `DATASET_HEADERS` header-mismatches the
 existing 80-row `data/master_dataset.csv`. That file already needs a fresh restart once a
 FAN_OUT/dual-machine sweep begins (LINEAR-only today, per D15's topology-count check) —
 this is the same restart happening for one more reason, not new breakage.
 
-**Revisit if:** the calibration block is run and `analysis/machine_calibration.py` returns
-`MACHINE_EFFECT_NEGLIGIBLE` — cross-topology timing claims may then proceed, citing the
-JSON. If it returns `MACHINE_EFFECT_DETECTED`, the paper either applies the measured
-per-machine offset as a stated correction or keeps option (b) permanently for that DV pair.
+**Revisit if:** a third machine joins data collection for LINEAR or FANOUT — this verdict
+covers exactly the two machines calibrated above (soham-local, codespace) and does not
+automatically extend to a new host without its own calibration block.
 

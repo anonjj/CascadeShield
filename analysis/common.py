@@ -95,7 +95,13 @@ DATASETS = {
         "note": "Post-metric-change rebuild. blast_radius and the leg vector finally range "
                 "over the SAME four CB-bearing subjects, so cross-metric checks are exact. "
                 "LATENCY rows were fully re-collected (both topologies) after the "
-                "LOAD_CONCURRENCY fix -- see v4_flat_concurrency above for the pre-fix archive.",
+                "LOAD_CONCURRENCY fix -- see v4_flat_concurrency above for the pre-fix archive. "
+                "Complete as of 2026-09-03: 704/704 rows, 0 quarantined by analysis/quarantine.py "
+                "(no STATE_LEAK/RECOVERY_TIMEOUT_HANG/LAMBDA_DEVIATION hits). LINEAR+LATENCY "
+                "collected on soham-local, FANOUT+LATENCY on codespace -- see "
+                "master_dataset_calibration_*_overlap.csv for the cross-machine calibration "
+                "subset (6 configs x 3 replicates each direction) used to bound the host effect "
+                "before trusting a LINEAR-vs-FANOUT comparison across these two collectors.",
     },
 }
 

@@ -404,3 +404,94 @@ this is the same restart happening for one more reason, not new breakage.
 JSON. If it returns `MACHINE_EFFECT_DETECTED`, the paper either applies the measured
 per-machine offset as a stated correction or keeps option (b) permanently for that DV pair.
 
+---
+
+## D17 · `leg_failure_rates` blends two circuit breakers per service — `real_blast_radius` structurally cannot register a fully-failed single-edge fault
+
+**Date:** 2026-09-04 (ad hoc investigation, surfaced while validating the canary-matrix
+executor) · **Decided by:** Jay (finding confirmed); remediation pending Soham's sign-off,
+same as D-001's own $\tau_{\text{leg}}$ treatment · **Status:** finding final; fix not yet
+applied anywhere
+
+**Decision.** Until a fix is designed and signed off, `real_blast_radius` and
+`leg_failure_rates` for **order-service, inventory-service, and payment-service** must be
+read as a *diluted* signal, not a literal per-edge severity — see Numbers. `notification-service`
+(one breaker, not two) is unaffected. No dataset has been altered; this is a measurement-validity
+caveat on values already collected, not yet a code change.
+
+**Mechanism.** `runner.py`'s `_get_cb_metric_count()` sums a Resilience4j actuator metric
+"across a service's CB instances" (its own docstring) — the query filters only by outcome
+kind (`tag=kind:{successful|failed|not_permitted}`), never by which circuit breaker. Every
+subject except notification-service owns **two** breakers (a "next hop" plus `sharedDbCB`),
+and each of those services' controllers call both downstream dependencies once per request,
+unconditionally, regardless of whether the first call succeeded. Since any single injected
+fault (this project has never injected more than one at a time) only ever degrades one of a
+service's two downstream edges, `compute_leg_failure_rates()`'s per-service reading is an
+**unweighted average of one broken breaker and one healthy breaker** — landing near half the
+true fault severity by construction, not by measurement.
+
+**Numbers** (`experiments/diagnose_leg_blend.py`, 5 replicates, TIME_BASED/T50/W20/D15/λ=20,
+`inventory-service-proxy` latency fault — live mesh, codespace):
+
+| Reading | mean | stdev |
+|---|---|---|
+| blended `order-service` leg (existing metric) | 0.4010 | 0.0011 |
+| `inventoryServiceCB` alone (the faulted edge) | 0.8020 | 0.0021 |
+| `sharedDbCB` alone (untouched by this fault) | 0.0000 | 0.0000 |
+
+$0.8020 / 2 = 0.4010$ to 4 decimal places — not "near half," exactly half, with stdev under
+0.2% across every replicate. This is the arithmetic signature of the mechanism above, not
+sampling noise.
+
+**This directly implicates D-001.** D-001's own numbers — "order-service, max rate 0.4867"
+across 320 leg observations, cited as the reason $\tau_{\text{leg}}$ must be reported as a
+curve rather than a fixed value — were computed through this same unfixed blending path.
+D-001 is not being reopened by this entry (its curve-vs-value methodology stands regardless
+of what caused the observed ceiling), but its **factual premise** — that order-service's true
+leg severity tops out near 0.49 — may itself be an artifact of this bug rather than a
+property of the system. A leg experiencing 100% true failure on its faulted edge is
+mathematically incapable of reporting above 0.50 blended; D-001's entire informative band
+$[0.25, 0.45]$ sits inside the range this bug can produce regardless of real severity.
+
+**Rejected (for now):** applying a quick fix unilaterally. The remediation isn't a bugfix
+with one obvious answer — it's a redefinition of what `leg_failure_rates` means, and needs a
+representation decision first:
+  (a) report only the faulted edge's rate (requires threading `inject_point` through to the
+      metric read, since which breaker is "the faulted one" is a runtime fact, not a static
+      one),
+  (b) report both breakers separately per service (changes `leg_failure_rates`' string
+      format and every downstream parser of that column), or
+  (c) report the max of a service's breakers (simplest, but loses which edge failed).
+This is the same category of decision $\tau_{\text{leg}}$'s calibration was (D-001) and
+D6/D16's protocol was — a measurement-design choice, not a code-quality fix, so it gets the
+same "Decided by: Soham" gate rather than being resolved silently mid-sprint.
+
+**Consequence — this is not retroactively recoverable.** Unlike $\tau_{\text{leg}}$ (D-001),
+which is a post-hoc sensitivity sweep *because* `leg_failure_rates`' raw value was already
+persisted and could be recomputed at any threshold from the existing CSV, this bug is upstream
+of what gets persisted at all: `snapshot_cb_calls()` only ever captured the already-blended
+per-service sum, never the raw per-breaker counts. **Every row collected before this fix
+lands is permanently blended — there is no way to recover the true per-edge rate from
+`master_dataset.csv`, any of its `v1`–`v5` archives, or `canary_matrix_runs.csv` after the
+fact.** A fix only protects data collected *after* it lands, and only if it also gets a
+version boundary (same `vN` archival treatment `analysis/common.py`'s `DATASETS` registry
+already uses for `v1_prefix` through `v5_soham_linear_presweep` — each a prior metric-regime
+boundary) so old and new `leg_failure_rates` values are never silently pooled as if they
+meant the same thing.
+
+**Revisit if:** Soham signs off on a representation (a/b/c above); at that point this becomes
+a `research/*` branch PR touching `snapshot_cb_calls()`/`compute_leg_failure_rates()`/
+`DATASET_HEADERS`, isolated from the sweep-execution code path entirely (fault injection, CB
+config, resumability, and everything `run_experiment_run()` orchestrates are untouched by
+this — only the metric read at the end of a run changes). D-001 should be explicitly
+re-examined once real per-edge data exists, to check whether order-service's true ceiling is
+actually near 100% rather than 0.4867.
+
+**Related, separate open item found while reading this file for format reference:** D16
+above is still marked "pending the calibration run itself" — that calibration (D6, LINEAR run
+on both codespace and soham-local, plus cross-topology overlap arms) has since actually been
+run (2026-09-02/03) and shows a large, highly significant, topology-independent machine
+effect (Welch's t ≈ 110–120 on `lambda_achieved`, ~8pp gap, consistent across LINEAR and
+FANOUT). D16 needs its own update citing this verdict — not folded into D17 since it's a
+distinct finding about a distinct metric.
+

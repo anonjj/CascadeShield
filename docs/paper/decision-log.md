@@ -404,3 +404,60 @@ this is the same restart happening for one more reason, not new breakage.
 JSON. If it returns `MACHINE_EFFECT_DETECTED`, the paper either applies the measured
 per-machine offset as a stated correction or keeps option (b) permanently for that DV pair.
 
+---
+
+## D18 · H2b (occupancy ratio) holds for TIME_BASED, is cleanly falsified for COUNT_BASED
+
+> Numbered D18 to avoid colliding with D17 (leg-metric-blending finding, PR #39), which is
+> still open/unmerged at the time this was written. Renumber if the two land in a different
+> order.
+
+**Date:** 2026-09-04/05 · **Decided by:** Jay (D7 live sweep, codespace) · **Status:** final
+
+**Decision.** `experiments/runner.py --mode occupancy` ("D7", task.md) was run live for the
+first time this session — 54 configs (36 TIME_BASED: 3$\lambda$×3$T$×4$n_{\min}$, 18
+COUNT_BASED control: 2$\lambda$×3$W$×3$n_{\min}$) × 3 replicates, LINEAR topology, LATENCY
+fault, on codespace. It tests H2b: whether the occupancy ratio $\rho = H/n_{\min}$ (effective
+horizon over `minimumNumberOfCalls`) crossing 1 predicts breaker inertness, generalizing H2's
+$\lambda$-only crossover claim to any window type.
+
+**Numbers.** 162/162 runs completed (two sessions: an interrupted first attempt that stopped
+cleanly after 16 rows when the codespace's SSH connection dropped — not a code bug, no
+corrupted or partial rows — resumed and finished the remaining 146). 0 rows with
+`precondition_ok=False`, 0 rows with `lambda_deviation_flag=True` — no exclusions needed
+anywhere in the sweep, including at D7's higher $\lambda$ (up to 20 req/s, 2x the standard
+sweep's default).
+
+- **TIME_BASED (108 rows): H2b confirmed, clean crossover.** All 30 `inert=True` rows have
+  $\rho \le 0.4996$; all 78 tripped rows have $\rho \ge 0.9967$. No overlap, across the full
+  sampled range ($\rho$ from 0.1249 to 79.79).
+- **COUNT_BASED (54 rows): H2b falsified, completely.** Every COUNT_BASED run tripped —
+  `inert=True` appears zero times in this arm, across $\rho \in \{0.025, 0.05, 0.1, 0.2, 0.4,
+  1.0, 2.0, 4.0\}$. Configs predicted strongly inert ($\rho = 0.025$, the window at 2.5% of
+  its required occupancy) tripped exactly like configs at $\rho = 4.0$.
+
+**Mechanism.** COUNT_BASED's sliding window is a fixed-capacity ring buffer of
+`slidingWindowSize` calls. Once the buffer fills, Resilience4j evaluates the failure rate on
+every subsequent call regardless of whether `minimumNumberOfCalls` was configured larger than
+`slidingWindowSize` — window capacity is the real ceiling on "calls needed before evaluation,"
+not `minimumNumberOfCalls` as an independent gate. TIME_BASED has no such fixed buffer (its
+window accumulates over wall-clock time), so `minimumNumberOfCalls` genuinely gates evaluation
+there, which is exactly why the ratio model works on that arm and not the other.
+
+**Consequence for the paper.** H2b is reported as **window-type-scoped**, not universal: "the
+occupancy ratio predicts inertness for TIME_BASED windows; COUNT_BASED windows evaluate as
+soon as the window itself fills, independent of the configured minimum" — a stronger, more
+precise claim than an unscoped "ratio predicts inertness" would have been, and one this sweep
+is now the direct evidence for. Written into `hypotheses.md` §3 (table) and new §3.2.
+
+**Rejected:** treating the COUNT_BASED null result as a design defect to fix and re-run.
+There is nothing to fix — it is a true, reproducible property of `CountBasedSlidingWindow`
+(zero inertness across an 8-point, 3-replicate-each ratio sweep is not sampling noise), and
+it is a more useful result reported as the theory's scope boundary than it would be as a
+discarded control arm.
+
+**Revisit if:** a future run finds a COUNT_BASED config that *does* go inert — this would
+falsify the "window capacity is the real ceiling" mechanism above and mean something else is
+gating evaluation. Not expected: the 8-point ratio sweep already covers $n_{\min}$ both above
+and below `slidingWindowSize` and found zero exceptions.
+

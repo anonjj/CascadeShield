@@ -850,11 +850,19 @@ def check_breaker_precondition():
 # as damage: the canary showed that omitting it made latency faults read 0% real blast
 # radius despite 70-94% gateway error rate. See docs/proposals/blast-radius-redefinition.md.
 
-def _get_cb_metric_count(base_url, metric, kind):
+def _get_cb_metric_count(base_url, metric, kind, name=None):
     """Sum of a resilience4j circuit-breaker COUNT metric across a service's CB instances,
     filtered by kind, via its actuator metrics endpoint. Returns float, or None if
-    unreachable / metric absent."""
+    unreachable / metric absent.
+
+    name: optional circuit-breaker instance name (e.g. "inventoryServiceCB"). When given,
+    adds `&tag=name:{name}` so the query returns that ONE breaker's count instead of the
+    service-wide sum -- see D17 (docs/paper/decision-log.md): a service with more than one
+    breaker calling it unconditionally per request otherwise blends a faulted edge with a
+    healthy one. None preserves the old service-wide behavior for any other caller."""
     url = f"{base_url}/actuator/metrics/{metric}?tag=kind:{kind}"
+    if name is not None:
+        url += f"&tag=name:{name}"
     try:
         with urllib.request.urlopen(url, timeout=2) as response:
             if response.status == 200:
@@ -867,20 +875,32 @@ def _get_cb_metric_count(base_url, metric, kind):
     return None
 
 def snapshot_cb_calls():
-    """Per-service cumulative call outcomes from Resilience4j counters:
+    """Per-service, per-breaker cumulative call outcomes from Resilience4j counters:
       success  = calls{kind=successful}   (includes slow-but-completed calls)
       failed   = calls{kind=failed}       (recorded exceptions)
       rejected = not.permitted.calls      (calls short-circuited while the breaker is OPEN)
     'ignored' calls (business 4xx rejections) are deliberately excluded -- they are not
-    infrastructure failures. Returns {service: {...}} or {service: None} when a service
-    exposes no CB metric / is unreachable."""
+    infrastructure failures.
+
+    D17 fix: snapshots each of a service's breakers SEPARATELY (via SERVICE_BREAKERS'
+    per-service breaker-name list, matched to CB_METRIC_TARGETS by stripping the
+    "-service" suffix) instead of one pre-summed reading -- a service with two breakers
+    called unconditionally per request previously blended a faulted edge with a healthy
+    one. Returns {service: {breaker_name: {success, failed, rejected}}} or
+    {service: {breaker_name: None}} per-breaker when that breaker is unmeasurable."""
     snap = {}
     for svc, base in CB_METRIC_TARGETS.items():
-        success = _get_cb_metric_count(base, "resilience4j.circuitbreaker.calls", "successful")
-        failed = _get_cb_metric_count(base, "resilience4j.circuitbreaker.calls", "failed")
-        rejected = _get_cb_metric_count(base, "resilience4j.circuitbreaker.not.permitted.calls", "not_permitted")
-        snap[svc] = None if (success is None and failed is None and rejected is None) else {
-            "success": success or 0.0, "failed": failed or 0.0, "rejected": rejected or 0.0}
+        short_name = svc.replace("-service", "")
+        breakers = SERVICE_BREAKERS[short_name][1]
+        svc_snap = {}
+        for cb_name in breakers:
+            success = _get_cb_metric_count(base, "resilience4j.circuitbreaker.calls", "successful", name=cb_name)
+            failed = _get_cb_metric_count(base, "resilience4j.circuitbreaker.calls", "failed", name=cb_name)
+            rejected = _get_cb_metric_count(base, "resilience4j.circuitbreaker.not.permitted.calls",
+                                             "not_permitted", name=cb_name)
+            svc_snap[cb_name] = None if (success is None and failed is None and rejected is None) else {
+                "success": success or 0.0, "failed": failed or 0.0, "rejected": rejected or 0.0}
+        snap[svc] = svc_snap
     return snap
 
 def compute_leg_failure_rates(before, after):
@@ -891,24 +911,43 @@ def compute_leg_failure_rates(before, after):
 
     A call short-circuited by an OPEN breaker never reached the downstream, so from the
     caller's perspective it is propagated failure, not success; slow-but-completed calls stay
-    success. This RAW per-leg breakdown is persisted (leg_failure_rates column) so
+    success.
+
+    D17 fix (option c, signed off by Soham): computes each of a service's breakers'
+    rate SEPARATELY, then reports the MAX across that service's breakers -- the faulted
+    edge's own rate, not diluted by an unconditionally-called healthy sibling breaker.
+    Same {svc: rate} shape and CSV format as before, so parse_legs()/tau_sweep.py/
+    leak_audit.py/order_leg_containment.py all keep working unmodified, fed a corrected
+    number instead of a diluted one. A breaker with total<=0 (not exercised) is skipped
+    the same way the old code skipped unmeasurable services; if every breaker for a
+    service is unmeasurable, the whole service is skipped (matches old behavior exactly).
+    This RAW per-leg breakdown is persisted (leg_failure_rates column) so
     real_blast_radius can be recomputed at ANY TAU_LEG straight from the CSV -- no need to
-    re-run the 324-run sweep if the threshold changes after sign-off. Returns {} if nothing
-    observable (measurement gap). See docs/proposals/blast-radius-redefinition.md."""
+    re-run the sweep if the threshold changes after sign-off. Returns {} if nothing
+    observable (measurement gap). See docs/paper/decision-log.md D17 and
+    docs/proposals/blast-radius-redefinition.md."""
     rates = {}
     if not before or not after:
         return rates
     for svc in CB_METRIC_TARGETS:
-        b, a = before.get(svc), after.get(svc)
-        if not b or not a:
-            continue  # leg not measurable this run
-        d_success = max(a["success"] - b["success"], 0.0)
-        d_failed = max(a["failed"] - b["failed"], 0.0)
-        d_rejected = max(a["rejected"] - b["rejected"], 0.0)
-        total = d_success + d_failed + d_rejected
-        if total <= 0:
-            continue  # leg not exercised during the window
-        rates[svc] = (d_failed + d_rejected) / total
+        b_svc, a_svc = before.get(svc), after.get(svc)
+        if not b_svc or not a_svc:
+            continue  # service not measurable this run
+        breaker_rates = []
+        for cb_name, b in b_svc.items():
+            a = a_svc.get(cb_name)
+            if not b or not a:
+                continue  # this breaker not measurable this run
+            d_success = max(a["success"] - b["success"], 0.0)
+            d_failed = max(a["failed"] - b["failed"], 0.0)
+            d_rejected = max(a["rejected"] - b["rejected"], 0.0)
+            total = d_success + d_failed + d_rejected
+            if total <= 0:
+                continue  # this breaker not exercised during the window
+            breaker_rates.append((d_failed + d_rejected) / total)
+        if not breaker_rates:
+            continue  # no breaker on this service was both measurable and exercised
+        rates[svc] = max(breaker_rates)
     return rates
 
 

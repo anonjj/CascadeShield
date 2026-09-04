@@ -939,7 +939,15 @@ def make_experiment_id(topology, fault_type, config, toxicity=1.0, inject_point=
     mode gates the -M/-L suffix below by the actual mode string, not by config's
     shape -- every config now carries minimumNumberOfCalls/targetRps unconditionally
     (see generate_combinations), so key-presence can no longer signal "is this
-    occupancy" without appending -M/-L to every full/canary/sweep ID too."""
+    occupancy" without appending -M/-L to every full/canary/sweep ID too.
+
+    mode="canary_matrix" (the experiments/canary_matrix.py executor) also needs the -L
+    suffix: its `base`/`null_control` arms hold threshold/window_size/wait_duration fixed
+    and sweep targetRps alone (5/20/80/320 req/s) -- without -L, four different lambda
+    values at the same window/threshold would collide onto one ID, and resumability would
+    silently skip 3 of every 4 lambda arms after the first one's replicates ran. -M is
+    always "5" for this mode (N_MIN is pinned, not swept) -- harmless, appended anyway to
+    keep this one shared code path rather than splitting -M and -L onto separate gates."""
     topo_map  = {"linear": "LIN", "fanout": "FAN", "mesh": "MSH"}
     fault_map = {"latency": "LAT", "crash": "CRS", "none": "NON"}
     wtype_map = {"COUNT_BASED": "CNT", "TIME_BASED": "TIM"}
@@ -950,9 +958,9 @@ def make_experiment_id(topology, fault_type, config, toxicity=1.0, inject_point=
                       f"-T{config['failureRateThreshold']}"
                       f"-W{config['slidingWindowSize']}"
                       f"-D{config['waitDurationInOpenState']}")
-    # -M/-L only apply to mode="occupancy" (minimumNumberOfCalls/targetRps are swept
-    # there); appended conditionally on mode so every other mode's IDs are unchanged.
-    if mode == "occupancy":
+    # -M/-L only apply where minimumNumberOfCalls/targetRps are the swept independent
+    # variable; appended conditionally on mode so every other mode's IDs are unchanged.
+    if mode in ("occupancy", "canary_matrix"):
         experiment_id += f"-M{config['minimumNumberOfCalls']}"
         experiment_id += f"-L{int(config['targetRps'])}"
     # -X only when toxicity deviates from every historical run's implicit 1.0 (full

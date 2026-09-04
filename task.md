@@ -77,7 +77,7 @@
       Every cascade-shaped claim (H5 beyond its LINEAR half, H6) depends on a FAN_OUT sweep
       that hasn't happened yet — now stated as a limitation in `hypotheses.md` §7, D15.
 
-## D7 — λ is a single value, and it is the variable your theory is about (in progress)
+## D7 — λ is a single value, and it is the variable your theory is about (live run done)
 
 - [x] **Code ported and wired up.** `--mode occupancy` added to `experiments/runner.py`:
       54 configs (36 TIME_BASED cells: 3λ×3window×4n_min, + 18 COUNT_BASED control
@@ -96,12 +96,15 @@
       smoke test (correct `occupancy_ratio` math, correct tri-state `inert`, correct
       `-M/-L` experiment_id suffixing). Pushed to `feat/d7-occupancy-lambda-sweep`.
 
-- [ ] **Not yet done: an actual Docker end-to-end run.** No live mesh/Toxiproxy in this
-      environment, so `--mode occupancy` has never actually been run against the real
-      services — only verified at the Python-logic level. **Plan: run on the codespace,
-      bundled with the other pending live-stack tests.** Smoke test first:
-      `python3 experiments/runner.py --mode occupancy --fault latency --topology linear
-      --limit 1` — before committing to the full 54-config × replicates run.
+- [x] **Live Docker end-to-end run — done 2026-09-04/05, on codespace.** Smoke test
+      (`--limit 1`) passed clean, then the full 54-config × 3-replicate sweep completed
+      162/162 (across two sessions — an SSH drop stopped it cleanly after 16 rows with no
+      corruption; resumed and finished the remaining 146 via the existing resumability
+      path). 0 `precondition_ok=False`, 0 `lambda_deviation_flag=True` — no exclusions.
+      **Result: H2b confirmed for TIME_BASED (clean crossover at ρ≈1, no overlap across
+      108 rows), cleanly falsified for COUNT_BASED (0/54 rows ever inert, ρ from 0.025 to
+      4.0).** Full write-up: decision-log **D18**, `hypotheses.md` §3.2. Data:
+      `data/occupancy_dataset.csv` on `data/d7-occupancy-sweep-codespace`.
 
 - [x] **`data/DATA_DICTIONARY.md` documentation — done, scoped to match precedent.**
       Checked first: `injected_toxicity` (D12's structurally identical sweep-mode

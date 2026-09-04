@@ -63,6 +63,7 @@ whole design turns on the Day-2 canary.
 |---|---|---|---|
 | **H1** | At matched horizon $H$, COUNT and TIME have indistinguishable **mean** $t_{\text{open}}$ but significantly different **variance** | Not yet tested. The existing contrast (TIME 9.43 ± 5.41 vs COUNT 5.22 ± 2.19) is at *nominal* window size — the comparison §2.1 argues is invalid | Day 2 canary |
 | **H2** | There exists a crossover $\lambda^*$ below which TIME_BASED cannot trip within the fault window | New. Nothing in the repo varies $\lambda$ | Day 2 canary |
+| **H2b** | Generalizing H2 with $\rho$ (§2.1): a breaker is inert (never opens) whenever the occupancy ratio $\rho = H/n_{\min}$ crosses below 1 — **regardless of window type** | New. D7 sweep, run independently of the Day-2 canary | **D7 sweep — see §3.2. Partially decided: confirmed for TIME_BASED, falsified for COUNT_BASED** |
 | **H3** | Window parameters drive $t_{\text{open}}$ and not $t_{\text{rec}}$; $D_w$ drives $t_{\text{rec}}$ and not $t_{\text{open}}$ (double dissociation) | Evidence in hand ($t_{\text{rec}}$ = 16.95 / 27.85 / 49.31 s across $D_w$ = 5/15/30, negative control on $t_{\text{open}}$ at 7.39 / 7.35 / 7.49). Leak audit clears it — see §4. Additionally stress-tested directly against window_type, see §4.1 (`analysis/out/window_type_recovery_leak.json`) | Day 3 analysis |
 | **H4** | Competing containment definitions rank configurations differently ($\tau_{\text{Kendall}} < 1$, significantly) | **Supported on Day 1** from the persisted leg vectors, with no new runs — see §5 | ✅ Day 1 |
 | **H5** | Blast-radius resolution is topology-dependent: $\text{Var}(B) = 0$ on chain topologies, $> 0$ where parallel reachable subjects exist | Half proven. The LINEAR half is done and the mechanism is now explicit (§5.3). Needs the FAN_OUT contrast | Day 4 sweep |
@@ -88,6 +89,44 @@ Stated explicitly because reviewers of empirical papers check whether the test m
   half of H3 and is reported as half.
 - **H4 and H5 are claims about the metric**, not about the system. They survive even if H1 and
   H2 fail, which is precisely why they are the fallback.
+- **H2b is a scope claim about H2's own mechanism** — it asks whether "not enough calls landed
+  in the window" is a *window-type-independent* explanation for inertness, or a TIME_BASED-only
+  one. It is supported by the same clean-crossover evidence H2 wants, and falsified by an equally
+  clean null result (zero inertness at any tested ratio) on the other arm — see §3.2.
+
+---
+
+### 3.2 H2b — confirmed for TIME_BASED, falsified for COUNT_BASED (D7, 2026-09-05)
+
+`experiments/runner.py --mode occupancy` (task.md's "D7") sweeps $\lambda$ and $n_{\min}$
+directly across 54 configs (36 TIME_BASED: 3$\lambda$×3$T$×4$n_{\min}$, 18 COUNT_BASED control:
+2$\lambda$×3$W$×3$n_{\min}$), 3 replicates each, LINEAR+LATENCY, run live on codespace.
+**162/162 runs completed, 0 aborted (`precondition_ok`), 0 unreliable-rate flags
+(`lambda_deviation_flag`)** — full sweep, no data-quality exclusions needed.
+
+**TIME_BASED (108 rows): H2b holds cleanly.** Every `inert=True` row sits at $\rho \le 0.4996$;
+every trip happens at $\rho \ge 0.9967$. The crossover is exactly where the ratio model
+predicts it, with no overlap between the two regions across the full sampled range
+($\rho$ from 0.1249 to 79.79).
+
+**COUNT_BASED (54 rows): H2b is falsified, cleanly and completely.** Every single COUNT_BASED
+run tripped — including configs at $\rho = 0.025$, where the window held only 2.5% of the calls
+the ratio model says it needs. Zero inertness was observed anywhere in the COUNT_BASED arm,
+across $\rho \in [0.025, 4.0]$.
+
+**Why, mechanically:** COUNT_BASED's sliding window is a fixed-size ring buffer of
+`slidingWindowSize` calls. Once that buffer fills, Resilience4j evaluates on every subsequent
+call regardless of whether `minimumNumberOfCalls` is larger than `slidingWindowSize` — the
+window's own capacity appears to act as a hard ceiling on how many calls the evaluator waits
+for, not `minimumNumberOfCalls` as an independent gate. TIME_BASED has no such ceiling: its
+window accumulates calls over wall-clock time with no fixed buffer size, so $n_{\min}$ really
+does gate evaluation the way the ratio model assumes.
+
+**What this means for the paper:** H2b's ratio model is not a universal description of
+"inertness" — it is a description of **TIME_BASED-specific** behavior. Reporting it without
+that qualifier would overclaim; reporting the COUNT_BASED null result *as the scope condition*
+turns a design assumption (§2.1's "$n_{\min}$ pinned at 5" was chosen partly to keep this from
+mattering) into a stated, evidenced boundary of the theory. Full write-up: decision-log **D18**.
 
 ---
 

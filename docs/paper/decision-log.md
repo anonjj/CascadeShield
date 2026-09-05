@@ -38,6 +38,22 @@ scheduled it for Day 5 and expected it to be degenerate on LINEAR.
 **Revisit if:** the FAN_OUT sweep produces legs on more than one service, which changes the
 support and may move the informative band.
 
+**Update (2026-09-06):** the FAN_OUT sweep has run (354 rows, merged into `data/master_dataset.csv`
+via PR #37) and `analysis/tau_sweep.py` was re-run against the full 704-row file. The revisit
+condition fired: **inventory-service now fires too**, not just order-service (2056 leg
+observations, up from 320; max nonzero rate still 0.5). The τ=0.50 dead-zone finding is
+unchanged and now far better-powered — `real_blast_radius` is still identically 0 for every τ
+≥ 0.50 across all 704 rows. H4's rank-disagreement claim technically still holds (36/36 pairs
+below τ_Kendall=1.0) but the magnitude changed a lot and should be reported accurately, not as
+"stronger": **minimum pairwise Kendall's τ is now 0.891** (was 0.238 on the 80-row archive) —
+rankings across different τ choices now agree much *more*, not less. One important caveat,
+detailed in D15's update below: inventory-service's new nonzero readings are 100% concentrated
+in `fault_type=CRASH` rows, always exactly 0.5000 with zero variance — this is the D17
+leg-blending bug appearing on a second service via the shared `sharedDbCB` dependency, not
+genuine multi-service cascading. Re-derive this table again once D17's fix lands and CRASH is
+re-collected; the qualitative dead-zone/H4 findings are expected to survive, but exact numbers
+will shift.
+
 ---
 
 ## D-002 · Contaminated rows are marked, never dropped
@@ -332,19 +348,66 @@ with a swept parameter.
 
 **Consequence — the tension this decision surfaces.** Isolating the gateway (necessary to
 kill the gateway-CB confound) also removed the only propagation path a chain topology can
-expose: §5.3 shows exactly one leg (order-service) ever fires on LINEAR, structurally, not
-by calibration accident. Cascade (more than one leg degraded at once) is therefore
-unobservable on LINEAR by construction. Confirmed via topology counts: every row in
-`current`, `v2_latency_5svc`, and `v3_gateway_not_rebuilt` is LINEAR — zero FAN_OUT rows
-exist in any archive. `--topology fanout` is implemented in `experiments/runner.py`
-(argparse choice) but has never been swept. Every cascade-shaped claim (H5 beyond its
-LINEAR half, H6) depends on that sweep.
+expose: §5.3 shows exactly one leg (order-service) ever fires on LINEAR under LATENCY,
+structurally, not by calibration accident. Cascade (more than one leg degraded at once) is
+therefore unobservable on LINEAR-under-LATENCY by construction. **(2026-09-06: the "zero
+FAN_OUT rows exist" claim that used to follow this sentence is now false — see Update below.
+`--topology fanout` was implemented and has since been swept; the sweep's data just sat
+unanalyzed for a few days.)**
 
 **Revisit if:** a FAN_OUT sweep is run. Re-derive the same table — check whether a second
 leg firing changes `order_leg`'s clean separation or monotonicity, and whether the
 quartized metric becomes informative again now that more than two node-sets are reachable
 (in which case this decision's "retire" call should be revisited, not assumed to still
 hold).
+
+**Update (2026-09-06) — the FAN_OUT sweep ran, H5 tested for real, and one more D17 connection
+found.** 354 FAN_OUT rows merged into `data/master_dataset.csv` via PR #37 (2026-09-03);
+`analysis/order_leg_containment.py` and a direct multi-leg check were re-run against the full
+704-row file.
+
+*The "retire" call itself stands — reaffirmed, not just assumed.* `order_leg` still has real
+resolution (132 distinct values on 704 rows) that the quartized metric never had.
+
+*But the "clean separation, no overlap, δ=-1.0" sub-claim does not survive on the combined
+dataset* — and the reason is not FAN_OUT, it's `fault_type=CRASH`:
+
+| fault_type | window_type | n | mean | min | max |
+|---|---|---|---|---|---|
+| CRASH | COUNT_BASED | 188 | 0.5000 | 0.5000 | 0.5000 |
+| CRASH | TIME_BASED | 192 | 0.5000 | 0.5000 | 0.5000 |
+| LATENCY | COUNT_BASED | 162 | 0.1201 | 0.0375 | 0.2250 |
+| LATENCY | TIME_BASED | 162 | 0.3952 | 0.2686 | 0.4622 |
+
+Every one of 380 CRASH rows reads `order_leg=0.5000` exactly, zero variance, both window
+types — that is not real system behavior, it is **the same D17 leg-blending bug**
+(`_get_cb_metric_count()` averaging two circuit breakers per service instead of taking the
+max), this time via the `sharedDbCB` dependency order-service and inventory-service share:
+CRASH fully fails whichever breaker it actually hits, the untouched sibling reads 0%, average
+= exactly 50%. This is also why inventory-service now appears in `services_that_ever_fire`
+(D-001's update above) — checked directly: inventory-service's 380 nonzero rows are the exact
+380 CRASH rows, 1:1, independent of topology (188 LINEAR + 192 FANOUT). Not genuine
+multi-service cascading; the same bug on a second service.
+
+**LATENCY-only preserves the clean separation**: COUNT_BASED max 0.2250 < TIME_BASED min
+0.2686, no overlap — the qualitative D15 claim holds. The exact magnitudes shifted a lot from
+the original 79-row archive (COUNT mean was 0.28–0.42, now 0.1201) — plausibly from harness
+fixes landed since (load-concurrency, precondition-reset), not a new bug, but re-quote from
+current data, not the stale archive, going forward.
+
+**H5, tested for real, is NOT supported** (this closes H5's "needs the FAN_OUT contrast" open
+item from hypotheses.md, with a negative result): under LATENCY — the fault type not
+contaminated by D17's bug — both LINEAR and FAN_OUT show `Var(B)=0`, exactly one leg
+(order-service) firing in all 162+162 rows. FAN_OUT's parallel structure does not, as
+currently injected, create observable multi-leg propagation. This isn't an artifact; it's a
+real property of the current fault-injection design (LATENCY targets one edge regardless of
+how many parallel downstream paths the topology offers).
+
+**Action before re-quoting the combined-dataset table anywhere:** land D17's fix
+(`fix/d17-leg-metric-blend`, already built, unmerged) and re-collect CRASH rows. Expect
+order-service's and inventory-service's CRASH-row values to jump toward the true per-breaker
+rate once the max-of-breakers fix is in, likely resolving (or reshaping, not necessarily
+restoring) the separation on the combined dataset.
 
 ---
 

@@ -68,14 +68,16 @@
       separate `blast_radius`-thresholded safe/unsafe label deliberately left untouched —
       out of scope, its own engineering choice. Pushed to `retire/d3-blast-radius-metric`.
 
-- [x] **LINEAR/FAN_OUT tension stated explicitly, not left for a reviewer.** Confirmed via
-      topology counts: every row in every archive (`current`, `v2_latency_5svc`,
-      `v3_gateway_not_rebuilt`) is LINEAR — zero FAN_OUT rows exist anywhere, even though
-      `--topology fanout` is already implemented in `experiments/runner.py`. Isolating the
+- [x] **LINEAR/FAN_OUT tension stated explicitly, not left for a reviewer.** Isolating the
       gateway (the right call for confound control) also removed the only propagation path
-      a chain topology can expose, so cascade is unobservable on LINEAR by construction.
-      Every cascade-shaped claim (H5 beyond its LINEAR half, H6) depends on a FAN_OUT sweep
-      that hasn't happened yet — now stated as a limitation in `hypotheses.md` §7, D15.
+      a chain topology can expose under LATENCY, so cascade is unobservable on
+      LINEAR-under-LATENCY by construction. **Update 2026-09-06: the FAN_OUT sweep this used
+      to say "hasn't happened yet" ran on 2026-09-03 (PR #37, 354 rows) — the docs just
+      weren't reconciled against it for a few days.** Re-run against the full 704-row
+      dataset: H5 is now decided, **not supported** — FAN_OUT+LATENCY shows `Var(B)=0`
+      identical to LINEAR (162/162 rows each side, one leg firing). See `hypotheses.md`
+      §5.5 and decision-log D15's update for the full numbers and the separate CRASH/D17
+      finding that surfaced in the same pass.
 
 ## D7 — λ is a single value, and it is the variable your theory is about (live run done)
 

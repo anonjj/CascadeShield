@@ -66,7 +66,7 @@ whole design turns on the Day-2 canary.
 | **H2b** | Generalizing H2 with $\rho$ (§2.1): a breaker is inert (never opens) whenever the occupancy ratio $\rho = H/n_{\min}$ crosses below 1 — **regardless of window type** | New. D7 sweep, run independently of the Day-2 canary | **D7 sweep — see §3.2. Partially decided: confirmed for TIME_BASED, falsified for COUNT_BASED** |
 | **H3** | Window parameters drive $t_{\text{open}}$ and not $t_{\text{rec}}$; $D_w$ drives $t_{\text{rec}}$ and not $t_{\text{open}}$ (double dissociation) | Evidence in hand ($t_{\text{rec}}$ = 16.95 / 27.85 / 49.31 s across $D_w$ = 5/15/30, negative control on $t_{\text{open}}$ at 7.39 / 7.35 / 7.49). Leak audit clears it — see §4. Additionally stress-tested directly against window_type, see §4.1 (`analysis/out/window_type_recovery_leak.json`) | Day 3 analysis |
 | **H4** | Competing containment definitions rank configurations differently ($\tau_{\text{Kendall}} < 1$, significantly) | **Supported on Day 1** from the persisted leg vectors, with no new runs — see §5 | ✅ Day 1 |
-| **H5** | Blast-radius resolution is topology-dependent: $\text{Var}(B) = 0$ on chain topologies, $> 0$ where parallel reachable subjects exist | Half proven. The LINEAR half is done and the mechanism is now explicit (§5.3). Needs the FAN_OUT contrast | Day 4 sweep |
+| **H5** | Blast-radius resolution is topology-dependent: $\text{Var}(B) = 0$ on chain topologies, $> 0$ where parallel reachable subjects exist | **Tested and NOT supported (§5.5, 2026-09-06).** FAN_OUT+LATENCY shows $\text{Var}(B)=0$ too — identical to LINEAR, 162/162 rows each side, exactly one leg firing | ✅ Day 4 sweep (negative result) |
 | **H6** | A uniformly configured edge breaker suppresses interior breaker engagement (gateway shadowing) | Evidence exists in the archived 162-run data (gateway leg 0.70–1.00 in every row, interior legs 0.0000 in 154 of 162) but the condition was **removed** by the `measurement-plane` isolation block | Day 3, if time |
 
 **H1 + H2 are the novelty. H3 + H5 are the floor.** If the Day-2 canary kills H1/H2, the
@@ -255,15 +255,34 @@ H4 was scheduled for Day 5 and expected to be degenerate on LINEAR. It is neithe
 
 ### 5.3 H5's LINEAR half, with the mechanism attached
 
-Across all 320 leg observations in the current dataset, **exactly one service ever fires:
-order-service.** Every other subject records 0.0000 in every run. $\text{Var}(B) = 0$ on the
-chain is therefore not a null result to be explained away — it is structural. A chain exposes
-one reachable subject downstream of the injection point, so the containment metric has exactly
-two attainable values and no resolution at all.
+Across the 320 leg observations available at the time this section was first written,
+**exactly one service ever fired: order-service.** That was true specifically under LATENCY —
+the only fault type collected so far at that point. $\text{Var}(B) = 0$ on the chain under
+LATENCY is not a null result to be explained away — it is structural for that fault type. A
+chain exposes one reachable subject downstream of the injection point, so the containment
+metric has exactly two attainable values and no resolution at all, under LATENCY.
 
-This is the strongest available form of the H5 claim, and it makes the FAN_OUT contrast a
-genuine test rather than a repetition: FAN_OUT is the only topology in the system where $B$ can
-physically take a value other than 0 and 0.25.
+(A second service, inventory-service, does now appear in the full dataset — but only via
+`fault_type=CRASH`, and only as an artifact of the D17 leg-blending bug, not real
+multi-service propagation. See D-001's and D15's 2026-09-06 updates in `decision-log.md` for
+the full mechanism. §5.5 below is the real, LATENCY-isolated FAN_OUT test.)
+
+### 5.5 The FAN_OUT contrast, run for real (2026-09-06) — H5 is not supported
+
+354 FAN_OUT rows exist in `data/master_dataset.csv` (merged 2026-09-03, PR #37) — this section
+was originally written before that merge was reconciled against the docs; see decision-log D15's
+update for the full story of why the merge sat unanalyzed for a few days.
+
+Isolating to `fault_type=LATENCY` (the fault type not contaminated by D17's blending bug, so
+the comparison is trustworthy): **both LINEAR and FAN_OUT show exactly one leg firing
+(order-service), in all 162 rows on each side.** $\text{Var}(B) = 0$ on FAN_OUT too — identical
+to LINEAR, not a partial or half-proven result.
+
+This is a real, negative result, not a design failure to fix: the current fault-injection setup
+targets one edge regardless of how many parallel downstream paths the topology's fan-out
+actually offers, so FAN_OUT's structural capacity for multi-leg propagation is never exercised
+by LATENCY as currently injected. H5 is decided — **not supported** — rather than left "half
+proven."
 
 ### 5.4 Retiring the quartized metric in favor of the continuous leg vector (D3 / D15)
 
@@ -293,6 +312,15 @@ $\delta = -1.0$ (large). Thresholding that into a 4-point denominator and then d
 knife-edge $\tau_{\text{leg}}$ (D-001's whole problem) throws away exactly the resolution the
 paper needs. **Decision D15: $B$/$B_{\text{real}}$ are retired as reported outcomes; `order_leg`
 is the reported containment signal, see §6 and §7.**
+
+**This table is the original 79-row, LATENCY-only archive — do not re-quote it as current.**
+On the full 704-row dataset (LATENCY+CRASH, LINEAR+FAN_OUT), the "no overlap" claim does not
+hold on the combined data — traced to `fault_type=CRASH` triggering the same D17 leg-blending
+bug on a second breaker, not a real change in system behavior. **LATENCY-only, on the current
+data, still separates cleanly** (COUNT_BASED max 0.2250 < TIME_BASED min 0.2686) but at
+different absolute magnitudes than this table (COUNT_BASED mean is now 0.1201, not 0.28-0.42),
+plausibly from harness fixes landed since this table was computed. Full numbers, the CRASH/D17
+mechanism, and what to re-derive once D17's fix lands: decision-log D15's 2026-09-06 update.
 
 ---
 
@@ -345,16 +373,16 @@ Day 6:
   and stays in the dataset for reference, but the paper's containment claims rest entirely on
   the continuous `order_leg` signal (§5.4), which has the resolution the quartized metric threw
   away. Stated here plainly rather than left implicit across §4, §5, and D-001.
-- **Isolating the gateway removed the only propagation path LINEAR can show.** The
-  `measurement-plane` fix (above) was the right call for confound control — an uncontrolled
-  gateway breaker would have dominated every result. But §5.3 shows it also means a chain
-  topology exposes exactly one subject downstream of the injection point: cascade (more than
-  one leg degraded at once) is unobservable on LINEAR **by construction**, not by bad luck.
-  Every row in every archive checked (`current`, `v2_latency_5svc`,
-  `v3_gateway_not_rebuilt` — confirmed via topology counts) is LINEAR; zero FAN_OUT rows exist
-  anywhere. `--topology fanout` is already implemented in `experiments/runner.py` and has never
-  been swept. Every cascade-shaped claim in this paper (H5 beyond its LINEAR half, H6) depends
-  on that sweep happening — stated here so a reviewer finds it stated, not discovered.
+- **Isolating the gateway removed the only propagation path LINEAR can show, under LATENCY.**
+  The `measurement-plane` fix (above) was the right call for confound control — an
+  uncontrolled gateway breaker would have dominated every result. §5.3 shows a chain topology
+  exposes exactly one subject downstream of the injection point under LATENCY: cascade (more
+  than one leg degraded at once) is unobservable on LINEAR-under-LATENCY **by construction**,
+  not by bad luck. **(2026-09-06: this bullet used to say "zero FAN_OUT rows exist anywhere" —
+  that was true of the three archives named above, but not of the live dataset by the time this
+  was re-checked. 354 FAN_OUT rows merged into `data/master_dataset.csv` on 2026-09-03; the
+  sweep happened, the docs just weren't reconciled against it for a few days. §5.5 runs the
+  actual FAN_OUT contrast: H5 is decided, not supported — see there for numbers.)**
 - **The FAN_OUT sweep that closes the bullet above compounds with a second confound
   (D6/D16) unless it's run carefully.** The obvious way to get LINEAR and FAN_OUT data at
   once is to split them across two machines. Splitting one sweep across two boxes was

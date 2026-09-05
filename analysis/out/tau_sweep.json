@@ -1,116 +1,117 @@
 {
   "dataset": "current",
-  "n_runs": 79,
-  "n_configs": 26,
+  "n_runs": 704,
+  "n_configs": 216,
   "runner_tau": 0.5,
   "leg_support": {
-    "n_leg_observations": 316,
-    "n_nonzero": 79,
-    "max_leg_failure_rate": 0.4867,
-    "max_nonzero_leg_rate": 0.4867,
+    "n_leg_observations": 2056,
+    "n_nonzero": 1084,
+    "max_leg_failure_rate": 0.5,
+    "max_nonzero_leg_rate": 0.5,
     "services_that_ever_fire": [
+      "inventory-service",
       "order-service"
     ]
   },
   "informative_tau_range": {
     "lo": 0.05,
     "hi": 0.45,
-    "comment": "B_real is identically 0 for every tau above the largest observed leg failure rate (0.4867), which is why the pinned 0.50 produced a constant column."
+    "comment": "B_real is identically 0 for every tau above the largest observed leg failure rate (0.5), which is why the pinned 0.50 produced a constant column."
   },
   "curve": [
     {
       "tau": 0.05,
-      "n_runs_with_observable_legs": 79,
+      "n_runs_with_observable_legs": 704,
       "n_runs_missing_legs": 0,
-      "mean_real_blast_radius": 0.25,
-      "ci_lo": 0.25,
-      "ci_hi": 0.25,
-      "n_distinct_values": 1,
-      "share_nonzero": 1.0
+      "mean_real_blast_radius": 0.6512784090909091,
+      "ci_lo": 0.5990630582520181,
+      "ci_hi": 0.7026933701657458,
+      "n_distinct_values": 3,
+      "share_nonzero": 0.9857954545454546
     },
     {
       "tau": 0.1,
-      "n_runs_with_observable_legs": 79,
+      "n_runs_with_observable_legs": 704,
       "n_runs_missing_legs": 0,
-      "mean_real_blast_radius": 0.25,
-      "ci_lo": 0.25,
-      "ci_hi": 0.25,
-      "n_distinct_values": 1,
-      "share_nonzero": 1.0
+      "mean_real_blast_radius": 0.6285511363636364,
+      "ci_lo": 0.572366546708652,
+      "ci_hi": 0.6842489081499153,
+      "n_distinct_values": 3,
+      "share_nonzero": 0.8948863636363636
     },
     {
       "tau": 0.15,
-      "n_runs_with_observable_legs": 79,
+      "n_runs_with_observable_legs": 704,
       "n_runs_missing_legs": 0,
-      "mean_real_blast_radius": 0.25,
-      "ci_lo": 0.25,
-      "ci_hi": 0.25,
-      "n_distinct_values": 1,
-      "share_nonzero": 1.0
+      "mean_real_blast_radius": 0.6115056818181818,
+      "ci_lo": 0.5528415445611742,
+      "ci_hi": 0.6696441041500398,
+      "n_distinct_values": 3,
+      "share_nonzero": 0.8267045454545454
     },
     {
       "tau": 0.2,
-      "n_runs_with_observable_legs": 79,
+      "n_runs_with_observable_legs": 704,
       "n_runs_missing_legs": 0,
-      "mean_real_blast_radius": 0.25,
-      "ci_lo": 0.25,
-      "ci_hi": 0.25,
-      "n_distinct_values": 1,
-      "share_nonzero": 1.0
+      "mean_real_blast_radius": 0.6004971590909091,
+      "ci_lo": 0.5400720452841193,
+      "ci_hi": 0.6604216131284916,
+      "n_distinct_values": 3,
+      "share_nonzero": 0.7826704545454546
     },
     {
       "tau": 0.25,
-      "n_runs_with_observable_legs": 79,
+      "n_runs_with_observable_legs": 704,
       "n_runs_missing_legs": 0,
-      "mean_real_blast_radius": 0.24367088607594936,
-      "ci_lo": 0.23,
-      "ci_hi": 0.25,
-      "n_distinct_values": 2,
-      "share_nonzero": 0.9746835443037974
+      "mean_real_blast_radius": 0.5973011363636364,
+      "ci_lo": 0.5363832853025937,
+      "ci_hi": 0.6574743409933805,
+      "n_distinct_values": 3,
+      "share_nonzero": 0.7698863636363636
     },
     {
       "tau": 0.3,
-      "n_runs_with_observable_legs": 79,
+      "n_runs_with_observable_legs": 704,
       "n_runs_missing_legs": 0,
-      "mean_real_blast_radius": 0.18670886075949367,
-      "ci_lo": 0.14506172839506173,
-      "ci_hi": 0.22666666666666666,
-      "n_distinct_values": 2,
-      "share_nonzero": 0.7468354430379747
+      "mean_real_blast_radius": 0.5951704545454546,
+      "ci_lo": 0.5336949514139778,
+      "ci_hi": 0.6552924791086351,
+      "n_distinct_values": 3,
+      "share_nonzero": 0.7613636363636364
     },
     {
       "tau": 0.35,
-      "n_runs_with_observable_legs": 79,
+      "n_runs_with_observable_legs": 704,
       "n_runs_missing_legs": 0,
-      "mean_real_blast_radius": 0.16455696202531644,
-      "ci_lo": 0.11666666666666667,
-      "ci_hi": 0.21,
-      "n_distinct_values": 2,
-      "share_nonzero": 0.6582278481012658
+      "mean_real_blast_radius": 0.5877130681818182,
+      "ci_lo": 0.525147771845718,
+      "ci_hi": 0.6493667096536477,
+      "n_distinct_values": 3,
+      "share_nonzero": 0.7315340909090909
     },
     {
       "tau": 0.4,
-      "n_runs_with_observable_legs": 79,
+      "n_runs_with_observable_legs": 704,
       "n_runs_missing_legs": 0,
-      "mean_real_blast_radius": 0.14556962025316456,
-      "ci_lo": 0.09451219512195122,
-      "ci_hi": 0.19444444444444445,
-      "n_distinct_values": 2,
-      "share_nonzero": 0.5822784810126582
+      "mean_real_blast_radius": 0.5667613636363636,
+      "ci_lo": 0.5017582714614269,
+      "ci_hi": 0.6307514287772548,
+      "n_distinct_values": 3,
+      "share_nonzero": 0.6477272727272727
     },
     {
       "tau": 0.45,
-      "n_runs_with_observable_legs": 79,
+      "n_runs_with_observable_legs": 704,
       "n_runs_missing_legs": 0,
-      "mean_real_blast_radius": 0.10443037974683544,
-      "ci_lo": 0.05965909090909091,
-      "ci_hi": 0.1513157894736842,
-      "n_distinct_values": 2,
-      "share_nonzero": 0.4177215189873418
+      "mean_real_blast_radius": 0.5458096590909091,
+      "ci_lo": 0.47760115606936415,
+      "ci_hi": 0.6123613159876969,
+      "n_distinct_values": 3,
+      "share_nonzero": 0.5639204545454546
     },
     {
       "tau": 0.5,
-      "n_runs_with_observable_legs": 79,
+      "n_runs_with_observable_legs": 704,
       "n_runs_missing_legs": 0,
       "mean_real_blast_radius": 0.0,
       "ci_lo": 0.0,
@@ -120,7 +121,7 @@
     },
     {
       "tau": 0.55,
-      "n_runs_with_observable_legs": 79,
+      "n_runs_with_observable_legs": 704,
       "n_runs_missing_legs": 0,
       "mean_real_blast_radius": 0.0,
       "ci_lo": 0.0,
@@ -130,7 +131,7 @@
     },
     {
       "tau": 0.6,
-      "n_runs_with_observable_legs": 79,
+      "n_runs_with_observable_legs": 704,
       "n_runs_missing_legs": 0,
       "mean_real_blast_radius": 0.0,
       "ci_lo": 0.0,
@@ -140,7 +141,7 @@
     },
     {
       "tau": 0.65,
-      "n_runs_with_observable_legs": 79,
+      "n_runs_with_observable_legs": 704,
       "n_runs_missing_legs": 0,
       "mean_real_blast_radius": 0.0,
       "ci_lo": 0.0,
@@ -150,7 +151,7 @@
     },
     {
       "tau": 0.7,
-      "n_runs_with_observable_legs": 79,
+      "n_runs_with_observable_legs": 704,
       "n_runs_missing_legs": 0,
       "mean_real_blast_radius": 0.0,
       "ci_lo": 0.0,
@@ -160,7 +161,7 @@
     },
     {
       "tau": 0.75,
-      "n_runs_with_observable_legs": 79,
+      "n_runs_with_observable_legs": 704,
       "n_runs_missing_legs": 0,
       "mean_real_blast_radius": 0.0,
       "ci_lo": 0.0,
@@ -170,7 +171,7 @@
     },
     {
       "tau": 0.8,
-      "n_runs_with_observable_legs": 79,
+      "n_runs_with_observable_legs": 704,
       "n_runs_missing_legs": 0,
       "mean_real_blast_radius": 0.0,
       "ci_lo": 0.0,
@@ -180,7 +181,7 @@
     },
     {
       "tau": 0.85,
-      "n_runs_with_observable_legs": 79,
+      "n_runs_with_observable_legs": 704,
       "n_runs_missing_legs": 0,
       "mean_real_blast_radius": 0.0,
       "ci_lo": 0.0,
@@ -190,7 +191,7 @@
     },
     {
       "tau": 0.9,
-      "n_runs_with_observable_legs": 79,
+      "n_runs_with_observable_legs": 704,
       "n_runs_missing_legs": 0,
       "mean_real_blast_radius": 0.0,
       "ci_lo": 0.0,
@@ -200,7 +201,7 @@
     },
     {
       "tau": 0.95,
-      "n_runs_with_observable_legs": 79,
+      "n_runs_with_observable_legs": 704,
       "n_runs_missing_legs": 0,
       "mean_real_blast_radius": 0.0,
       "ci_lo": 0.0,
@@ -215,137 +216,141 @@
         "tau": 0.05,
         "kendall_tau": null,
         "p": null,
-        "n_configs": 26,
+        "n_configs": 216,
         "reason": "constant ranking vector at one of the two thresholds"
       },
       {
         "tau": 0.1,
         "kendall_tau": null,
         "p": null,
-        "n_configs": 26,
+        "n_configs": 216,
         "reason": "constant ranking vector at one of the two thresholds"
       },
       {
         "tau": 0.15,
         "kendall_tau": null,
         "p": null,
-        "n_configs": 26,
+        "n_configs": 216,
         "reason": "constant ranking vector at one of the two thresholds"
       },
       {
         "tau": 0.2,
         "kendall_tau": null,
         "p": null,
-        "n_configs": 26,
+        "n_configs": 216,
         "reason": "constant ranking vector at one of the two thresholds"
       },
       {
         "tau": 0.25,
         "kendall_tau": null,
         "p": null,
-        "n_configs": 26,
+        "n_configs": 216,
         "reason": "constant ranking vector at one of the two thresholds"
       },
       {
         "tau": 0.3,
         "kendall_tau": null,
         "p": null,
-        "n_configs": 26,
+        "n_configs": 216,
         "reason": "constant ranking vector at one of the two thresholds"
       },
       {
         "tau": 0.35,
         "kendall_tau": null,
         "p": null,
-        "n_configs": 26,
+        "n_configs": 216,
         "reason": "constant ranking vector at one of the two thresholds"
       },
       {
         "tau": 0.4,
         "kendall_tau": null,
         "p": null,
-        "n_configs": 26,
+        "n_configs": 216,
         "reason": "constant ranking vector at one of the two thresholds"
       },
       {
         "tau": 0.45,
         "kendall_tau": null,
         "p": null,
-        "n_configs": 26,
+        "n_configs": 216,
         "reason": "constant ranking vector at one of the two thresholds"
       },
       {
         "tau": 0.5,
         "kendall_tau": null,
         "p": null,
-        "n_configs": 26,
+        "n_configs": 216,
         "reason": "constant ranking vector at one of the two thresholds"
       },
       {
         "tau": 0.55,
         "kendall_tau": null,
         "p": null,
-        "n_configs": 26,
+        "n_configs": 216,
         "reason": "constant ranking vector at one of the two thresholds"
       },
       {
         "tau": 0.6,
         "kendall_tau": null,
         "p": null,
-        "n_configs": 26,
+        "n_configs": 216,
         "reason": "constant ranking vector at one of the two thresholds"
       },
       {
         "tau": 0.65,
         "kendall_tau": null,
         "p": null,
-        "n_configs": 26,
+        "n_configs": 216,
         "reason": "constant ranking vector at one of the two thresholds"
       },
       {
         "tau": 0.7,
         "kendall_tau": null,
         "p": null,
-        "n_configs": 26,
+        "n_configs": 216,
         "reason": "constant ranking vector at one of the two thresholds"
       },
       {
         "tau": 0.75,
         "kendall_tau": null,
         "p": null,
-        "n_configs": 26,
+        "n_configs": 216,
         "reason": "constant ranking vector at one of the two thresholds"
       },
       {
         "tau": 0.8,
         "kendall_tau": null,
         "p": null,
-        "n_configs": 26,
+        "n_configs": 216,
         "reason": "constant ranking vector at one of the two thresholds"
       },
       {
         "tau": 0.85,
         "kendall_tau": null,
         "p": null,
-        "n_configs": 26,
+        "n_configs": 216,
         "reason": "constant ranking vector at one of the two thresholds"
       },
       {
         "tau": 0.9,
         "kendall_tau": null,
         "p": null,
-        "n_configs": 26,
+        "n_configs": 216,
         "reason": "constant ranking vector at one of the two thresholds"
       },
       {
         "tau": 0.95,
         "kendall_tau": null,
         "p": null,
-        "n_configs": 26,
+        "n_configs": 216,
         "reason": "constant ranking vector at one of the two thresholds"
       }
     ],
     "non_degenerate_taus": [
+      0.05,
+      0.1,
+      0.15,
+      0.2,
       0.25,
       0.3,
       0.35,
@@ -354,89 +359,297 @@
     ],
     "pairwise": [
       {
+        "tau_a": 0.05,
+        "tau_b": 0.1,
+        "kendall_tau": 0.9273578257695132,
+        "p": 1.8219334508778237e-46,
+        "n_configs": 216,
+        "reason": null
+      },
+      {
+        "tau_a": 0.05,
+        "tau_b": 0.15,
+        "kendall_tau": 0.9003488914084606,
+        "p": 7.371981160686868e-45,
+        "n_configs": 216,
+        "reason": null
+      },
+      {
+        "tau_a": 0.05,
+        "tau_b": 0.2,
+        "kendall_tau": 0.8962369266451208,
+        "p": 2.286512154532272e-44,
+        "n_configs": 216,
+        "reason": null
+      },
+      {
+        "tau_a": 0.05,
+        "tau_b": 0.25,
+        "kendall_tau": 0.8950561704669643,
+        "p": 2.882109342296233e-44,
+        "n_configs": 216,
+        "reason": null
+      },
+      {
+        "tau_a": 0.05,
+        "tau_b": 0.3,
+        "kendall_tau": 0.8945761602358913,
+        "p": 3.2394532474628073e-44,
+        "n_configs": 216,
+        "reason": null
+      },
+      {
+        "tau_a": 0.05,
+        "tau_b": 0.35,
+        "kendall_tau": 0.8948329881414673,
+        "p": 3.8558953885611046e-44,
+        "n_configs": 216,
+        "reason": null
+      },
+      {
+        "tau_a": 0.05,
+        "tau_b": 0.4,
+        "kendall_tau": 0.9106375166250734,
+        "p": 9.616007911509387e-45,
+        "n_configs": 216,
+        "reason": null
+      },
+      {
+        "tau_a": 0.05,
+        "tau_b": 0.45,
+        "kendall_tau": 0.9594800509032909,
+        "p": 7.292975967104187e-47,
+        "n_configs": 216,
+        "reason": null
+      },
+      {
+        "tau_a": 0.1,
+        "tau_b": 0.15,
+        "kendall_tau": 0.9472904549416187,
+        "p": 8.763826084484081e-53,
+        "n_configs": 216,
+        "reason": null
+      },
+      {
+        "tau_a": 0.1,
+        "tau_b": 0.2,
+        "kendall_tau": 0.9248210177094376,
+        "p": 2.7891373031994505e-50,
+        "n_configs": 216,
+        "reason": null
+      },
+      {
+        "tau_a": 0.1,
+        "tau_b": 0.25,
+        "kendall_tau": 0.9190499294216204,
+        "p": 1.0857176247487042e-49,
+        "n_configs": 216,
+        "reason": null
+      },
+      {
+        "tau_a": 0.1,
+        "tau_b": 0.3,
+        "kendall_tau": 0.915518453131815,
+        "p": 2.5644191805962987e-49,
+        "n_configs": 216,
+        "reason": null
+      },
+      {
+        "tau_a": 0.1,
+        "tau_b": 0.35,
+        "kendall_tau": 0.9051108108739757,
+        "p": 3.917793912387811e-48,
+        "n_configs": 216,
+        "reason": null
+      },
+      {
+        "tau_a": 0.1,
+        "tau_b": 0.4,
+        "kendall_tau": 0.8913621085057183,
+        "p": 8.310264661063818e-46,
+        "n_configs": 216,
+        "reason": null
+      },
+      {
+        "tau_a": 0.1,
+        "tau_b": 0.45,
+        "kendall_tau": 0.9057521072161634,
+        "p": 9.460287195934669e-45,
+        "n_configs": 216,
+        "reason": null
+      },
+      {
+        "tau_a": 0.15,
+        "tau_b": 0.2,
+        "kendall_tau": 0.9653232246894605,
+        "p": 8.03023479297327e-56,
+        "n_configs": 216,
+        "reason": null
+      },
+      {
+        "tau_a": 0.15,
+        "tau_b": 0.25,
+        "kendall_tau": 0.9563758454787447,
+        "p": 7.706792086776336e-55,
+        "n_configs": 216,
+        "reason": null
+      },
+      {
+        "tau_a": 0.15,
+        "tau_b": 0.3,
+        "kendall_tau": 0.9507400088014678,
+        "p": 3.2847340091239685e-54,
+        "n_configs": 216,
+        "reason": null
+      },
+      {
+        "tau_a": 0.15,
+        "tau_b": 0.35,
+        "kendall_tau": 0.9330230038505228,
+        "p": 3.719333797194146e-52,
+        "n_configs": 216,
+        "reason": null
+      },
+      {
+        "tau_a": 0.15,
+        "tau_b": 0.4,
+        "kendall_tau": 0.8993705702100179,
+        "p": 1.2739658868967435e-47,
+        "n_configs": 216,
+        "reason": null
+      },
+      {
+        "tau_a": 0.15,
+        "tau_b": 0.45,
+        "kendall_tau": 0.8912663788226454,
+        "p": 2.4705766666350847e-44,
+        "n_configs": 216,
+        "reason": null
+      },
+      {
+        "tau_a": 0.2,
+        "tau_b": 0.25,
+        "kendall_tau": 0.9891942428837808,
+        "p": 2.0707983051316492e-58,
+        "n_configs": 216,
+        "reason": null
+      },
+      {
+        "tau_a": 0.2,
+        "tau_b": 0.3,
+        "kendall_tau": 0.9823309576039746,
+        "p": 1.2750851658950883e-57,
+        "n_configs": 216,
+        "reason": null
+      },
+      {
+        "tau_a": 0.2,
+        "tau_b": 0.35,
+        "kendall_tau": 0.9603744627121833,
+        "p": 4.9895794941616555e-55,
+        "n_configs": 216,
+        "reason": null
+      },
+      {
+        "tau_a": 0.2,
+        "tau_b": 0.4,
+        "kendall_tau": 0.9153659185699536,
+        "p": 3.713030430410951e-49,
+        "n_configs": 216,
+        "reason": null
+      },
+      {
+        "tau_a": 0.2,
+        "tau_b": 0.45,
+        "kendall_tau": 0.89481366066338,
+        "p": 1.4206468819990998e-44,
+        "n_configs": 216,
+        "reason": null
+      },
+      {
         "tau_a": 0.25,
         "tau_b": 0.3,
-        "kendall_tau": 0.35000000000000003,
-        "p": 0.07150374375909059,
-        "n_configs": 26,
+        "kendall_tau": 0.9927287787210501,
+        "p": 7.985654966677375e-59,
+        "n_configs": 216,
         "reason": null
       },
       {
         "tau_a": 0.25,
         "tau_b": 0.35,
-        "kendall_tau": 0.2931763649279746,
-        "p": 0.1305524524655918,
-        "n_configs": 26,
+        "kendall_tau": 0.9693630921740696,
+        "p": 4.811446606501872e-56,
+        "n_configs": 216,
         "reason": null
       },
       {
         "tau_a": 0.25,
         "tau_b": 0.4,
-        "kendall_tau": 0.25298221281347033,
-        "p": 0.2059032107320684,
-        "n_configs": 26,
+        "kendall_tau": 0.9205780814530646,
+        "p": 1.0364006072737619e-49,
+        "n_configs": 216,
         "reason": null
       },
       {
         "tau_a": 0.25,
         "tau_b": 0.45,
-        "kendall_tau": 0.1745743121887939,
-        "p": 0.3674861008331032,
-        "n_configs": 26,
+        "kendall_tau": 0.8958826100587165,
+        "p": 1.0923224398479851e-44,
+        "n_configs": 216,
         "reason": null
       },
       {
         "tau_a": 0.3,
         "tau_b": 0.35,
-        "kendall_tau": 0.855097731039926,
-        "p": 5.6052832057512914e-06,
-        "n_configs": 26,
+        "kendall_tau": 0.9756869985092708,
+        "p": 9.528803899225286e-57,
+        "n_configs": 216,
         "reason": null
       },
       {
         "tau_a": 0.3,
         "tau_b": 0.4,
-        "kendall_tau": 0.7378647873726218,
-        "p": 0.0001449836645691113,
-        "n_configs": 26,
+        "kendall_tau": 0.9243680408350561,
+        "p": 4.226408176498839e-50,
+        "n_configs": 216,
         "reason": null
       },
       {
         "tau_a": 0.3,
         "tau_b": 0.45,
-        "kendall_tau": 0.5091750772173156,
-        "p": 0.006799088732895203,
-        "n_configs": 26,
+        "kendall_tau": 0.8969024297710937,
+        "p": 8.826829808113543e-45,
+        "n_configs": 216,
         "reason": null
       },
       {
         "tau_a": 0.35,
         "tau_b": 0.4,
-        "kendall_tau": 0.8783100656536798,
-        "p": 5.912506107380118e-06,
-        "n_configs": 26,
+        "kendall_tau": 0.9396761087872417,
+        "p": 1.348986870759522e-51,
+        "n_configs": 216,
         "reason": null
       },
       {
         "tau_a": 0.35,
         "tau_b": 0.45,
-        "kendall_tau": 0.6060915267313264,
-        "p": 0.0012531626912119463,
-        "n_configs": 26,
+        "kendall_tau": 0.9024283540347767,
+        "p": 3.285530293594717e-45,
+        "n_configs": 216,
         "reason": null
       },
       {
         "tau_a": 0.4,
         "tau_b": 0.45,
-        "kendall_tau": 0.6900655593423543,
-        "p": 0.00036765465420553894,
-        "n_configs": 26,
+        "kendall_tau": 0.9335087647409873,
+        "p": 2.7124666325747094e-47,
+        "n_configs": 216,
         "reason": null
       }
     ],
-    "min_pairwise_kendall_tau": 0.1745743121887939,
-    "n_pairs_below_1": 10,
-    "n_pairs_compared": 10
+    "min_pairwise_kendall_tau": 0.8912663788226454,
+    "n_pairs_below_1": 36,
+    "n_pairs_compared": 36
   },
-  "figure": "figures\\fig7_tau_sweep.png"
+  "figure": "figures/fig7_tau_sweep.png"
 }

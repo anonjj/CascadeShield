@@ -1,6 +1,69 @@
 {
-  "n_rows": 0,
-  "sources": [],
-  "status": "SKIPPED_NO_CALIBRATION_DATA",
-  "reason": "fewer than 2 distinct machine_id values in the data provided"
+  "n_rows": 177,
+  "sources": [
+    "/tmp/d16_calib/soham_linear.csv",
+    "/tmp/d16_calib/codespace_linear_overlap.csv"
+  ],
+  "status": "COMPUTED",
+  "verdict": "MACHINE_EFFECT_NEGLIGIBLE",
+  "worst_magnitude": "negligible",
+  "undefined_dvs": [],
+  "by_dv": {
+    "time_to_open": {
+      "machines": [
+        "soham-local",
+        "codespace"
+      ],
+      "ci_by_machine": {
+        "soham-local": {
+          "n_rows": 159,
+          "n_groups": 54,
+          "point": 5.546691823899373,
+          "lo": 4.753598069267516,
+          "hi": 6.433744640330187
+        },
+        "codespace": {
+          "n_rows": 18,
+          "n_groups": 6,
+          "point": 5.116111111111111,
+          "lo": 3.776611111111111,
+          "hi": 6.675222222222222
+        }
+      },
+      "cliffs_delta": {
+        "delta": 0.021313766596785466,
+        "magnitude": "negligible",
+        "n_a": 159,
+        "n_b": 18
+      }
+    },
+    "time_to_recover": {
+      "machines": [
+        "soham-local",
+        "codespace"
+      ],
+      "ci_by_machine": {
+        "soham-local": {
+          "n_rows": 159,
+          "n_groups": 54,
+          "point": 31.515320754716978,
+          "lo": 26.471529163017518,
+          "hi": 36.7408053449168
+        },
+        "codespace": {
+          "n_rows": 18,
+          "n_groups": 6,
+          "point": 25.519777777777776,
+          "lo": 19.339722222222225,
+          "hi": 31.73366666666666
+        }
+      },
+      "cliffs_delta": {
+        "delta": 0.022711390635918937,
+        "magnitude": "negligible",
+        "n_a": 159,
+        "n_b": 18
+      }
+    }
+  }
 }

@@ -469,11 +469,92 @@ per-machine offset as a stated correction or keeps option (b) permanently for th
 
 ---
 
-## D18 · H2b (occupancy ratio) holds for TIME_BASED, is cleanly falsified for COUNT_BASED
+## D17 · `leg_failure_rates` blends two circuit breakers per service — `real_blast_radius` structurally cannot register a fully-failed single-edge fault
 
-> Numbered D18 to avoid colliding with D17 (leg-metric-blending finding, PR #39), which is
-> still open/unmerged at the time this was written. Renumber if the two land in a different
-> order.
+**Date:** 2026-09-04 (ad hoc investigation, surfaced while validating the canary-matrix
+executor) · **Decided by:** Jay (finding confirmed); remediation pending Soham's sign-off,
+same as D-001's own $\tau_{\text{leg}}$ treatment · **Status:** finding final; fix built and
+signed off by Soham (`723863d`, option c), pending merge
+
+**Decision.** `real_blast_radius` and `leg_failure_rates` for **order-service,
+inventory-service, and payment-service**, in every row collected before this fix lands, must
+be read as a *diluted* signal, not a literal per-edge severity — see Numbers.
+`notification-service` (one breaker, not two) is unaffected. Fix: `compute_leg_failure_rates()`
+now reports the **max** of a service's own breakers (option c) rather than an unweighted
+average — see the code change on `experiments/runner.py` in this same PR.
+
+**Mechanism.** `runner.py`'s `_get_cb_metric_count()` sums a Resilience4j actuator metric
+"across a service's CB instances" (its own docstring) — the query filters only by outcome
+kind (`tag=kind:{successful|failed|not_permitted}`), never by which circuit breaker. Every
+subject except notification-service owns **two** breakers (a "next hop" plus `sharedDbCB`),
+and each of those services' controllers call both downstream dependencies once per request,
+unconditionally, regardless of whether the first call succeeded. Since any single injected
+fault (this project has never injected more than one at a time) only ever degrades one of a
+service's two downstream edges, `compute_leg_failure_rates()`'s per-service reading was an
+**unweighted average of one broken breaker and one healthy breaker** — landing near half the
+true fault severity by construction, not by measurement.
+
+**Numbers** (`experiments/diagnose_leg_blend.py`, 5 replicates, TIME_BASED/T50/W20/D15/λ=20,
+`inventory-service-proxy` latency fault — live mesh, codespace):
+
+| Reading | mean | stdev |
+|---|---|---|
+| blended `order-service` leg (pre-fix metric) | 0.4010 | 0.0011 |
+| `inventoryServiceCB` alone (the faulted edge) | 0.8020 | 0.0021 |
+| `sharedDbCB` alone (untouched by this fault) | 0.0000 | 0.0000 |
+
+$0.8020 / 2 = 0.4010$ to 4 decimal places — not "near half," exactly half, with stdev under
+0.2% across every replicate. This is the arithmetic signature of the mechanism above, not
+sampling noise.
+
+**Independent confirming evidence, found 2026-09-06 (PR #44):** the same signature shows up
+on `fault_type=CRASH` rows in `master_dataset.csv` — all 380 of them read `order_leg=0.5000`
+exactly, zero variance, both window types, via the shared `sharedDbCB` dependency
+order-service and inventory-service both own. CRASH fully fails whichever breaker it hits;
+the untouched sibling reads 0%; blended average is exactly 50%. Full detail: D15's 2026-09-06
+update below.
+
+**This directly implicates D-001.** D-001's own numbers — "order-service, max rate 0.4867"
+across 320 leg observations, cited as the reason $\tau_{\text{leg}}$ must be reported as a
+curve rather than a fixed value — were computed through this same unfixed blending path.
+D-001 is not being reopened by this entry (its curve-vs-value methodology stands regardless
+of what caused the observed ceiling), but its **factual premise** — that order-service's true
+leg severity tops out near 0.49 — may itself be an artifact of this bug rather than a
+property of the system. A leg experiencing 100% true failure on its faulted edge is
+mathematically incapable of reporting above 0.50 blended; D-001's entire informative band
+$[0.25, 0.45]$ sits inside the range this bug can produce regardless of real severity.
+
+**Rejected:** (a) report only the faulted edge's rate — needs infrastructure that doesn't
+exist (no mapping anywhere from "which Toxiproxy proxy is faulted" to "which calling
+service's breaker should reflect that," and the relationship is topology-dependent — under
+FANOUT with the default fault target this could leave the leg unobservable entirely). (b)
+report both breakers separately — breaks `analysis/common.py::parse_legs()`'s silent
+last-wins behavior on duplicate keys, corrupting `tau_sweep.py` and, most directly,
+`analysis/order_leg_containment.py` (backs the already-shipped D15). (c), chosen: report the
+max — changes zero downstream schema, `parse_legs`/`tau_sweep`/`leak_audit` all keep working
+fed a corrected number instead of a diluted one; `notification-service` is byte-identical
+before/after, confirming it was never affected.
+
+**Consequence — this is not retroactively recoverable.** Unlike $\tau_{\text{leg}}$ (D-001),
+which is a post-hoc sensitivity sweep *because* `leg_failure_rates`' raw value was already
+persisted and could be recomputed at any threshold from the existing CSV, this bug is upstream
+of what gets persisted at all: `snapshot_cb_calls()` only ever captured the already-blended
+per-service sum, never the raw per-breaker counts. **Every row collected before this fix
+lands is permanently blended — there is no way to recover the true per-edge rate from
+`master_dataset.csv`, any of its `v1`–`v5` archives, or `canary_matrix_runs.csv` after the
+fact.** Data collected after this fix lands should get a version boundary (same `vN` archival
+treatment `analysis/common.py`'s `DATASETS` registry already uses for `v1_prefix` through
+`v5_soham_linear_presweep`) so old and new `leg_failure_rates` values are never silently
+pooled as if they meant the same thing.
+
+**Revisit if:** any consumer of `leg_failure_rates` needs to know *which* edge failed rather
+than just the worst rate — option (c) loses that information by design. D-001 and D15 should
+both be re-examined once real per-edge data exists post-fix; D15's 2026-09-06 update already
+starts this for the `CRASH`-row artifact specifically.
+
+---
+
+## D18 · H2b (occupancy ratio) holds for TIME_BASED, is cleanly falsified for COUNT_BASED
 
 **Date:** 2026-09-04/05 · **Decided by:** Jay (D7 live sweep, codespace) · **Status:** final
 

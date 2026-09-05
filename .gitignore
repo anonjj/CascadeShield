@@ -32,6 +32,7 @@ data/occupancy_dataset.csv
 !data/master_dataset_v2_latency_5svc.csv
 !data/master_dataset_v4_flat_concurrency.csv
 !data/master_dataset_v5_soham_linear_presweep.csv
+!data/master_dataset_v6_pre_d17_leg_blend_crash.csv
 !data/master_dataset_calibration_*.csv
 !data/master_dataset.csv
 

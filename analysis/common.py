@@ -86,19 +86,43 @@ DATASETS = {
                 "calibration LINEAR+LATENCY redo and 'current''s own retained CRASH rows -- kept "
                 "for audit/history, not intended as a live analysis input.",
     },
-    "current": {
-        "path": DATA_DIR / "master_dataset.csv",
-        "n_expected": 704,   # 380 retained CRASH rows + 324 re-collected LATENCY rows (162/topology)
+    "v6_pre_d17_leg_blend_crash": {
+        "path": DATA_DIR / "master_dataset_v6_pre_d17_leg_blend_crash.csv",
+        "n_expected": 704,
         "blast_scale": 1.0,
         "blast_denominator": 4,
         "leg_node_set": "4",
-        "note": "Post-metric-change rebuild. blast_radius and the leg vector finally range "
-                "over the SAME four CB-bearing subjects, so cross-metric checks are exact. "
-                "LATENCY rows were fully re-collected (both topologies) after the "
-                "LOAD_CONCURRENCY fix -- see v4_flat_concurrency above for the pre-fix archive. "
-                "Complete as of 2026-09-03: 704/704 rows, 0 quarantined by analysis/quarantine.py "
-                "(no STATE_LEAK/RECOVERY_TIMEOUT_HANG/LAMBDA_DEVIATION hits). LINEAR+LATENCY "
-                "collected on soham-local, FANOUT+LATENCY on codespace -- see "
+        "note": "Full pre-D17-fix snapshot of 'current' (704 rows: 380 CRASH + 324 LATENCY), "
+                "kept for audit before the 380 CRASH rows were removed from the live file and "
+                "re-collected under the corrected compute_leg_failure_rates() (max-of-breakers, "
+                "commit 723863d, PR #45). Every CRASH row here reads order-service's AND "
+                "inventory-service's leg_failure_rates at exactly 0.5000 (zero variance, "
+                "380/380, confirmed in PR #44) -- the D17 leg-blending bug saturating at a "
+                "deterministic ceiling (CRASH drives one breaker to ~100% failure, its sibling "
+                "reads 0%, average is exactly 50%). The 324 LATENCY rows here are ALSO computed "
+                "through the same pre-fix blending path and are technically diluted too, just "
+                "not to a hard ceiling (LATENCY's partial/probabilistic failure doesn't collapse "
+                "the average the way CRASH's near-total failure does) -- they were carried "
+                "forward into 'current' UNCHANGED because D15's LATENCY-only separation claim "
+                "already held on this data and a LATENCY re-collection is a separate, later "
+                "decision, not because they're unaffected. Superseded once CRASH re-collection "
+                "lands in 'current'.",
+    },
+    "current": {
+        "path": DATA_DIR / "master_dataset.csv",
+        "n_expected": 324,   # 324 retained LATENCY rows; CRASH rows removed pending re-collection (v6 above)
+        "blast_scale": 1.0,
+        "blast_denominator": 4,
+        "leg_node_set": "4",
+        "note": "TEMPORARILY LATENCY-ONLY (2026-09-06): the 380 CRASH rows were removed and "
+                "archived to v6_pre_d17_leg_blend_crash above, pending re-collection under "
+                "D17's fix (max-of-breakers). Update n_expected again once fresh CRASH rows "
+                "land -- see decision-log D17/D15 for the re-collection plan. "
+                "Pre-2026-09-06 history: post-metric-change rebuild, blast_radius and the leg "
+                "vector range over the SAME four CB-bearing subjects, so cross-metric checks are "
+                "exact. LATENCY rows were fully re-collected (both topologies) after the "
+                "LOAD_CONCURRENCY fix -- see v4_flat_concurrency above for that pre-fix archive. "
+                "LINEAR+LATENCY collected on soham-local, FANOUT+LATENCY on codespace -- see "
                 "master_dataset_calibration_*_overlap.csv for the cross-machine calibration "
                 "subset (6 configs x 3 replicates each direction) used to bound the host effect "
                 "before trusting a LINEAR-vs-FANOUT comparison across these two collectors.",

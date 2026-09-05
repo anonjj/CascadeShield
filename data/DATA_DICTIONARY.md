@@ -41,6 +41,10 @@ Standing rules:
 | `master_dataset_v2_latency_5svc.csv` | 162 | ✅ | 5-subject, **disjoint from leg node set** | H3 timing (160 rows after quarantine). Not containment. |
 | `master_dataset_v3_gateway_not_rebuilt.csv` | 92 | ✅ | ❌ **constant offset, 95.7% of rows** | Timing only. `blast_radius` / `real_blast_radius` must not be used as outcomes. |
 | `master_dataset_v1_prefix.csv` | 486 | ❌ **100% null** | raw 0–100 percent, 5-subject | **Nothing.** No timing was ever collected. Provenance only — never source a claim to it. |
+| `master_dataset_v6_pre_d17_leg_blend_crash.csv` | 704 | ✅ | 4-subject denominator | Timing only for its 380 CRASH rows — their `leg_failure_rates`/`order_leg`/`real_blast_radius` are diluted by the pre-D17-fix breaker-averaging bug (all read exactly 0.5000). Its 324 LATENCY rows are also diluted but not to a hard ceiling. Provenance/audit archive, not a live analysis input. |
+| `master_dataset.csv` (`current`, as of 2026-09-06) | 324 (LATENCY only) | ✅ | 4-subject denominator | LATENCY analysis only, temporarily. 380 CRASH rows removed pending re-collection under D17's fix — see `analysis/common.py`'s `DATASETS["current"]` note and `docs/paper/decision-log.md` D17/D15. |
+
+**Table above this row is otherwise stale** (row counts for the top four entries predate several sweeps; `v4_flat_concurrency`/`v5_soham_linear_presweep` aren't listed at all) — not corrected here, since a full rebuild of this table is a separate cleanup, not part of the CRASH re-collection this row documents. `analysis/common.py`'s `DATASETS` dict is the source of truth for current row counts and notes; this table should defer to it.
 
 See `docs/paper/leak-audit.md` for how each verdict was reached.
 

@@ -55,6 +55,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 LAMBDAS = [5, 20, 80, 320]           # req/s at the gateway's protected call site
 WINDOW_TYPES = ["COUNT_BASED", "TIME_BASED"]
 WINDOW_SIZES = [5, 10, 20]
+MATCHED_HORIZONS = [25, 50, 100, 200, 400, 800]
 REPLICATES = 5
 THRESHOLD = 50                       # theta, fixed
 WAIT_DURATION = 15                   # D_w seconds, fixed
@@ -124,40 +125,34 @@ def base_arm():
 
 
 def matched_horizon_arm():
-    """Pairs of settings that put COUNT and TIME on the same horizon H at a given lambda."""
-    for lam in LAMBDAS:
-        # Direction 1: hold the COUNT window, derive the TIME window.
-        for w in WINDOW_SIZES:
-            exact = w / lam
-            t = int(round(exact / RESOLUTION_S) * RESOLUTION_S)
-            feasible, reason = 1, ""
-            if t < RESOLUTION_S:
-                # At 320 req/s a 5-call horizon is 16 ms; the breaker cannot be configured
-                # that finely, so this half of the plane is simply unreachable.
-                feasible, reason = 0, ("T = W/lambda = {:.3f}s rounds below the {}s "
-                                       "configuration resolution".format(exact, RESOLUTION_S))
-            elif lam * t < N_MIN:
-                # Fewer than minimumNumberOfCalls arrive inside the window, so the breaker
-                # never evaluates and t_open is null by construction, not by measurement.
-                feasible, reason = 0, ("only {:.1f} calls arrive in T = {}s at lambda = {}, "
-                                       "below n_min = {}".format(lam * t, t, lam, N_MIN))
-            for rep in range(1, REPLICATES + 1):
-                yield _row("matched_horizon", "TIME_BASED", t, lam, w, rep, direction="T_from_W",
-                           matched_to_count_w=w, feasible=feasible, reason=reason, id_horizon=w)
+    """Pairs of settings that put COUNT and TIME on the same horizon H at a given lambda.
 
-        # Direction 2: hold the TIME window, derive the COUNT window. This is the direction
-        # that actually reaches high lambda, until W outruns the configurable ceiling.
-        for t in WINDOW_SIZES:
-            w = int(round(lam * t))
-            feasible, reason = 1, ""
+    Both window types are derived FROM the same shared H (MATCHED_HORIZONS), so a feasible
+    COUNT_BASED row and a feasible TIME_BASED row at the same (H, lambda) are a genuine
+    matched pair -- id_horizon is H itself on both, enabling an exact join for H1."""
+    for lam in LAMBDAS:
+        for h in MATCHED_HORIZONS:
+            w = h
+            w_feasible, w_reason = 1, ""
             if w > MAX_COUNT_WINDOW:
-                feasible, reason = 0, ("W = lambda*T = {} calls exceeds the {}-call "
-                                       "slidingWindowSize ceiling".format(w, MAX_COUNT_WINDOW))
-            elif w < N_MIN:
-                feasible, reason = 0, ("W = lambda*T = {} calls is below n_min = {}".format(w, N_MIN))
+                w_feasible, w_reason = 0, ("W = H = {} calls exceeds the {}-call "
+                                           "slidingWindowSize ceiling".format(w, MAX_COUNT_WINDOW))
             for rep in range(1, REPLICATES + 1):
-                yield _row("matched_horizon", "COUNT_BASED", w, lam, w, rep, direction="W_from_T",
-                           matched_to_count_w=t, feasible=feasible, reason=reason, id_horizon=w)
+                yield _row("matched_horizon", "COUNT_BASED", w, lam, h, rep, direction="W_eq_H",
+                           matched_to_count_w=h, feasible=w_feasible, reason=w_reason, id_horizon=h)
+
+            exact = h / lam
+            t = int(round(exact / RESOLUTION_S) * RESOLUTION_S)
+            t_feasible, t_reason = 1, ""
+            if t < RESOLUTION_S:
+                t_feasible, t_reason = 0, ("T = H/lambda = {:.3f}s rounds below the {}s "
+                                          "configuration resolution".format(exact, RESOLUTION_S))
+            elif lam * t < N_MIN:
+                t_feasible, t_reason = 0, ("only {:.1f} calls arrive in T = {}s at lambda = {}, "
+                                          "below n_min = {}".format(lam * t, t, lam, N_MIN))
+            for rep in range(1, REPLICATES + 1):
+                yield _row("matched_horizon", "TIME_BASED", t, lam, h, rep, direction="T_eq_H_over_lambda",
+                           matched_to_count_w=h, feasible=t_feasible, reason=t_reason, id_horizon=h)
 
 
 def null_arm():

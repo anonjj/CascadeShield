@@ -62,11 +62,11 @@ keeping 92 usable $t_{\text{open}}$ values is the correct trade.
 
 ## D-003 · The matched-horizon comparison is tested on a diagonal band, and the paper says so
 
-**Date:** Day 2 (Tue 11 Aug 2026) · **Decided by:** Soham · **Status:** final
+**Date:** Day 2 (Tue 11 Aug 2026) · **Decided by:** Soham · **Status:** SUPERSEDED by D18 (Sep 6)
 
-**Decision.** The matched-horizon arm derives the partner window in **both** directions —
-$T = W/\lambda$ and $W = \lambda T$ — and infeasible cells are emitted with `feasible = 0` and a
-stated reason rather than dropped.
+**Decision (as originally made).** The matched-horizon arm derives the partner window in
+**both** directions — $T = W/\lambda$ and $W = \lambda T$ — and infeasible cells are emitted
+with `feasible = 0` and a stated reason rather than dropped.
 
 **Numbers** (`data/canary_matrix.csv`): matching in the plan's single direction
 ($T = W/\lambda$) yields **3 usable configurations out of 12**. $T$ falls below Resilience4j's
@@ -74,8 +74,15 @@ one-second resolution for every $\lambda > 5$ with $W \in \{5, 10, 20\}$. Adding
 direction recovers 12 usable configurations spanning $H = 5$ to $H = 800$, bounded above by the
 1000-call `slidingWindowSize` ceiling ($\lambda = 320$, $T = 20$ would need $W = 6400$).
 
-**Consequence:** H1 is testable on a diagonal band of the $(\lambda, H)$ plane, not on the full
-plane. Section VII states this as a design limit rather than letting a reviewer find the gap.
+**Consequence (as originally stated):** H1 is testable on a diagonal band of the
+$(\lambda, H)$ plane, not on the full plane.
+
+**Why this is wrong, found Sep 5-6:** the "diagonal band" was never actually a band of
+*matched* comparisons — both directions independently derived a horizon from $W$, but treated
+$W$ as a different quantity in each ($W$ held directly vs. $W$ used to compute $T$), so the
+feasible horizon sets landed on two disjoint numeric ranges: COUNT-side $\{25,50,100,200,
+400,800\}$, TIME-side $\{5,10,20\}$. Zero overlap — H1 was **untestable**, not merely
+band-limited, no matter how many replicates were collected. See D18 for the fix and result.
 
 ---
 
@@ -495,3 +502,76 @@ effect (Welch's t ≈ 110–120 on `lambda_achieved`, ~8pp gap, consistent acros
 FANOUT). D16 needs its own update citing this verdict — not folded into D17 since it's a
 distinct finding about a distinct metric.
 
+
+---
+
+## D18 · Matched-horizon grid fixed (D-003's "diagonal band" was actually zero overlap); H1 result
+
+**Date:** Sep 6, 2026 · **Decided by:** Soham + Jay (harness), verified via chat session ·
+**Status:** final
+
+**Root cause.** `matched_horizon_arm()` derived each window type's horizon independently:
+COUNT_BASED held $W$ directly from `WINDOW_SIZES = {5,10,20}$; TIME_BASED derived $T$ from the
+same list treated as a *different* quantity ($T = W/\lambda$). The two feasible horizon sets
+never intersected — COUNT landed on $\{25,50,100,200,400,800\}$ (from the reverse direction,
+$W=\lambda T$), TIME on $\{5,10,20\}$. Disjoint by construction. D-003 mischaracterized this as
+a "diagonal band" limiting *coverage*; it was actually zero overlap, meaning H1 (COUNT vs TIME
+at equal horizon) was **untestable**, not merely under-covered, regardless of replicate count.
+
+**Fix.** Both window types now derive from one shared `MATCHED_HORIZONS = [25,50,100,200,400,
+800]$ list at each $\lambda$: $W = H$ exactly for COUNT_BASED, $T = \text{round}(H/\lambda)$
+for TIME_BASED. A feasible pair at the same $(H, \lambda)$ is now a genuine matched comparison.
+Verified pre-collection: 20 matched $(\lambda, H)$ pairs feasible across all 4 lambdas (was 0).
+Branch `fix/d17-leg-metric-blend`, `experiments/canary_matrix.py`.
+
+**Harness issues found while collecting the fixed grid** (both pre-existing, not introduced by
+this fix):
+- **Windows timer resolution.** Soham's local machine (`time.sleep()`-paced dispatch loop)
+  could not sustain $\lambda \geq 20$ req/s reliably — `lambda_deviation_flag` fired on 213/301
+  rows collected there, median deviation 23%, up to 80% at $\lambda=320$. Reproduced on
+  Codespace (Linux) at $\lambda=80$: 3.5% deviation, not flagged. Root cause is Windows'
+  ~15ms `time.sleep()` granularity colliding with sub-15ms dispatch intervals at high
+  $\lambda$, compounded by GIL/thread-pool overhead when `concurrency` scales into the
+  thousands. **Collection for this arm moved to Soham's Codespace as a result.** This affects
+  the historical base/null_control arms collected on Soham's local machine too (same
+  mechanism) — flagged here for awareness, not re-litigated as part of D18.
+- **$\lambda=320$ + TIME_BASED is a genuine resource ceiling, not a bug.** A 1-second TIME
+  window at $\lambda=320$ demands ~8300 requests dispatched in ~26s against a 3s latency fault;
+  the container mesh saturates and the gateway itself becomes unreachable
+  (`Failed to query blast radius from Gateway: timed out`). The runner correctly aborts these
+  rather than writing a fabricated row. All 15 $\lambda=320$ TIME_BASED matched-horizon cells
+  failed this way on Codespace; $\lambda=320$ COUNT_BASED partially survived (25/30).
+- **`arm` is still not in `runner.py`'s `DATASET_HEADERS`**, so it never lands in the results
+  CSV — same root cause as the Sep 5 canary-matrix Bug 1. Recovering it via a blind
+  `(run_index, replicate)` join against the current `data/canary_matrix.csv` is **unsafe**:
+  `run_index` is assigned by a seeded shuffle over whichever rows are in that generation call,
+  so regenerating the design file with `--arms matched_horizon` only reassigns `run_index`
+  from scratch, with no relationship to the numbering the original Sep 5 full-arm generation
+  used for the historical base/null_control rows. Joining today's design file against the full
+  results file would silently mislabel those old rows. Worked around for this readout by
+  scoping to `machine_id` (today's Codespace collection is the only data from that machine,
+  and is entirely `matched_horizon` by construction) rather than fixing `DATASET_HEADERS`
+  itself. **Still open:** `DATASET_HEADERS` should get an `arm` column so this stops being a
+  recurring one-off fix.
+
+**Result (n=200, Sep 6 Codespace collection, LINEAR+LATENCY, $\lambda \in \{5,20,80\}$ plus
+partial $\lambda=320$ COUNT_BASED only):** H1 is **not supported**. Across all 6 matched
+horizons ($H=25,50,100,200,400,800$), no mean difference or variance ratio between COUNT_BASED
+and TIME_BASED `time_to_open` survives Holm-Bonferroni correction (smallest corrected
+$p=0.22$, at $H=25$). Effect sizes are negligible-to-small (Cliff's $\delta$ 0.00–0.33).
+
+**Interpretation:** the original uncorrected "TIME_BASED opens slower" narrative was very
+likely an artifact of comparing unmatched horizons, not a real mechanism difference. Once
+horizon is actually held equal, the two window types are statistically indistinguishable on
+`time_to_open` — consistent with (though not proof of) the $N$ vs $\lambda T$ equivalence
+identity. Report as "data consistent with equivalence," not "equivalence established" — a
+non-significant Welch $p$ does not prove equal means, it fails to reject.
+
+**Threats to validity:** $\lambda=320$ contributes no TIME_BASED data at all (harness ceiling
+above), so the equivalence claim is empirically grounded at $\lambda \in \{5,20,80\}$ only;
+$\lambda=320$ is a coverage gap, not a tested-and-passed cell.
+
+**Revisit if:** `DATASET_HEADERS` gains `arm` (removes the machine_id workaround for future
+readouts); someone wants $\lambda=320$ TIME_BASED coverage badly enough to fix the dispatch
+loop's timing precision (async dispatch or `time.perf_counter()`-based pacing) rather than
+accepting the gap.

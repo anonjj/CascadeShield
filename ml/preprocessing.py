@@ -65,8 +65,11 @@ OUTCOME_COLUMNS = ["blast_radius", "time_to_open", "time_to_recover",
                    "error_rate", "throughput_loss"]
 # Non-feature columns carried for provenance/analysis only. permitted_calls_half_open
 # and mode are fixed operational knobs in this sweep (const 5 / "full"), not features.
+# machine_id (D14) is provenance only, same as environment -- distinguishes which host/
+# Codespace produced a row (D16 cross-machine calibration), never a model feature.
 PROVENANCE_COLUMNS = ["experiment_id", "permitted_calls_half_open",
-                      "environment", "mode", "replicate", "run_timestamp"]
+                      "environment", "mode", "replicate", "run_timestamp",
+                      "machine_id"]
 # 17-column real contract, in file order.
 SCHEMA_COLUMNS = (["experiment_id"] + FEATURE_COLUMNS
                   + ["permitted_calls_half_open", "environment", "mode",

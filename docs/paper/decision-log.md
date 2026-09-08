@@ -97,11 +97,8 @@ plane. Section VII states this as a design limit rather than letting a reviewer 
 
 ## D-004 · Day-2 Gate — which paper gets written
 
-**Date:** Day 2 (Tue 11 Aug 2026) · **Decided by:** Soham + Jay, jointly · **Status:** ⏳ PENDING CANARY
-
-> **This entry is not yet a decision.** It is filled in from
-> `analysis/out/canary_readout.json` the evening the canary finishes, and closed before
-> midnight on Day 2.
+**Date:** Day 2 (Tue 11 Aug 2026); closed out retroactively 2026-09-08 (Soham) once the
+canary matrix run existed to read · **Decided by:** Soham + Jay, jointly · **Status:** final — **Paper B**
 
 ### Gate table
 
@@ -114,36 +111,66 @@ plane. Section VII states this as a design limit rather than letting a reviewer 
 `analysis/canary_readout.py` prints the recommendation directly. Its three branches are verified
 against synthetic data (`--self-test`); the gate logic is not decided by hand at 23:00.
 
-### Preconditions — check these before reading the gate
+**Provenance note on the read.** The canary matrix run (`data/canary_matrix_runs.csv`, codespace,
+300/300, 0 aborted, PR pending on `data/canary-matrix-codespace-full`) never persisted an `arm`
+column — it isn't in `runner.DATASET_HEADERS`. Read here by joining the run results back onto the
+design file `data/canary_matrix.csv` on `(run_index, replicate)` — not `experiment_id`, which the
+design file predates the `-M{n_min}` suffix on. That join is a read-time reconstruction for this
+entry only; `arm` still isn't persisted by the harness itself, so any future read of this file
+needs the same join. 60/120 designed `matched_horizon` rows came back feasible (0 nulls after the
+join) — matches D3's stated split.
 
-- [ ] **$\lambda$ fidelity.** `lambda_achieved` recorded, and within 15% of target. If it was
-      never recorded, **H1 and H2 cannot be claimed at all** — the independent variable is
-      unmeasured. This is a hard blocker, not a caveat, and it is Jay's Day-2 instrumentation.
-- [ ] **Monotone trip rate.** If trip rate *falls* as $\lambda$ rises for either window type,
-      no mechanism explains that. Stop and diagnose the harness before reading anything else.
-- [ ] **`precondition_ok`** true on every row (breakers asserted CLOSED before each run).
-- [ ] **Mode-mixing check.** Per the leak audit, TIME_BASED $t_{\text{open}}$ is bimodal
-      (−2.70 s displacement, 4 configs). Before claiming H1, establish whether any variance gap
-      is a **sampling property** or a **mixing proportion between two discrete modes**. If it is
-      mixing, H1 as stated is not supported and the finding is different — and more interesting.
+### Preconditions — checked before reading the gate
 
-### To be filled in
+- [x] **$\lambda$ fidelity.** Recorded (`lambda_achieved`, `lambda_deviation_flag`) on all 300
+      rows. 38 of 300 (12.7%) missed target by >15%, concentrated at $\lambda$=80/320 — see
+      numbers below. Not a blocker (D3-documented already: this is the harness's real ceiling
+      at high offered load), but H2/H1 are read off `lambda_achieved`, never `lambda_target`.
+- [x] **Monotone trip rate.** Flat at 1.00 in every cell for both window types — never falls,
+      so no harness-diagnosis flag raised. (Flat-at-ceiling is itself the H2 result, not a
+      measurement fault — see below.)
+- [x] **`precondition_ok`** true on all 300/300 rows.
+- [ ] **Mode-mixing check.** Not reached — H1 never gets past the horizon-overlap check (see
+      below), so there is no variance-gap claim to disambiguate as sampling vs. bimodal mixing.
+
+### Filled in
 
 ```
-Decision:              Paper ___
-H2 crossover:          TIME_BASED ___ (bracket: lambda in [___, ___] req/s)
-                       COUNT_BASED ___ (must be absent for H2 as stated)
-H1 at matched H:       Welch p = ___ (Holm ___), difference ___ s, 95% CI [___, ___]
-                       Brown-Forsythe W = ___, p = ___ (Holm ___)
-                       sd COUNT ___ vs TIME ___, Cliff's delta ___ (___)
-Mode-mixing verdict:   ___
-phi (false-trip rate): ___ [___, ___] over ___ null-fault runs
-lambda fidelity:       ___ of ___ runs off target; worst deviation ___
-Signed:                Soham ___  Jay ___
+Decision:              Paper B — construct validity (H3 + H5 + H4 + metric-evolution narrative)
+H2 crossover:          TIME_BASED absent -- trip rate 1.00 [0.80, 1.00] at every
+                       lambda in {5, 20, 80, 320}; no lambda low enough in this design
+                       to see TIME_BASED fail to trip
+                       COUNT_BASED absent -- same, trip rate 1.00 at every lambda (consistent
+                       with H2 as stated, which predicts absence here)
+H1 at matched H:       NOT TESTABLE. The matched_horizon design (data/canary_matrix.csv, as
+                       collected) put COUNT_BASED horizons at {25,50,100,200,400,800} and
+                       TIME_BASED at {5,10,20} -- disjoint, zero overlapping H with >=3
+                       tripped runs on both sides at any of the 9 horizon values observed.
+                       (The generator itself was already fixed for this on main --
+                       commit 6b045b4, shared MATCHED_HORIZONS list -- but this run predates
+                       a re-generation of data/canary_matrix.csv against the fixed code, so
+                       the fix doesn't reach this dataset. Re-running the matched_horizon arm
+                       against the regenerated design is what would make H1 testable, per D3.)
+Mode-mixing verdict:   not reached (H1 untestable upstream of this check)
+phi (false-trip rate): 0.000 [0.000, 0.031] over 120 null-fault runs
+lambda fidelity:       38 of 300 runs off target (>15%); worst deviation 35.3%
+                       (by lambda_target: 5 and 20 -- 0 off; 80 -- 23 off; 320 -- 15 off)
+Signed:                Soham 2026-09-08
 ```
+
+**Consequence.** Per the gate table, absent crossover closes out Paper A and A′ outright — H2
+does not distinguish window types at any sampled $\lambda$, so there's no "estimator" claim to
+build a paper around from this arm. **Paper B is confirmed**: H3 (recovery-side leak, D13),
+H5 (FAN_OUT leg containment, D15), H4 ($\tau_{\text{leg}}$ curve, D-001), and the metric-evolution
+narrative (D17 and its downstream corrections) are the load-bearing chapters, not H1/H2.
 
 **Not reopened on Day 4.** The Day-4 gate decides whether the *data* supports the chosen paper.
 It does not reconsider which paper.
+
+**Revisit if:** the matched_horizon arm is re-run against the regenerated `data/canary_matrix.csv`
+(post 6b045b4) and H1 becomes testable — a positive H1 result alone does not reopen this gate
+(H2's absence already rules out Paper A/A′ on its own), but would add an H1 finding to Paper B's
+scope rather than change which paper this is.
 
 ---
 
@@ -500,9 +527,11 @@ automatically extend to a new host without its own calibration block.
 ## D17 · `leg_failure_rates` blends two circuit breakers per service — `real_blast_radius` structurally cannot register a fully-failed single-edge fault
 
 **Date:** 2026-09-04 (ad hoc investigation, surfaced while validating the canary-matrix
-executor) · **Decided by:** Jay (finding confirmed); remediation pending Soham's sign-off,
-same as D-001's own $\tau_{\text{leg}}$ treatment · **Status:** finding final; fix built and
-signed off by Soham (`723863d`, option c), pending merge
+executor) · **Decided by:** Jay (finding confirmed); remediation signed off by Soham,
+same as D-001's own $\tau_{\text{leg}}$ treatment · **Status:** final — fix merged to `main`
+(PR #45, `0c64ca4`) 2026-09-06. CRASH re-collection (LINEAR, post-fix, 162/162 clean) has
+started on `data/crash-recollect-linear` (`644c42c`); D-001/D15 stay flagged for
+re-derivation until that re-collection is complete on both topologies.
 
 **Decision.** `real_blast_radius` and `leg_failure_rates` for **order-service,
 inventory-service, and payment-service**, in every row collected before this fix lands, must

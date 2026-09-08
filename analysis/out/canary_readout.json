@@ -1,0 +1,264 @@
+{
+  "self_test": false,
+  "n_rows": 300,
+  "lambda_fidelity": {
+    "deviation_flag_source": "runner.lambda_deviation_flag",
+    "deviation_threshold": 0.15,
+    "available": true,
+    "n_runs": 300,
+    "n_off_target": 38,
+    "share_off_target": 0.12666666666666668,
+    "worst_relative_deviation": 0.353085,
+    "median_lambda_cv": 0.0066,
+    "by_target": {
+      "5.0": {
+        "achieved_mean": 4.994493333333333,
+        "n_off_target": 0
+      },
+      "20.0": {
+        "achieved_mean": 19.913705454545454,
+        "n_off_target": 0
+      },
+      "80.0": {
+        "achieved_mean": 72.78365600000001,
+        "n_off_target": 23
+      },
+      "320.0": {
+        "achieved_mean": 263.3479566666667,
+        "n_off_target": 15
+      }
+    },
+    "verdict": "38 of 300 runs missed their target lambda by more than 15% -- report results against lambda_achieved, never lambda_target"
+  },
+  "H2": {
+    "n_rows_used": 120,
+    "table": [
+      {
+        "window_type": "COUNT_BASED",
+        "lambda_target": 5.0,
+        "n": 15,
+        "n_tripped": 15,
+        "trip_rate": 1.0,
+        "ci_lo": 0.7961107336956521,
+        "ci_hi": 1.0,
+        "mean_t_open": 4.111133333333333
+      },
+      {
+        "window_type": "COUNT_BASED",
+        "lambda_target": 20.0,
+        "n": 15,
+        "n_tripped": 15,
+        "trip_rate": 1.0,
+        "ci_lo": 0.7961107336956521,
+        "ci_hi": 1.0,
+        "mean_t_open": 3.3688666666666673
+      },
+      {
+        "window_type": "COUNT_BASED",
+        "lambda_target": 80.0,
+        "n": 15,
+        "n_tripped": 15,
+        "trip_rate": 1.0,
+        "ci_lo": 0.7961107336956521,
+        "ci_hi": 1.0,
+        "mean_t_open": 3.2678666666666674
+      },
+      {
+        "window_type": "COUNT_BASED",
+        "lambda_target": 320.0,
+        "n": 15,
+        "n_tripped": 15,
+        "trip_rate": 1.0,
+        "ci_lo": 0.7961107336956521,
+        "ci_hi": 1.0,
+        "mean_t_open": 3.3304
+      },
+      {
+        "window_type": "TIME_BASED",
+        "lambda_target": 5.0,
+        "n": 15,
+        "n_tripped": 15,
+        "trip_rate": 1.0,
+        "ci_lo": 0.7961107336956521,
+        "ci_hi": 1.0,
+        "mean_t_open": 8.861066666666666
+      },
+      {
+        "window_type": "TIME_BASED",
+        "lambda_target": 20.0,
+        "n": 15,
+        "n_tripped": 15,
+        "trip_rate": 1.0,
+        "ci_lo": 0.7961107336956521,
+        "ci_hi": 1.0,
+        "mean_t_open": 5.996733333333333
+      },
+      {
+        "window_type": "TIME_BASED",
+        "lambda_target": 80.0,
+        "n": 15,
+        "n_tripped": 15,
+        "trip_rate": 1.0,
+        "ci_lo": 0.7961107336956521,
+        "ci_hi": 1.0,
+        "mean_t_open": 4.414599999999999
+      },
+      {
+        "window_type": "TIME_BASED",
+        "lambda_target": 320.0,
+        "n": 15,
+        "n_tripped": 15,
+        "trip_rate": 1.0,
+        "ci_lo": 0.7961107336956521,
+        "ci_hi": 1.0,
+        "mean_t_open": 9.946933333333334
+      }
+    ],
+    "per_window_type": {
+      "COUNT_BASED": {
+        "crossover_present": false,
+        "lambda_star_lower": null,
+        "lambda_star_upper": null,
+        "max_trip_rate": 1.0,
+        "min_trip_rate": 1.0
+      },
+      "TIME_BASED": {
+        "crossover_present": false,
+        "lambda_star_lower": null,
+        "lambda_star_upper": null,
+        "max_trip_rate": 1.0,
+        "min_trip_rate": 1.0
+      }
+    },
+    "non_monotone_window_types": [],
+    "h2_supported": false,
+    "h2_verdict": "no crossover in TIME_BASED -- H2 not supported",
+    "trip_by_window_type_overall": null
+  },
+  "H1": {
+    "testable": false,
+    "n_horizons_tested": 0,
+    "by_horizon": [
+      {
+        "horizon": 5.0,
+        "n_count": 0,
+        "n_time": 5,
+        "testable": false,
+        "reason": "fewer than 3 tripped runs on one side"
+      },
+      {
+        "horizon": 10.0,
+        "n_count": 0,
+        "n_time": 5,
+        "testable": false,
+        "reason": "fewer than 3 tripped runs on one side"
+      },
+      {
+        "horizon": 20.0,
+        "n_count": 0,
+        "n_time": 10,
+        "testable": false,
+        "reason": "fewer than 3 tripped runs on one side"
+      },
+      {
+        "horizon": 25.0,
+        "n_count": 5,
+        "n_time": 0,
+        "testable": false,
+        "reason": "fewer than 3 tripped runs on one side"
+      },
+      {
+        "horizon": 50.0,
+        "n_count": 5,
+        "n_time": 0,
+        "testable": false,
+        "reason": "fewer than 3 tripped runs on one side"
+      },
+      {
+        "horizon": 100.0,
+        "n_count": 10,
+        "n_time": 0,
+        "testable": false,
+        "reason": "fewer than 3 tripped runs on one side"
+      },
+      {
+        "horizon": 200.0,
+        "n_count": 5,
+        "n_time": 0,
+        "testable": false,
+        "reason": "fewer than 3 tripped runs on one side"
+      },
+      {
+        "horizon": 400.0,
+        "n_count": 10,
+        "n_time": 0,
+        "testable": false,
+        "reason": "fewer than 3 tripped runs on one side"
+      },
+      {
+        "horizon": 800.0,
+        "n_count": 5,
+        "n_time": 0,
+        "testable": false,
+        "reason": "fewer than 3 tripped runs on one side"
+      }
+    ],
+    "means_indistinguishable": false,
+    "variance_differs": false,
+    "h1_supported": false,
+    "h1_verdict": "no variance gap survives Holm correction -- H1 not supported",
+    "note": "Non-significant Welch p does NOT prove equal means; it fails to reject. Report the CI on the difference and say the data are consistent with equality, never that equality is established."
+  },
+  "phi": {
+    "available": true,
+    "phi_overall": 0.0,
+    "n": 120,
+    "ci_lo": 0.0,
+    "ci_hi": 0.031020271055929513,
+    "by_cell": [
+      {
+        "window_type": "COUNT_BASED",
+        "lambda_target": 20.0,
+        "n": 30,
+        "n_false_trips": 0,
+        "phi": 0.0,
+        "ci_lo": 0.0,
+        "ci_hi": 0.113517091390478
+      },
+      {
+        "window_type": "COUNT_BASED",
+        "lambda_target": 80.0,
+        "n": 30,
+        "n_false_trips": 0,
+        "phi": 0.0,
+        "ci_lo": 0.0,
+        "ci_hi": 0.113517091390478
+      },
+      {
+        "window_type": "TIME_BASED",
+        "lambda_target": 20.0,
+        "n": 30,
+        "n_false_trips": 0,
+        "phi": 0.0,
+        "ci_lo": 0.0,
+        "ci_hi": 0.113517091390478
+      },
+      {
+        "window_type": "TIME_BASED",
+        "lambda_target": 80.0,
+        "n": 30,
+        "n_false_trips": 0,
+        "phi": 0.0,
+        "ci_lo": 0.0,
+        "ci_hi": 0.113517091390478
+      }
+    ]
+  },
+  "gate": {
+    "paper": "B",
+    "days_3_7_pivot": "Drop lambda from the sweep. Spend Days 3-4 on FAN_OUT + TREE breadth. H3 + H5 + H4 + the metric-evolution narrative.",
+    "h2_supported": false,
+    "variance_gap_significant": false,
+    "reminder": "Write this into docs/paper/decision-log.md with the supporting numbers tonight. Do not revisit it on Day 4."
+  }
+}

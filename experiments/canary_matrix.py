@@ -1,51 +1,8 @@
-"""Day 2 (Soham) -- generate the lambda canary run matrix.
+"""Generates the exploratory lambda canary run matrix across base,
+matched-horizon, and null-fault control arms.
 
-This is the decision matrix. It does not test a hypothesis so much as choose which paper
-gets written: whether detection latency depends on arrival rate in a way that makes the
-sliding window a load-dependent estimator (Paper A), or does not (Paper B).
-
-DESIGN
-------
-Base arm -- the nominal comparison, the one the paper argues is invalid:
-
-    lambda in {5, 20, 80, 320} req/s
-    x window_type in {COUNT_BASED, TIME_BASED}
-    x window_size in {5, 10, 20}          (calls under COUNT, seconds under TIME)
-    x 5 replicates                         = 120 runs
-
-  LINEAR / LATENCY, theta = 0.50, D_w = 15 s throughout, so window type and lambda are the
-  only things moving.
-
-Matched-horizon arm -- the comparison that is actually fair:
-
-  A COUNT window of W calls and a TIME window of T seconds only see the same number of
-  calls when H = W = lambda * T. Comparing COUNT W=20 against TIME T=20 s at 80 req/s is
-  comparing a 20-call horizon against a 1600-call horizon, which is why the existing
-  "TIME is slower" result means nothing.
-
-  The plan matches by deriving T = W / lambda, and that direction turns out to be almost
-  entirely unreachable: with W in {5, 10, 20}, T drops below one second for every lambda
-  above 5 req/s, and Resilience4j's window is a whole number of seconds. Taken alone it
-  yields three usable configurations out of twelve.
-
-  So both directions are emitted:
-
-    T_from_W  T = round(W / lambda)  -- reachable only at low lambda
-    W_from_T  W = round(lambda * T)  -- reachable until W outruns MAX_COUNT_WINDOW
-
-  Between them the matched comparison covers a diagonal band of the (lambda, H) plane, and
-  the band is the honest statement of where H1 can be tested at all. Cells outside it are
-  emitted with `feasible = 0` and a stated reason rather than dropped, so the read-out
-  reports unreachable design space instead of quietly not covering it.
-
-Null-fault control arm -- fault_type = NONE, 10 replicates per (window_type, window_size)
-at the middle two lambdas. Without these there is no false-trip rate phi, and with no phi
-no configuration can be called safe. The sprint plan puts phi in the mandatory control DVs;
-this is where the rows come from.
-
-Usage:  python experiments/canary_matrix.py [--out data/canary_matrix.csv]
+Outputs to data/canary_matrix.csv.
 """
-
 import argparse
 import csv
 from pathlib import Path

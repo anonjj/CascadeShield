@@ -10,5 +10,7 @@ public class DownstreamRejectedException extends RuntimeException {
         this.status = status;
     }
 
-    public HttpStatusCode getStatus() { return status; }
+    public HttpStatusCode getStatus() {
+        return status;
+    }
 }

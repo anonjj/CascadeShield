@@ -4,7 +4,7 @@ import json
 import sys
 
 class ToxiproxyClient:
-    def __init__(self, base_url="http://localhost:8474"):
+    def __init__(self, base_url="http://localhost:8474"): #shopify rest api
         self.base_url = base_url
 
     def _request(self, path, method="GET", data=None):

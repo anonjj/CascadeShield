@@ -30,16 +30,11 @@ services:
   dynamodb-local:
     image: amazon/dynamodb-local:2.2.0
     container_name: dynamodb-local
-    command: "-jar DynamoDBLocal.jar -sharedDb -dbPath ."
+    command: "-jar DynamoDBLocal.jar -sharedDb -inMemory"
     ports:
       - "8000:8000"
     networks:
       - cascadeshield-net
-    healthcheck:
-      test: [ "CMD-SHELL", "curl -s http://localhost:8000/ | grep -q 'MissingAuthenticationToken' || exit 1" ]
-      interval: 5s
-      timeout: 5s
-      retries: 5
 
   # Toxiproxy sidecar for injecting faults
   toxiproxy:
@@ -195,7 +190,7 @@ services:
       - cascadeshield-net
     depends_on:
       dynamodb-local:
-        condition: service_healthy
+        condition: service_started
       toxiproxy:
         condition: service_healthy
       shared-db-service:

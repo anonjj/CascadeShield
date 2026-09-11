@@ -349,8 +349,15 @@ Rules that hold for the rest of the sprint:
 3. The effective sample size is the number of **configurations**, not rows. CIs on pooled
    quantities use the cluster bootstrap in `analysis/common.py`.
 4. Nulls in $t_{\text{open}}$ / $t_{\text{rec}}$ are **outcomes**, not missing data. They are
-   never mean-imputed; under H2 the null *is* the measurement.
+   never mean-imputed; under H2 the null *is* the measurement. **(D19: reported as a rate +
+   a conditional-timing distribution, never a plain mean of the non-null rows — see
+   `docs/paper/statistical-treatment.md` §3.)**
 5. Excluded rows are marked with `excluded_reason` and counted in the paper. Nothing is deleted.
+6. **(D19)** The default two-group significance test is Mann-Whitney U, always reported with
+   Cliff's delta — not a t-test. `analysis/common.py::compare_groups` /
+   `compare_censored_groups` are the only sanctioned entry points; see
+   `docs/paper/statistical-treatment.md` for the full rationale and the one script
+   (`canary_readout.py::h1_matched_horizon`) not yet migrated to it.
 
 ---
 

@@ -183,9 +183,10 @@ pending re-collection.
 |---|---|---|---|
 | 1 | FANOUT CRASH re-collection | ~6 h | A free machine (see below) |
 | 2 | Merge #47 + FANOUT, bump `n_expected` to ~648, re-run `tau_sweep.py` + `order_leg_containment.py`, update D15 / D-001 / hypotheses §5.4 | ~1 h | #1 |
-| 3 | D13/H3 replicate top-up + re-run `window_type_recovery_leak.py`, **commit `cb_transitions.jsonl`** | ~45 min | A free machine |
-| 4 | Merge #43 and #49; close #48 | minutes | — |
-| 5 | **Start writing Paper B** | — | #1–#3 |
+| 3 | D13/H3 replicate top-up + re-run `window_type_recovery_leak.py`, **commit `cb_transitions.jsonl`** | ~45 min | 🟡 **running now** on `jay-mac` (36 runs; doubles as D16's calibration block, since reps 1–3 of the same 18 configs are `soham-local`) |
+| 4 | Merge #43 and #47 (#47 waits for FANOUT) | minutes | #1 for #47 |
+| 5 | Conditional — **only if an ML result enters the paper**: drop `throughput_loss` from `ml/preprocessing.py::IF_NUMERIC_FEATURES` and re-fit, per D20's carried item. The Isolation Forest currently inherits the confound | ~min | — |
+| 6 | **Start writing Paper B** | — | #1–#3 |
 
 **Optional, no longer required:** re-running the `matched_horizon` arm against the regenerated
 design to make H1 testable (~1.5 h). Paper B doesn't need H1; per D-004 a positive result would

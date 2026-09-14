@@ -8,7 +8,7 @@
 [![Toxiproxy](https://img.shields.io/badge/Toxiproxy-2.9.0-red.svg)](https://github.com/Shopify/toxiproxy)
 [![Status: Active Research](https://img.shields.io/badge/Status-Active%20Research-yellow.svg)]()
 
-CascadeShield is a controlled experimental platform: a six-service Spring Boot mesh, a Toxiproxy fault-injection layer, a Prometheus/Grafana observability stack, and a Python sweep harness that together measure how circuit breaker parameter choices change the **blast radius** of a cascading failure. The harness's main sweep evaluates **54 circuit-breaker configurations × 2 fault classes × 3 replicates = 324 runs** per topology, alongside three purpose-built auxiliary sweeps (an occupancy-ratio grid, a crash-toxicity grid, and a λ/window-type hypothesis-gate matrix) — the full breakdown is in Appendix A. Every run logs to one of several CSVs under `data/` (schema frozen in `data/DATA_DICTIONARY.md`) that feed the project's ML/analytical pipeline (`ml/`).
+CascadeShield is a controlled experimental platform: a six-service Spring Boot mesh, a Toxiproxy fault-injection layer, a Prometheus/Grafana observability stack, and a Python sweep harness that together measure how circuit breaker parameter choices change the **blast radius** of a cascading failure. The harness's main sweep evaluates **54 circuit-breaker configurations × 2 fault classes × 3 replicates = 324 runs** per topology, alongside three purpose-built auxiliary sweeps (an occupancy-ratio grid, a crash-toxicity grid, and a λ/window-type hypothesis-gate matrix) — the full breakdown is in Appendix A. Every run logs to one of several CSVs under `data/` (schema documented in `data/DATA_DICTIONARY.md`) that feed the project's ML/analytical pipeline (`ml/`).
 
 The **primary novelty claim** is a systematic `COUNT_BASED` vs `TIME_BASED` sliding-window comparison under controlled fault conditions — a dimension largely absent from existing Resilience4j empirical literature.
 
@@ -134,7 +134,7 @@ runner.py main()
       │                                            # polls blast-radius to catch time_to_open
      10. toxiproxy.reset_all()                      # clear toxics, restore healthy mesh
      11. observer.observe_recovery(...)             # poll OPEN → HALF_OPEN → CLOSED for time_to_recover
-     12. log_results(...)                           # append a 35+-column row to the mode's dataset CSV
+     12. log_results(...)                           # append a 36-column row to the mode's dataset CSV
 ```
 
 The CB parameters flow: `runner.py` → `.env` file → compose variable substitution (`${CB_FAILURE_RATE_THRESHOLD:-50}`) → container environment → Spring's relaxed property binding → `resilience4j.circuitbreaker.configs.default.*` in each of the four downstream services' `application.yml` (the Gateway's three breakers are pinned to `measurement-plane` and never see these vars — §1.2). **Zero code changes or image rebuilds between runs** — only container recreation with new env values.
@@ -450,7 +450,7 @@ Orchestration    Container starts out of order service_healthy gating + 60s star
 
 `permittedCallsInHalfOpenState` and `minimumNumberOfCalls` are **fixed baselines** here (5 and 5 respectively), not swept axes — `permittedCallsInHalfOpenState` was dropped from the matrix mid-project.
 
-**3 × 3 × 3 × 2 = 54 configurations × 2 fault classes (`latency`, `crash`) × 3 replicates = 324 runs per topology** (`--topology linear|fanout|mesh`; `mesh` is a routing alias for `fanout`, §1.4). Rows land in `data/master_dataset.csv` against the 35-column schema frozen in `data/DATA_DICTIONARY.md` — the two timing DVs (`time_to_open`, `time_to_recover`), blast radius (legacy CB-state and real per-leg-failure-rate variants), λ-fidelity columns (`lambda_target`/`lambda_achieved`/`lambda_cv`/`lambda_deviation_flag`), and a battery of precondition/validity columns (`precondition_ok`, `readiness_wait_s`, `warmup_requests`, `run_order_seed`, `machine_id`, `excluded_reason`, ...).
+**3 × 3 × 3 × 2 = 54 configurations × 2 fault classes (`latency`, `crash`) × 3 replicates = 324 runs per topology** (`--topology linear|fanout|mesh`; `mesh` is a routing alias for `fanout`, §1.4). Rows land in `data/master_dataset.csv` against the 36-column `DATASET_HEADERS` schema in `experiments/runner.py` (the source of truth for column count; `data/DATA_DICTIONARY.md`'s own column list has drifted and still describes a never-implemented 48-column D8 schema) — the two timing DVs (`time_to_open`, `time_to_recover`), blast radius (legacy CB-state and real per-leg-failure-rate variants), λ-fidelity columns (`lambda_target`/`lambda_achieved`/`lambda_cv`/`lambda_deviation_flag`), and a battery of precondition/validity columns (`precondition_ok`, `readiness_wait_s`, `warmup_requests`, `run_order_seed`, `machine_id`, `excluded_reason`, ...).
 
 ### `--mode canary` — pipeline smoke test
 

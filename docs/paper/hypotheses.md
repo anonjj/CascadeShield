@@ -329,9 +329,12 @@ mechanism, and what to re-derive once D17's fix lands: decision-log D15's 2026-0
 **Primary DVs:** $t_{\text{open}}$, $t_{\text{rec}}$.
 
 **Secondary DVs:** $\rho_{\text{order}}$ and the per-leg vector (continuous severity), $B$
-(containment, quartized), throughput loss, p95/p99 client latency. **D15 (Day 3+): $B$
+(containment, quartized), ~~throughput loss~~, p95/p99 client latency. **D15 (Day 3+): $B$
 retired as a reported outcome — see §5.4 and §7 — $\rho_{\text{order}}$ (`order_leg`) is the
-reported containment DV.**
+reported containment DV.** **D20 (2026-09-14): throughput loss likewise retired — the
+fault-phase load window is sized by `slidingWindowType`/`slidingWindowSize`/
+`waitDurationInOpenState`, so `throughput_loss` is confounded with the independent variable and
+no TPS-derived number appears in this paper. See §7 and decision D20.**
 
 **Control DVs (mandatory):** $\phi$ (false-trip rate under null-fault runs), missed-detection
 rate, flap count (OPEN↔CLOSED transitions per run).
@@ -380,6 +383,21 @@ Day 6:
   and stays in the dataset for reference, but the paper's containment claims rest entirely on
   the continuous `order_leg` signal (§5.4), which has the resolution the quartized metric threw
   away. Stated here plainly rather than left implicit across §4, §5, and D-001.
+- **Throughput is retired, not fixed (D20).** `throughput_loss` divides a fault-phase TPS
+  measurement against a fixed 20-request pre-fault baseline, but the fault phase's
+  `requests_count`, `concurrency` and `interval_s` all come from `compute_load_plan()`, which
+  sizes them from `slidingWindowType`, `slidingWindowSize` and `waitDurationInOpenState` — the
+  independent variables themselves. The denominator is constant while the numerator's
+  measurement window is sized by the thing under comparison, and the data shows it: across the
+  324 live rows COUNT_BASED `throughput_loss` is flat to within 0.011 (call-sized plans, near-
+  constant duration) while TIME_BASED slides monotonically with both `window_size`
+  (0.925 → 0.863) and `wait_duration` (0.854 → 0.929) (second-sized plans). The +0.166
+  between-window-type gap is not separable from the load plan that produced it. Because only
+  the ratio is written to the schema — neither raw `throughput` nor `baseline_throughput` is a
+  column — no existing row can be corrected post hoc. No TPS-derived number is reported
+  anywhere in this paper; the separate pacing-overhead defect README §4.7 used to describe was
+  fixed in `508575f` (2026-06-18), eleven weeks before this dataset was collected, and is *not*
+  the reason for the retirement.
 - **Isolating the gateway removed the only propagation path LINEAR can show, under LATENCY.**
   The `measurement-plane` fix (above) was the right call for confound control — an
   uncontrolled gateway breaker would have dominated every result. §5.3 shows a chain topology

@@ -720,3 +720,78 @@ contrast's significance, which is the same class of decision this entry's own **
 paragraph declines to make as a side effect. Pending review by this standard's author and
 Soham.
 
+---
+
+## D20 · Throughput (`throughput_loss`) is retired as a reported outcome, not repaired
+
+**Date:** 2026-09-14 · **Decided by:** roadmap item B7 · **Status:** final (reporting);
+one carried item in the ML layer, see below
+
+**Decision.** No TPS-derived number appears in any table, figure, or claim in this paper.
+`throughput_loss` is struck from the §6 secondary-DV list and moves to §7 as a stated threat.
+The column stays in the 36-column schema and in every collected dataset — retired from
+reporting, not deleted — exactly as `blast_radius` was under D15.
+
+**The bug B7 names is already fixed, and is not the reason.** `508575f` (2026-06-18) replaced
+the pacing-overhead subtraction with `execution_time = last_completion - t0`, stamping the true
+last completion inside `send_request` under the existing lock. That is, precisely, the fix
+README §4.7 still described as "queued for the Week 2 hardening pass." Every row of
+`data/master_dataset.csv` was collected 2026-09-02, eleven weeks after that commit, so no live
+row carries the fast-fail inflation. §4.7 was never reconciled against the fix; corrected in
+this same commit.
+
+**Why it is retired anyway: the measurement window is a function of the independent variable.**
+`throughput_loss = max(0.0, 1 - throughput / baseline_throughput)` (`runner.py:1391`) divides
+two `generate_load` calls that are not the same experiment:
+
+- **baseline** (`runner.py:1245`) — fixed at `requests_count=20, concurrency=3` and the default
+  50 ms pacing, roughly one second of load, identical in every run;
+- **fault phase** (`runner.py:1312`) — `requests_count`, `concurrency` and `interval_s` all come
+  from `compute_load_plan()`, which derives them from `slidingWindowType`, `slidingWindowSize`,
+  `waitDurationInOpenState` and `fault_type`.
+
+The denominator is constant; the numerator's measurement window is sized by the very factors
+under comparison. The 324 live rows carry that fingerprint exactly:
+
+| `window_type` | mean | by `window_size` 5 / 10 / 20 | by `wait_duration` 5 / 15 / 30 |
+|---|---|---|---|
+| COUNT_BASED | 0.728 | 0.734 / 0.723 / 0.726 | 0.728 / 0.727 / 0.728 |
+| TIME_BASED | 0.894 | 0.925 / 0.896 / 0.863 | 0.854 / 0.900 / 0.929 |
+
+COUNT_BASED plans are sized in calls, so the load duration barely moves and `throughput_loss`
+is flat to within 0.011 across both IVs. TIME_BASED plans are sized in seconds, so the duration
+tracks both IVs and `throughput_loss` slides monotonically with each. The between-window-type
+gap (+0.166) is therefore not separable from the load plan that produced it — the number most
+likely to be reported is the one most contaminated.
+
+**It cannot be repaired post hoc.** Neither `throughput` nor `baseline_throughput` is in
+`DATASET_HEADERS`; only the derived ratio is written. No corrected value can be recomputed from
+any existing row. A fix means re-collection: the 324 rows above took **11 h 19 min** wall-clock
+(`run_timestamp` 2026-09-02T12:01:36Z → 23:20:36Z), on top of the FANOUT CRASH re-collection
+already queued as STATUS.md's remaining-work item 1.
+
+**What retiring it costs: nothing that is claimed.** No hypothesis H1–H6 tests throughput, no
+script under `analysis/` computes it, and it appears in the paper docs exactly once — the §6
+secondary-DV list. B7's own reading is confirmed: it is not a headline DV. The headline figure
+is detection latency vs. false-trip rate (§6).
+
+**Rejected:** (a) *matching the load plans and re-collecting.* ~11 h of compute plus a schema
+change to add the two raw TPS columns, spent on a secondary DV that supports no claim, while
+the machines are needed for remaining-work items 1–3. (b) *reporting it with a caveat.* A
+reviewer who asks how the two load phases were matched has no satisfactory answer, and carrying
+one confounded number invites the same discount to be applied to the primary DVs.
+
+**Carried, not closed — the ML layer.** `ml/preprocessing.py::IF_NUMERIC_FEATURES` fits the
+Isolation Forest on `throughput_loss` alongside `blast_radius` and `error_rate`, so its anomaly
+scores inherit the confound above. Not changed here: the ML layer is Soham's, sits outside
+Paper B's hypothesis set (STATUS.md's remaining work names no ML task), and by its own README
+still runs partly on synthetic data. **If any ML result enters the paper, `throughput_loss` must
+be dropped from `IF_NUMERIC_FEATURES` and the model re-fit first.** Flagged rather than silently
+changed, for the same reason D19 declined to re-run `h1_matched_horizon` as a side effect.
+
+**Revisit if:** TPS becomes a claim this paper wants to make. Three things must land together —
+baseline and fault phases measured at the same offered rate, concurrency and duration; raw
+`throughput` and `baseline_throughput` added to the schema so the ratio is auditable; and the
+`max(0.0, ...)` clamp at `runner.py:1391` reconsidered, since it floors throughput *gain* at
+zero loss. The clamp never bites in the current all-LATENCY dataset (0 of 324 rows sit at
+0.0000) but will under CRASH, where an open breaker's fast-fail can push TPS above baseline.

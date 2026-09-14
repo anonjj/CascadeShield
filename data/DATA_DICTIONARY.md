@@ -10,7 +10,7 @@
 | Class | Columns | Rule |
 |---|---|---|
 | **Primary DVs** | `time_to_open`, `time_to_recover` | Every reported mean carries a bootstrap CI. |
-| **Secondary DVs** | `leg_failure_rates` (continuous severity), `blast_radius` / `real_blast_radius` (quartized), `throughput_loss`, p95/p99 client latency *(pending)* | $B_{\text{real}}$ is reported **as a function of $\tau_{\text{leg}}$**, never at one pinned threshold — see `analysis/tau_sweep.py` and decision D-001. **Since retired (D15):** the quartized `blast_radius`/`real_blast_radius` pair is no longer a reported outcome at all — the continuous `order_leg` value (`leg_failure_rates["order-service"]`) is, per `analysis/order_leg_containment.py`. |
+| **Secondary DVs** | `leg_failure_rates` (continuous severity), `blast_radius` / `real_blast_radius` (quartized), `throughput_loss`, p95/p99 client latency *(pending)* | $B_{\text{real}}$ is reported **as a function of $\tau_{\text{leg}}$**, never at one pinned threshold — see `analysis/tau_sweep.py` and decision D-001. **Since retired (D15):** the quartized `blast_radius`/`real_blast_radius` pair is no longer a reported outcome at all — the continuous `order_leg` value (`leg_failure_rates["order-service"]`) is, per `analysis/order_leg_containment.py`. **Since retired (D20):** `throughput_loss` is likewise no longer a reported outcome — its measurement window is sized by the swept window params, so it is confounded with the independent variable. |
 | **Control DVs** *(mandatory)* | $\phi$ false-trip rate (from `fault_type = NONE` rows ✅), missed-detection rate, `flap_count` *(pending, Jay)* | Without $\phi$ no configuration in this paper may be described as safe. |
 | **Provenance** | `experiment_id`, `environment`, `mode`, `replicate`, `run_timestamp`, `permitted_calls_half_open`, `run_index` ✅, `run_order_seed` ✅, image digests *(pending, Jay)* | Never model features. |
 | **Validity** | `excluded_reason` ✅, `precondition_ok` / `precondition_fail_reason` / `readiness_wait_s` / `cb_state_pre` / `buffered_calls_pre` ✅, `warmup_requests` / `warmup_duration_s` ✅ | Rows are marked, never deleted. `precondition_ok = False` means the run never happened; `excluded_reason` means it happened but is untrustworthy. Analyses drop both. |
@@ -237,7 +237,7 @@ past 324 (e.g. 324 configs × 2 environments × 3 replicates = 1,944 rows).
 | `time_to_open` | float | `≥ 0` | seconds | CB never opened (threshold not reached / fault too mild) → **null is meaningful, not missing** |
 | `time_to_recover` | float | `≥ 0` | seconds | system did not return to baseline within the observation window → null is meaningful |
 | `error_rate` | float | `0.0–1.0` | fraction | never null. Peak error rate across the mesh during the fault. |
-| `throughput_loss` | float | `0.0–1.0` | fraction | never null. Fractional drop in successful TPS vs the pre-fault baseline. |
+| `throughput_loss` | float | `0.0–1.0` | fraction | never null. Fractional drop in successful TPS vs the pre-fault baseline. **Retired as a reported outcome (D20) — kept for reference, never cited.** The pre-fault baseline is a fixed 20-request measurement while the fault-phase window is sized by `compute_load_plan()` from the swept window params, so this ratio is confounded with the independent variable; raw `throughput`/`baseline_throughput` are not columns, so no row can be corrected post hoc. |
 
 ### Validity / quarantine
 

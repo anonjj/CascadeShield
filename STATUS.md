@@ -37,6 +37,7 @@ Everything below is ordered by whether it blocks Paper B.
 | D15 / D-001 re-derivation after CRASH | 🔴 **Blocked** on the line above | **Yes** |
 | D13 / H3 replicate top-up | 🟡 **Preliminary** — real signal at n=1/bucket, ~45 min to fix | **Yes** |
 | Statistical treatment (D19) | ✅ **Defined** — Mann-Whitney + Cliff's δ, bootstrap CIs, censoring as rate + conditional timing. Two known deviations flagged, neither blocking | — |
+| Throughput / TPS reporting (D20) | ✅ **Retired** — `throughput_loss`'s measurement window is sized by the swept window params, so it is confounded with the IV and not repairable post hoc. No TPS number appears in the paper | — |
 | Manuscript | 🔴 **Not started** — no draft exists anywhere in the repo | — |
 
 **Two things block writing:** the FANOUT CRASH re-collection (and the re-analysis it unblocks),
@@ -164,6 +165,13 @@ pending re-collection.
    as historical record, but they point at nothing retrievable. **The backlog is the *Remaining
    work* table in this file.** Add to it here; do not start a second list somewhere a session
    can't read.
+
+   **Amendment, same day.** A **B7** card ("Drop TPS from reported results," P1) surfaced hours
+   after this was written — pasted in from a screenshot the owner still had, not from a
+   recovered board. So the board is unreachable, not provably gone, and more cards may yet
+   arrive the same way. Treat any that do as input to the *Remaining work* table, not as a
+   revival of B-numbering. B7 itself is decided and closed: **D20**, throughput retired from
+   reporting.
 5. **A stray `master_dataset.csv` sits at the repo root** (798 rows, matching the v4 archive),
    untracked and in no git history. **It is not the live file.** Delete it.
 
@@ -175,9 +183,10 @@ pending re-collection.
 |---|---|---|---|
 | 1 | FANOUT CRASH re-collection | ~6 h | A free machine (see below) |
 | 2 | Merge #47 + FANOUT, bump `n_expected` to ~648, re-run `tau_sweep.py` + `order_leg_containment.py`, update D15 / D-001 / hypotheses §5.4 | ~1 h | #1 |
-| 3 | D13/H3 replicate top-up + re-run `window_type_recovery_leak.py`, **commit `cb_transitions.jsonl`** | ~45 min | A free machine |
-| 4 | Merge #43 and #49; close #48 | minutes | — |
-| 5 | **Start writing Paper B** | — | #1–#3 |
+| 3 | D13/H3 replicate top-up + re-run `window_type_recovery_leak.py`, **commit `cb_transitions.jsonl`** | ~45 min | 🟡 **running now** on `jay-mac` (36 runs; doubles as D16's calibration block, since reps 1–3 of the same 18 configs are `soham-local`) |
+| 4 | Merge #43 and #47 (#47 waits for FANOUT) | minutes | #1 for #47 |
+| 5 | Conditional — **only if an ML result enters the paper**: drop `throughput_loss` from `ml/preprocessing.py::IF_NUMERIC_FEATURES` and re-fit, per D20's carried item. The Isolation Forest currently inherits the confound | ~min | — |
+| 6 | **Start writing Paper B** | — | #1–#3 |
 
 **Optional, no longer required:** re-running the `matched_horizon` arm against the regenerated
 design to make H1 testable (~1.5 h). Paper B doesn't need H1; per D-004 a positive result would

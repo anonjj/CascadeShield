@@ -302,6 +302,11 @@ so an unlisted column cannot reach a model. Note it is **not yet** added to that
 `PROVENANCE_COLUMNS` either — today it simply rides along unreferenced, which is safe but
 means `machine_id` is not currently loaded for the D6 grouping that motivates it.
 
+**Update (2026-09-14).** The `PROVENANCE_COLUMNS` gap above is closed — commit `2b3095d`
+("fix(ml): D14 -- add machine_id to PROVENANCE_COLUMNS") landed on `main`, so `machine_id`
+is now loaded and available for the D6 grouping. The paragraph above is kept as written
+because it records why the column was safe to add before that wiring existed.
+
 **Why:** D6's cross-machine calibration compares runs collected on different hosts. Splitting a
 sweep across machines confounds host with treatment, and nothing in the existing 47 columns
 recovers which host wrote a given row after the fact — `environment` only distinguishes

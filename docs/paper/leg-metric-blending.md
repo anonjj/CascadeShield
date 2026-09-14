@@ -3,7 +3,10 @@
 **Found:** 2026-09-04, while validating the canary-matrix executor (`research/canary-matrix-executor`)
 **Regenerate the evidence:** `python3 experiments/diagnose_leg_blend.py` (live mesh required)
 **Decision-log entry:** D17 (`docs/paper/decision-log.md`)
-**Status:** finding confirmed with live-mesh evidence; fix not yet designed or applied
+**Status:** finding confirmed with live-mesh evidence; **fix designed, built, and merged**
+(2026-09-06, option (c) — per-breaker rates, report max — commit `0c64ca4`, PR #45).
+Downstream re-derivation of D-001 and D15 is still outstanding until the CRASH re-collection
+finishes on both topologies — see `STATUS.md`.
 
 ---
 

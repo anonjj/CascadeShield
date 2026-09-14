@@ -16,6 +16,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from scipy import stats
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
@@ -267,6 +268,93 @@ def cliffs_delta(a, b):
     m = abs(d)
     label = "negligible" if m < 0.147 else "small" if m < 0.33 else "medium" if m < 0.474 else "large"
     return {"delta": d, "magnitude": label, "n_a": int(len(a)), "n_b": int(len(b))}
+
+
+def mann_whitney(a, b):
+    """Two-sided Mann-Whitney U test -- the paper's default significance test for any
+    two-group timing/count comparison (B5, docs/paper/statistical-treatment.md). Rank-based
+    and distribution-free: it makes no normality assumption, which a parametric test (Welch's
+    t) is not entitled to here -- per-cell replicate counts are small (often n < 15) and the
+    timing DVs are heavy-tailed, bounded at 0, and carry a documented TIME_BASED bimodality
+    (hypotheses.md Sec 4). Always report alongside cliffs_delta() (see compare_groups below)
+    -- a bare p-value is a rejection reason at empirical-SE venues, per the metrics contract.
+
+    NaNs are dropped before the test, mirroring cliffs_delta's own handling. This does NOT
+    make it safe to call directly on a raw column that may still hold right-censored nulls
+    (time_to_open/time_to_recover) -- for those, go through compare_censored_groups below so
+    the censored rows are accounted for as a rate, not silently discarded.
+    """
+    a = np.asarray([x for x in a if not pd.isna(x)], dtype=float)
+    b = np.asarray([x for x in b if not pd.isna(x)], dtype=float)
+    if len(a) == 0 or len(b) == 0:
+        return {"U": None, "p": None, "n_a": int(len(a)), "n_b": int(len(b))}
+    result = stats.mannwhitneyu(a, b, alternative="two-sided")
+    return {"U": float(result.statistic), "p": float(result.pvalue),
+            "n_a": int(len(a)), "n_b": int(len(b))}
+
+
+def compare_groups(a, b):
+    """THE standard two-group comparison (B5): Mann-Whitney U for significance, Cliff's delta
+    for effect size, reported together so a caller can never emit one without the other.
+    Every H1-H5 two-group contrast on an uncensored quantity should call this rather than
+    reaching for scipy.stats directly -- see docs/paper/statistical-treatment.md."""
+    return {"mann_whitney": mann_whitney(a, b), "cliffs_delta": cliffs_delta(a, b)}
+
+
+def censored_timing_summary(df, value_col, group_col="experiment_id",
+                             n_resamples=10000, alpha=0.05, seed=20260810):
+    """The mandatory report shape for a right-censored timing DV (B5: time_to_open,
+    time_to_recover). A null in value_col means the event never happened within the
+    observation window -- "breaker never opened" / "never recovered" -- and is an outcome,
+    not a missing value (metrics contract Sec 6, DATA_DICTIONARY.md). It is NEVER
+    mean-imputed and never silently dropped before averaging: doing either conditions the
+    remaining rows on the event having occurred and biases the timing comparison up or down
+    depending on how the cell's own rate compares to the other cell's -- exactly the failure
+    mode B5 exists to close off.
+
+    Returns the rate at which the event was observed at all (e.g. trip rate / recovery rate)
+    and, SEPARATELY, the timing distribution conditional on it having happened. Report both
+    numbers together, always -- never one alone.
+
+    `df` must already be restricted to the population this rate is computed over (e.g. one
+    window_type x horizon cell); this function only splits on null/non-null in value_col.
+    Both the rate and the conditional-timing CI use the cluster bootstrap over group_col
+    (bootstrap_ci_grouped) -- the same configs-not-rows unit as every other pooled quantity
+    in this paper.
+    """
+    total = df[[group_col, value_col]].copy()
+    observed_mask = total[value_col].notna()
+    rate = bootstrap_ci_grouped(
+        total.assign(_observed=observed_mask.astype(float)),
+        "_observed", group_col=group_col, n_resamples=n_resamples, alpha=alpha, seed=seed,
+    )
+    conditional = bootstrap_ci_grouped(
+        total[observed_mask], value_col, group_col=group_col,
+        n_resamples=n_resamples, alpha=alpha, seed=seed,
+    )
+    return {
+        "n_total": int(len(total)),
+        "n_observed": int(observed_mask.sum()),
+        "n_censored": int((~observed_mask).sum()),
+        "rate": rate,                       # P(event observed) -- e.g. trip rate, recovery rate
+        "conditional_timing": conditional,  # value_col | event observed. Never imputed.
+    }
+
+
+def compare_censored_groups(df_a, df_b, value_col, group_col="experiment_id"):
+    """The full two-group protocol for a right-censored timing DV (B5): compares the RATE at
+    which the event occurred (e.g. did group B trip more often than group A) and, separately,
+    compares timing conditional on the event having occurred (Mann-Whitney + Cliff's delta,
+    via compare_groups). Call this instead of hand-rolling a mean-of-non-null-rows comparison
+    -- see censored_timing_summary above and docs/paper/statistical-treatment.md."""
+    summary_a = censored_timing_summary(df_a, value_col, group_col=group_col)
+    summary_b = censored_timing_summary(df_b, value_col, group_col=group_col)
+    return {
+        "a": summary_a,
+        "b": summary_b,
+        "conditional_timing_comparison": compare_groups(
+            df_a[value_col].dropna(), df_b[value_col].dropna()),
+    }
 
 
 def holm_bonferroni(pvalues):

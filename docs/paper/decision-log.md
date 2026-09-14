@@ -667,3 +667,56 @@ falsify the "window capacity is the real ceiling" mechanism above and mean somet
 gating evaluation. Not expected: the 8-point ratio sweep already covers $n_{\min}$ both above
 and below `slidingWindowSize` and found zero exceptions.
 
+---
+
+## D19 · Statistical treatment defined: Mann-Whitney + Cliff's delta, bootstrap CIs, censoring as rate + conditional timing
+
+**Date:** 2026-09-11 · **Decided by:** roadmap item B5 · **Status:** final (implementation);
+one existing script not yet migrated, see below
+
+**Decision.** The paper's default two-group significance test is the **Mann-Whitney U test**,
+always reported with **Cliff's delta** as the effect size (`analysis/common.py::compare_groups`)
+— not a t-test. Every right-censored timing DV (`time_to_open`, `time_to_recover`) is reported
+as **two numbers, always together**: the rate at which the event was observed at all (trip
+rate / recovery rate), and the timing distribution *conditional on it having happened* —
+never a plain mean of the non-null rows, and never mean-imputed. Both halves are
+cluster-bootstrapped by `experiment_id`, consistent with the existing configs-not-rows rule.
+Full rationale and the four enforcing functions (`mann_whitney`, `compare_groups`,
+`censored_timing_summary`, `compare_censored_groups`, all in `analysis/common.py`) are in
+`docs/paper/statistical-treatment.md`.
+
+**Why now.** `hypotheses.md` §6 already stated the principles (bootstrap CI, never
+mean-impute) but not the mechanics, and `analysis/mde_power_check.py` had already gone ahead
+using Cohen's *d* (a parametric effect size, fine as a design-time MDE heuristic, wrong as the
+paper's reported statistic) with no written standard to check it against. Left undefined, two
+people writing analysis scripts independently would not converge on the same test or the same
+treatment of a censored cell.
+
+**Validated against live data, not synthetic.** `censored_timing_summary` run against
+`data/occupancy_dataset.csv`'s TIME_BASED arm (the D18 sweep) reproduces D18's own numbers
+exactly: 108 rows, 30 censored, 78 observed, trip rate 0.722 [0.583, 0.861] over 36 configs,
+conditional `time_to_open` 9.89s [8.16, 11.79] — see `statistical-treatment.md` §3.
+
+**Rejected:** silently re-running `canary_readout.py::h1_matched_horizon` (currently
+Welch's t + Cliff's delta + Brown-Forsythe) under the new standard as part of this decision.
+Its numbers already back the closed D-004 Day-2 gate ("Paper B confirmed," 2026-09-08);
+changing the significance test on an already-decided result is a reviewed step of its own, not
+a side effect of defining the standard everything *else* should follow. Flagged in
+`statistical-treatment.md` §5 as a known, deliberate deviation pending that follow-up.
+
+**Revisit if:** the H1 migration above is done — re-run `h1_matched_horizon` under
+`compare_censored_groups`/`mann_whitney`, confirm the conclusion is unchanged (or update D-004
+if it isn't), and remove the §5.1 flag.
+
+**Update (2026-09-14) — a second open item, found while merging this patch.**
+`compare_censored_groups` computes its CIs with the cluster bootstrap (correct, per §2) but
+runs its conditional-timing Mann-Whitney on raw rows, treating 3 replicates of one
+`experiment_id` as 3 independent observations. The effect is one-directional — the reported
+p-value is smaller than the design earns. No published number currently comes from this
+function, so nothing in the paper is affected today, but the standard contradicts itself as
+written. Recorded as `statistical-treatment.md` §5.2 rather than silently fixed: the fix
+(aggregate to per-config means before testing) changes the unit of analysis and can flip a
+contrast's significance, which is the same class of decision this entry's own **Rejected**
+paragraph declines to make as a side effect. Pending review by this standard's author and
+Soham.
+

@@ -36,6 +36,7 @@ Everything below is ordered by whether it blocks Paper B.
 | CRASH re-collection, **FANOUT** | 🔴 **Not collected** — needs a free machine, ~6h | **Yes** |
 | D15 / D-001 re-derivation after CRASH | 🔴 **Blocked** on the line above | **Yes** |
 | D13 / H3 replicate top-up | 🟡 **Preliminary** — real signal at n=1/bucket, ~45 min to fix | **Yes** |
+| Statistical treatment (D19) | ✅ **Defined** — Mann-Whitney + Cliff's δ, bootstrap CIs, censoring as rate + conditional timing. Two known deviations flagged, neither blocking | — |
 | Manuscript | 🔴 **Not started** — no draft exists anywhere in the repo | — |
 
 **Two things block writing:** the FANOUT CRASH re-collection (and the re-analysis it unblocks),
@@ -133,7 +134,7 @@ pending re-collection.
 | `v5_soham_linear_presweep` | 324 | Soham's independent LINEAR sweep; superseded, audit only |
 | `v6_pre_d17_leg_blend_crash` | 704 | Pre-D17-fix snapshot; every CRASH row saturated at 0.5000 |
 
-**Three traps, all real:**
+**Five traps, all real:**
 
 1. **7 of 8 analysis outputs are stale.** Only `analysis/out/canary_readout.json` postdates the
    2026-09-06 CRASH-strip. `order_leg_containment.json` and `tau_sweep.json` were written ~75
@@ -141,7 +142,29 @@ pending re-collection.
    `analysis/out/` today describes the pre-strip dataset.** Re-run before quoting.
 2. **`data/occupancy_dataset.csv` (162 rows) is not registered in `DATASETS`** — H2b/D18's whole
    evidence base cannot be loaded via `analysis/common.py::load()` like everything else.
-3. **A stray `master_dataset.csv` sits at the repo root** (798 rows, matching the v4 archive),
+3. ~~**`scipy` is an undeclared dependency.**~~ **Fixed — PR #52.** It had been satisfied only
+   transitively via `scikit-learn`, so a bare `pandas`+`numpy` install would `ImportError`
+   across all 8 scripts under `analysis/`. Now pinned in `ml/requirements.txt`.
+4. ~~**The roadmap board that drives "B" items lives outside the repo.**~~ **Closed
+   2026-09-14 — the board is gone and is not being reconstructed.** Searched exhaustively:
+   both GitHub Projects exist but hold **0 items**, the repo has no linked project and no
+   milestones, the `.docx` planning files contain no B-numbers, no published artifact matches,
+   and no branch in history mentions any B-number except B5 and B8. The originating browser
+   session no longer has it either.
+
+   **This is a small loss, deliberately accepted.** Both known items shipped — **B5 → PR #51**,
+   **B8 → PR #49** — so the board indexed work, and the work survived. This file's *Remaining
+   work* table was derived from the decision log, hypotheses, the `DATASETS` registry and a
+   repo-wide sweep for open-work markers — never from the board — so nothing here depends on
+   it. The residual risk is unknowable but bounded: an item that lived only in that chat and
+   was written down nowhere else.
+
+   **Consequence: B-numbers are a dead reference.** Do not chase them. `docs/paper/statistical-
+   treatment.md` and D19 cite "B5 (roadmap board)" and PR #49 cites B8 — those citations stay
+   as historical record, but they point at nothing retrievable. **The backlog is the *Remaining
+   work* table in this file.** Add to it here; do not start a second list somewhere a session
+   can't read.
+5. **A stray `master_dataset.csv` sits at the repo root** (798 rows, matching the v4 archive),
    untracked and in no git history. **It is not the live file.** Delete it.
 
 ---
@@ -196,5 +219,8 @@ progress"). If you find a line here that is wrong, fix it rather than working ar
 
 **Reasoning lives elsewhere, on purpose:** `docs/paper/decision-log.md` (why each decision went
 the way it did), `docs/paper/hypotheses.md` (full hypothesis text and evidence),
+`docs/paper/statistical-treatment.md` (D19 — which test, which CI, how censored columns are
+reported; `analysis/common.py::compare_groups` / `compare_censored_groups` are the only
+sanctioned entry points),
 `data/DATA_DICTIONARY.md` (schema — note its column list has drifted; `DATASET_HEADERS` in
 `experiments/runner.py` is authoritative at **36 columns**).

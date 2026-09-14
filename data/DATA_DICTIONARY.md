@@ -266,7 +266,11 @@ Deliberately **not** excluded, and why:
 > **Meaningful nulls.** `time_to_open` / `time_to_recover` are null *because of a real outcome*
 > (the breaker never tripped, or the system never recovered), not random missingness. Do **not**
 > mean-impute them. Either carry a companion boolean (`cb_opened`, `recovered`) or use an explicit
-> sentinel — decide this in feature engineering before model training, not after.
+> sentinel — decide this in feature engineering before model training, not after. For the
+> paper's own reported statistics (not model features), this is now a defined protocol, not
+> just a caution: see `docs/paper/statistical-treatment.md` (D19) and
+> `analysis/common.py::censored_timing_summary` — every such column is reported as a rate plus
+> a conditional-timing distribution, computed together.
 
 ### Breaker-state-reset precondition columns
 

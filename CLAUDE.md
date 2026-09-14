@@ -17,6 +17,7 @@ and Soham More. Most work here is **measurement**, so a wrong number is worse th
 | Which file is the live dataset? | `data/master_dataset.csv` — currently **324 rows, LATENCY-only**. A stray `master_dataset.csv` at the **repo root** is *not* it |
 | Is an `analysis/out/*.json` number current? | Usually **no** — 7 of 8 predate the 2026-09-06 CRASH-strip. Re-run before quoting |
 | What's the current state of `main`? | `git fetch origin` and look. It moves faster than any session's memory of it |
+| Where is the backlog? | `STATUS.md`'s *Remaining work* table. "B" numbers in older commits (B5, B8) refer to a board that no longer exists and was never in the repo — historical record only, don't chase them |
 
 ## Conventions
 

@@ -19,7 +19,7 @@
       Needed for D4's supplementary check (does the mechanism hold at an injection point
       other than the historical default).
 
-## D6 — Cross-machine confounding (instrumented + ruled; calibration run itself blocked)
+## D6 — Cross-machine confounding (done — instrumented, calibrated, ruled)
 
 - [x] **`machine_id` now stamped on every row.** `experiments/runner.py` auto-captures
       `socket.gethostname()` (override via `MACHINE_ID` env var, mirroring the existing
@@ -44,13 +44,21 @@
       `machine_calibration.py` reads `MACHINE_EFFECT_NEGLIGIBLE`. `order_leg`/blast-radius
       -style comparisons (D15) are unaffected — only the timing DVs are gated.
 
-- [ ] **Not yet done: the actual calibration run.** Needs both real machines (Jay's and
-      Soham's Codespaces) — unavailable here. Next step: on each machine, run
+- [x] **Done 2026-09-02/03 — the actual calibration run.** Was blocked at the time of
+      writing: needed both real machines (Jay's and Soham's Codespaces), unavailable then.
+      The procedure, as planned and as run: on each machine, run
       `python3 experiments/runner.py --mode canary --topology linear --limit 10`, save off
       each machine's `data/canary_runs.csv` separately (it's overwritten on the next
       canary run), then `python3 analysis/machine_calibration.py <machine_a>.csv
       <machine_b>.csv` and read the verdict. ~2–3h of compute; buys either a clean
       cross-topology timing claim or a quantified correction.
+
+      **Update (2026-09-14):** this ran. `analysis/out/machine_calibration.json` reports
+      **`MACHINE_EFFECT_NEGLIGIBLE`** across soham-local (n=159) vs codespace (n=18):
+      Cliff's delta 0.021 on `time_to_open`, 0.023 on `time_to_recover`, both an order of
+      magnitude below the "small" cutoff. Per D16 the interim no-cross-topology-timing-
+      claim rule is lifted. See `docs/paper/decision-log.md` D16 for the full table and
+      for the separate `lambda_achieved` machine effect, which is real and is NOT lifted.
 
 ## D3 — blast_radius: fix, replace, or retire? (done)
 

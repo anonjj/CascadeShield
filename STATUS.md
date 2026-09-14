@@ -1,0 +1,200 @@
+# CascadeShield — Project Status
+
+**Last updated:** 2026-09-14 · **Update this file whenever a PR lands or a sweep finishes.**
+
+> This is the single source of truth for *where the project is*. It is meant to be read first,
+> from any tool — Claude Code, Claude in the browser, Cowork, or a human. The reasoning behind
+> any line here lives in `docs/paper/decision-log.md`; this file says **what is true now**.
+
+---
+
+## The one thing to know
+
+**The paper is decided: Paper B — construct validity.** Decision D-004 (the "Day-2 Gate"),
+taken jointly by Soham and Jay, closed out 2026-09-08 by Soham once the canary-matrix run
+existed to read against. Explicitly *not* reopenable by later data.
+
+| | |
+|---|---|
+| **Load-bearing chapters** | H3 (recovery-side leak), H4 (τ_leg curve), H5 (leg containment), and the metric-evolution narrative (D-001 → D15 → D17) |
+| **Retired** | H1 and H2. No λ effect was found at all — trip rate sat flat at 1.00 for both window types at every sampled λ — which ruled out Paper A and A′ outright |
+
+Everything below is ordered by whether it blocks Paper B.
+
+---
+
+## Status at a glance
+
+| Workstream | State | Blocks writing? |
+|---|---|---|
+| Paper direction (D-004) | ✅ **Done** — Paper B, 2026-09-08 | — |
+| Harness + mesh (6 services, Toxiproxy, D17 fix) | ✅ **Done** — D17 fix merged (PR #45) | — |
+| LATENCY data, LINEAR + FANOUT | ✅ **Done** — 324 rows live | — |
+| Occupancy / H2b sweep (D7, D18) | ✅ **Done** — 162/162 runs, hypothesis closed | — |
+| Canary matrix (D-004 gate) | ✅ **Done** — 300/300 runs; data in PR #43, unmerged | — |
+| CRASH re-collection, **LINEAR** | ✅ **Done** — 162/162; PR #47, unmerged | — |
+| CRASH re-collection, **FANOUT** | 🔴 **Not collected** — needs a free machine, ~6h | **Yes** |
+| D15 / D-001 re-derivation after CRASH | 🔴 **Blocked** on the line above | **Yes** |
+| D13 / H3 replicate top-up | 🟡 **Preliminary** — real signal at n=1/bucket, ~45 min to fix | **Yes** |
+| Manuscript | 🔴 **Not started** — no draft exists anywhere in the repo | — |
+
+**Two things block writing:** the FANOUT CRASH re-collection (and the re-analysis it unblocks),
+and the D13 replicate top-up. Nothing else.
+
+---
+
+## Hypothesis scoreboard
+
+| ID | Claim | Verdict | Where |
+|---|---|---|---|
+| **H1** | At matched horizon H, COUNT vs TIME differ in variance, not mean, of `time_to_open` | ⚪ **Not testable** on collected data — COUNT horizons {25…800} and TIME {5,10,20} are disjoint, zero overlap. Generator fixed (`6b045b4`) but the data predates it | D-004, D-003 |
+| **H2** | A crossover λ\* exists below which TIME_BASED cannot trip | ❌ **No effect found.** Trip rate 1.00 at every λ ∈ {5,20,80,320}, both window types. This is what selected Paper B | D-004 |
+| **H2b** | Occupancy ratio ρ = effective_horizon / n_min crossing 1 predicts inertness | ✅ **Confirmed for TIME_BASED** (clean crossover, no overlap) · ❌ **cleanly falsified for COUNT_BASED** (0/54 rows ever inert). Mechanism: COUNT's ring buffer caps `minimumNumberOfCalls` | D18 |
+| **H3** | Double dissociation: window params → detection, wait_duration → recovery | 🟡 **Re-opened, preliminary.** `LEAK_CONFIRMED_ON_HALF_OPEN_LEG` — TIME's HALF_OPEN→CLOSED is 8.9×–14.3× COUNT's, monotone in D_w. **But n=1 TIME row per bucket.** Mechanism unidentified; the originally suspected one is architecturally ruled out for Resilience4j 2.2.0 | D13 |
+| **H4** | Competing containment definitions rank configs differently (Kendall τ < 1) | ✅ **Supported.** 36/36 pairs below τ=1.0. Magnitude moved a lot after FAN_OUT data: min pairwise τ is now **0.891**, was 0.238 — rankings agree *more* than first measured, but never perfectly | D-001 |
+| **H5** | Blast-radius resolution is topology-dependent: Var(B)=0 on a chain, >0 with parallel subjects | ❌ **Tested and NOT supported.** FANOUT+LATENCY gives Var(B)=0 too, identical to LINEAR — 162/162 rows each side, exactly one leg firing | D15 |
+| **H6** | A uniform edge breaker suppresses interior breaker engagement (gateway shadowing) | ⚪ **Untestable as instrumented.** The `measurement-plane` isolation block removed the condition by design. Gateway CLOSED in all 704 rows. Testing it means deliberately reconstructing a removed confound, and the paper must say so | hypotheses.md §7 |
+
+---
+
+## Open loops that block writing
+
+### 1. CRASH re-collection → D15 and D-001 re-derivation
+
+D17 found that `leg_failure_rates` averaged two circuit breakers per service, halving true
+severity. The fix (max-of-breakers) merged 2026-09-06 as PR #45 / `0c64ca4`. **Every CRASH row
+collected before that is diluted** — all 380 read exactly `0.5000`, zero variance.
+
+| Step | State |
+|---|---|
+| Archive pre-fix data as `v6`, strip CRASH from live file | ✅ Done (PR #46). Live file is now **324 rows, LATENCY-only** |
+| Re-collect **LINEAR** CRASH | ✅ Done — 162/162, `order_leg` now uniformly `1.0000` |
+| Re-collect **FANOUT** CRASH | 🔴 **Not done.** Two attempts died (codespace VM restart; then billing lockout). No data survived |
+| Merge both into `master_dataset.csv`, bump `n_expected` 324 → ~648 | 🔴 Blocked |
+| Re-run `analysis/tau_sweep.py` + `analysis/order_leg_containment.py` | 🔴 Blocked |
+| Update D15, D-001, hypotheses.md §5.4 with real numbers | 🔴 Blocked |
+
+**D15 carries an explicit embargo:** *"Action before re-quoting the combined-dataset table
+anywhere: land D17's fix and re-collect CRASH rows."* Until that is done, **do not quote D15's
+combined-dataset separation numbers.** The LATENCY-only separation still holds and is safe to
+cite (COUNT max 0.2250 < TIME min 0.2686).
+
+**Honest caveat already known:** post-fix CRASH saturates at exactly `1.0000` regardless of
+window type, so it still won't discriminate COUNT vs TIME — it is now *correctly* saturated
+instead of incorrectly diluted. LATENCY remains the only fault type with resolution for that
+comparison.
+
+### 2. D13 / H3 replicate top-up
+
+The precise HALF_OPEN→CLOSED metric now works (two harness bugs fixed: event buffer 50→5000,
+plus settle time after the recovery loop). It found a real, large, monotone effect — but every
+median rests on **one TIME_BASED row per D_w bucket**. D13 stays "re-opened, preliminary"
+until `n_time` per bucket rises above 1.
+
+Roughly 24 runs / ~45 min, using `runner.py --only-ids` (built for exactly this). **Critical:**
+`data/cb_transitions.jsonl` is gitignored and was never committed last time — which is why this
+had to be redone at all. Commit it with `-f` this round.
+
+---
+
+## Open PRs — what to do with each
+
+| PR | Branch | State | Recommendation |
+|---|---|---|---|
+| **#43** | `data/canary-matrix-codespace-full` | MERGEABLE | **Merge.** 300/300 canary-matrix rows, 0 aborted. Already read out for D-004. Note it lacks an `arm` column — joins to `data/canary_matrix.csv` on `(run_index, replicate)` |
+| **#47** | `data/crash-recollect-linear` | MERGEABLE | **Hold**, then merge together with the FANOUT half so the dataset moves in one step |
+| **#49** | `docs/b8-readme-regen` | MERGEABLE | **Merge.** README §1 + Appendix A regenerated; all claims verified against main |
+| **#48** | `experiment/occupancy-ratio` | ⚠️ **CONFLICTING** | **Close it — do not merge.** See below |
+
+**Why #48 must not be merged.** Its content already reached main by another route (PRs #36/#42).
+Main's `runner.py` is strictly *ahead* of that branch: main has `socket`, `BreakerObserver`,
+`resumable_runner`, `constants`, and `DATASET_PATH_OVERRIDE`, none of which exist on #48, and
+main's `compute_occupancy_ratio(effective_horizon, min_calls)` is a refactor of #48's older
+four-argument version. Meanwhile #48's branch carries `data/master_dataset.csv` at **0 lines**
+against main's 325. **Merging it would revert the harness and destroy the dataset.**
+
+This is also the branch the local checkout sits on, which is a large part of why local state
+looks confusing. After closing #48, `git checkout main && git reset --hard origin/main`.
+
+---
+
+## Data inventory
+
+**Live:** `data/master_dataset.csv` — **324 rows, LATENCY-only** (matches
+`analysis/common.py`'s `DATASETS["current"]["n_expected"]`). CRASH rows are absent by design,
+pending re-collection.
+
+| Archive | Rows | Why it exists |
+|---|---|---|
+| `v1_prefix` | 486 | Pre-timing-collector; both timing DVs 100% null |
+| `v2_latency_5svc` | 162 | First sweep with timing; blast_radius and leg vector span disjoint node sets |
+| `v3_gateway_not_rebuilt` | 92 | Gateway container not rebuilt — transitional, not a result set |
+| `v4_flat_concurrency` | 798 | Pre-LOAD_CONCURRENCY-fix; 242 rows flagged `lambda_deviation_flag` |
+| `v5_soham_linear_presweep` | 324 | Soham's independent LINEAR sweep; superseded, audit only |
+| `v6_pre_d17_leg_blend_crash` | 704 | Pre-D17-fix snapshot; every CRASH row saturated at 0.5000 |
+
+**Three traps, all real:**
+
+1. **7 of 8 analysis outputs are stale.** Only `analysis/out/canary_readout.json` postdates the
+   2026-09-06 CRASH-strip. `order_leg_containment.json` and `tau_sweep.json` were written ~75
+   minutes *before* it; `leak_audit.json` dates to 2026-08-13. **Any number read out of
+   `analysis/out/` today describes the pre-strip dataset.** Re-run before quoting.
+2. **`data/occupancy_dataset.csv` (162 rows) is not registered in `DATASETS`** — H2b/D18's whole
+   evidence base cannot be loaded via `analysis/common.py::load()` like everything else.
+3. **A stray `master_dataset.csv` sits at the repo root** (798 rows, matching the v4 archive),
+   untracked and in no git history. **It is not the live file.** Delete it.
+
+---
+
+## Remaining work, in order
+
+| # | Task | Effort | Needs |
+|---|---|---|---|
+| 1 | FANOUT CRASH re-collection | ~6 h | A free machine (see below) |
+| 2 | Merge #47 + FANOUT, bump `n_expected` to ~648, re-run `tau_sweep.py` + `order_leg_containment.py`, update D15 / D-001 / hypotheses §5.4 | ~1 h | #1 |
+| 3 | D13/H3 replicate top-up + re-run `window_type_recovery_leak.py`, **commit `cb_transitions.jsonl`** | ~45 min | A free machine |
+| 4 | Merge #43 and #49; close #48 | minutes | — |
+| 5 | **Start writing Paper B** | — | #1–#3 |
+
+**Optional, no longer required:** re-running the `matched_horizon` arm against the regenerated
+design to make H1 testable (~1.5 h). Paper B doesn't need H1; per D-004 a positive result would
+only *add* a finding, never change the paper.
+
+**Machines.** Jay's codespace is billing-locked (free-tier compute exhausted; quota resets at
+the next cycle). Free options: Jay's Mac (16 GB / 8 CPU, Colima installed but not running,
+~17 GB disk free — tight for the 6 service images) or Soham's laptop (already proven on this
+harness as `soham-local`). D16 cleared cross-machine splitting for these DVs, so either is
+methodologically fine. [GitHub Student Pack](https://education.github.com/pack) would raise the
+codespace quota to 180 core-hours for free, but takes days to verify.
+
+---
+
+## Operational footguns
+
+Learned the hard way, repeatedly. These are in `CLAUDE.md` too so sessions load them
+automatically.
+
+1. **`export DATASET_PATH_OVERRIDE=...` before *every* run**, and check it after launch.
+   `get_dataset_path()` has no case for several modes and silently falls through to
+   `master_dataset.csv`. This has misfiled data **twice** (PR #37; the canary-matrix smoke test).
+2. **Long sweeps: `nohup … & disown`.** An SSH drop does not kill the job — but a codespace **VM
+   restart kills both the job and Docker**. After any restart: `docker compose up -d --build`,
+   then confirm `curl http://localhost:8474/proxies` returns JSON before relaunching.
+3. **Verify the output file exists ~2 min after launching**, not 6 hours later.
+4. **`cb_transitions.jsonl` is gitignored.** Anything needing it must commit it with `git add -f`
+   or the run is wasted (this is exactly why D13 is still at n=1).
+5. **Never push or merge directly to `main`.** Branch per unit of work, PR via `gh pr create`.
+6. **Use a `git worktree`** when the local checkout has unrelated uncommitted work.
+
+---
+
+## Keeping this file honest
+
+Update it in the same PR as the work it describes — that is the only thing that stops it rotting
+the way `SESSION_HANDOFF.md` did (it sat three weeks describing a finished task as "in
+progress"). If you find a line here that is wrong, fix it rather than working around it.
+
+**Reasoning lives elsewhere, on purpose:** `docs/paper/decision-log.md` (why each decision went
+the way it did), `docs/paper/hypotheses.md` (full hypothesis text and evidence),
+`data/DATA_DICTIONARY.md` (schema — note its column list has drifted; `DATASET_HEADERS` in
+`experiments/runner.py` is authoritative at **36 columns**).

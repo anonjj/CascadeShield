@@ -8,7 +8,7 @@
 [![Toxiproxy](https://img.shields.io/badge/Toxiproxy-2.9.0-red.svg)](https://github.com/Shopify/toxiproxy)
 [![Status: Active Research](https://img.shields.io/badge/Status-Active%20Research-yellow.svg)]()
 
-CascadeShield is a controlled experimental platform: a six-service Spring Boot mesh, a Toxiproxy fault-injection layer, a Prometheus/Grafana observability stack, and a Python sweep harness that together measure how circuit breaker parameter choices change the **blast radius** of a cascading failure. The platform sweeps **162 circuit breaker configurations × 2 fault classes = 324 runs** per topology and logs every run to a master CSV that feeds an ML pipeline (Isolation Forest anomaly detection + Decision Tree config recommender).
+CascadeShield is a controlled experimental platform: a six-service Spring Boot mesh, a Toxiproxy fault-injection layer, a Prometheus/Grafana observability stack, and a Python sweep harness that together measure how circuit breaker parameter choices change the **blast radius** of a cascading failure. The harness's main sweep evaluates **54 circuit-breaker configurations × 2 fault classes × 3 replicates = 324 runs** per topology, alongside three purpose-built auxiliary sweeps (an occupancy-ratio grid, a crash-toxicity grid, and a λ/window-type hypothesis-gate matrix) — the full breakdown is in Appendix A. Every run logs to one of several CSVs under `data/` (schema documented in `data/DATA_DICTIONARY.md`) that feed the project's ML/analytical pipeline (`ml/`).
 
 The **primary novelty claim** is a systematic `COUNT_BASED` vs `TIME_BASED` sliding-window comparison under controlled fault conditions — a dimension largely absent from existing Resilience4j empirical literature.
 
@@ -73,20 +73,22 @@ No service calls another service directly. The compose file injects downstream U
 | Payment | `NOTIFICATION_SERVICE_URL=http://toxiproxy:8664` | 8664 | `notification-service:8084` |
 | Order / Inventory / Payment | `SHARED_DB_SERVICE_URL=http://toxiproxy:8665` | 8665 | `shared-db-service:8085` |
 
-This means a fault on any single hop is injected by adding a "toxic" (latency, bandwidth limit) or disabling a proxy — **without touching, restarting, or instrumenting the victim service**. The service under test experiences the fault exactly as it would experience a real network degradation.
+This means a fault on any single hop is injected by adding a Toxiproxy "toxic" — a fixed `latency` toxic for the `latency` fault class, or a graded `reset_peer` toxic (resetting a `--toxicity` fraction of connections, 1.0 = full outage) for the `crash` fault class — **without touching, restarting, or instrumenting the victim service**. The service under test experiences the fault exactly as it would experience a real network degradation. See Appendix A for the full fault-class → mechanism → default-target table.
 
-One deliberate exception: the Gateway's **BlastRadiusService** polls each service's `/actuator/health` via direct container names (`http://order-service:8081`, ...), bypassing Toxiproxy. This is intentional — the measurement plane must observe the *true* circuit breaker state of each service, not a view distorted by the very fault being injected.
+One deliberate exception: the Gateway's **BlastRadiusService** polls each service's `/actuator/health` via direct container names (`http://order-service:8081`, ...), bypassing Toxiproxy. This is intentional — the measurement plane must observe the *true* circuit breaker state of each service, not a view distorted by the very fault being injected. It polls only the **four CB-bearing downstream services** (order, inventory, payment, notification) — `shared-db-service` is a breaker-less leaf and is excluded so it can't dilute the denominator; blast radius is therefore `degraded/4`, i.e. one of `{0, 0.25, 0.5, 0.75, 1.0}`.
+
+A second, less obvious exception: the Gateway's own three circuit breakers (`orderServiceCB`, `inventoryServiceCB`, `paymentServiceCB`) are bound to a hardcoded `measurement-plane` config (`minimum-number-of-calls: 1000000`, every threshold at 100%) instead of the swept `default` config used by the four downstream services — see the `application.yml` excerpt in §2.1. Without this, an edge breaker at the Gateway sees the *summed* latency of the whole downstream chain and trips before any interior breaker can, collapsing every measurement onto a single node (a real confound found and fixed mid-project). The Gateway is the measurement plane, not an experimental subject; only the four downstream services' breakers are ever swept.
 
 ### 1.3 End-to-End Request Trace (`GET /api/v1/linear`)
 
 1. **Ingress.** The load generator (in `runner.py`) fires `GET http://localhost:8080/api/v1/linear`. Spring MVC routes it to `GatewayController.linear()`.
-2. **Gateway → Order.** The controller delegates to `GatewayDownstreamService.callOrder()`. This method is annotated `@CircuitBreaker(name = "orderServiceCB")` — Resilience4j's Spring AOP aspect intercepts the call. If the breaker is `CLOSED` or `HALF_OPEN` (with permits remaining), the call proceeds; if `OPEN`, a `CallNotPermittedException` is thrown in microseconds without any network I/O.
+2. **Gateway → Order.** The controller delegates to `GatewayDownstreamService.callOrder()`. This method is annotated `@CircuitBreaker(name = "orderServiceCB")` — Resilience4j's Spring AOP aspect intercepts the call. If the breaker is `CLOSED` or `HALF_OPEN` (with permits remaining), the call proceeds; if `OPEN`, a `CallNotPermittedException` is thrown in microseconds without any network I/O. (As noted in §1.2, `orderServiceCB` is one of the Gateway's three `measurement-plane` breakers and is structurally never `OPEN` during a sweep — this branch is exercised in practice by the four downstream services' breakers, not the Gateway's.) A 4xx response is caught first and rethrown as `DownstreamRejectedException` (ignored by the breaker); a 5xx/timeout/connection-refused is rethrown as `DownstreamUnavailableException` (recorded by the breaker) — every downstream hop in the mesh classifies failures this way, see §2.2/§4.1.
 3. **The wire.** `RestTemplate` (3s connect / 8s read timeout) sends `GET http://toxiproxy:8661/api/v1/order`. Toxiproxy applies any active toxics (e.g., +3000ms latency) and forwards to `order-service:8081`.
 4. **Order fans down.** `OrderController.order()` makes **two CB-wrapped calls** through `OrderDownstreamService`: `callInventory()` (`inventoryServiceCB`, via :8662) and `callSharedDb()` (`sharedDbCB`, via :8665). Each is independently try/caught — one failing hop degrades the response (HTTP 503 with a partial body) without aborting the other.
 5. **The chain continues.** Inventory → Payment (`paymentServiceCB`) + Shared-DB; Payment → Notification (`notificationServiceCB`) + Shared-DB. Notification and Shared-DB are leaves — they respond `200 {"service": ..., "status":"ok"}` with no downstream calls.
 6. **Failure accounting on the way up.** Each intermediary marks its response 503 if any downstream hop failed. The CB on each hop records the outcome: an exception or a slow call (>2s, configured via `slow-call-duration-threshold`) counts toward the sliding window's failure rate. When the failure rate over the window exceeds `failureRateThreshold`, that breaker flips `CLOSED → OPEN`.
 7. **Egress.** The Gateway returns `200 {"topology":"linear","result":...}` or `503 {"topology":"linear","error":"service_unavailable","cause":"..."}`. The runner's load generator counts the outcome and measures latency.
-8. **Measurement.** After the load phase, the runner calls `GET /api/v1/blast-radius`; the Gateway's `BlastRadiusService` polls all 5 downstream health endpoints, counts services with at least one `CIRCUIT_OPEN` breaker (unreachable services also count as degraded), and returns `degraded/total × 100`.
+8. **Measurement.** After the load phase, the runner calls `GET /api/v1/blast-radius`; the Gateway's `BlastRadiusService` polls the 4 CB-bearing downstream health endpoints, counts services with at least one `CIRCUIT_OPEN` breaker (unreachable services also count as degraded), and returns `degraded/4 × 100`.
 
 ### 1.4 The Three Topology Endpoints
 
@@ -94,27 +96,48 @@ One deliberate exception: the Gateway's **BlastRadiusService** polls each servic
 |---|---|---|
 | `GET /api/v1/linear` | Gateway → Order → Inventory → Payment → Notification (serial chain) | Fault propagation depth — how far upstream a single downstream fault cascades |
 | `GET /api/v1/fanout` | Gateway calls Order, Inventory, Payment in parallel (`CompletableFuture` over a dedicated `ExecutorService`) | Failure independence — one slow/open hop must not block sibling calls |
-| `GET /api/v1/mesh` | Fan-out + every intermediary also hits Shared-DB (:8665) | Shared-dependency amplification — one throttled common dependency degrading many callers at once |
+| `GET /api/v1/mesh` | **Alias for `/api/v1/fanout`** — `GatewayController.mesh()` literally calls `fanout()` | Kept only for `--topology mesh` CLI/dataset-label compatibility; see note below |
+
+`mesh` never grew a distinct implementation: every intermediary (`order`/`inventory`/`payment`) already calls Shared-DB internally regardless of which gateway endpoint was hit, so the shared-dependency amplification `mesh` was meant to isolate already happens on both `linear` and `fanout`. It was judged not architecturally distinct enough to justify separate code, and the endpoint was left as a pass-through rather than removed outright.
 
 ### 1.5 Experiment Execution Lifecycle (one sweep run)
 
 ```
 runner.py main()
- ├── setup_default_proxies() + reset_all()        # Toxiproxy precondition
- ├── generate_combinations(mode)                  # 5 canary configs or 162 full-sweep configs
- └── for each config:
-      1. write_env_file(config)                   # CB_* vars → infra/.env
-      2. update_containers()                      # docker compose up -d --no-deps --force-recreate
-      │                                           # (aborts run on non-zero exit)
-      3. wait_for_healthy(60s)                    # poll gateway /actuator/health for "UP"
-      4. inject_fault(fault_type)                 # latency 3000ms / crash
-      5. generate_load(50 req, 5 threads)         # measure TPS, error rate, avg latency
-      6. get_blast_radius()                       # gateway aggregator endpoint
-      7. toxiproxy.reset_all()                    # restore healthy mesh
-      8. log_results(...)                         # append row to data/master_dataset.csv
+ ├── generate_combinations(mode)                  # canary=5 / full=54 / occupancy=54 / sweep=4 configs
+ ├── build_shuffled_run_list(configs, replicates, seed)
+ │                                                 # decorrelates execution order from config order,
+ │                                                 # so wall-clock drift over a long sweep isn't a
+ │                                                 # config-order confound; seed persisted per row
+ └── for each (config, replicate) in the shuffled list:
+      1. write_env_file(config)                    # 7 CB_* vars (incl. min-calls, event-buffer) → infra/.env
+      2. update_containers()                       # docker compose up -d --no-deps --force-recreate
+      │                                            # (aborts run on non-zero exit)
+      3. wait_for_readiness(90s)                    # poll ALL SIX services' /actuator/health, not just
+      │                                            # the gateway — shared-db has no breaker but sits in
+      │                                            # every call chain, so an unhealthy shared-db silently
+      │                                            # corrupts everyone else's measurements
+      4. reset_all_breakers() + check_breaker_precondition()
+      │                                            # verify every breaker actually reset to CLOSED/0
+      │                                            # buffered calls before trusting this run; abort +
+      │                                            # log PRECONDITION_FAIL rather than measure on stale
+      │                                            # carried-over breaker state (the harness's own most
+      │                                            # damaging bug, historically)
+      5. warmup_phase()                            # discard-phase JIT warmup (≥200 reqs / ≥10s) run
+      │                                            # against an already-warm JVM before any measurement
+      6. generate_load(20 req)                     # pre-fault baseline throughput
+      7. inject_fault(fault_type, toxicity, inject_point)
+      │                                            # latency: +3000ms toxic / crash: graded reset_peer
+      8. compute_load_plan(config)                 # size the fault-window load so COUNT_BASED and
+      │                                            # TIME_BASED windows both get a fair chance to fill
+      9. generate_load(sized request count)        # fault-window load; a concurrent sampler thread
+      │                                            # polls blast-radius to catch time_to_open
+     10. toxiproxy.reset_all()                      # clear toxics, restore healthy mesh
+     11. observer.observe_recovery(...)             # poll OPEN → HALF_OPEN → CLOSED for time_to_recover
+     12. log_results(...)                           # append a 36-column row to the mode's dataset CSV
 ```
 
-The CB parameters flow: `runner.py` → `.env` file → compose variable substitution (`${CB_FAILURE_RATE_THRESHOLD:-50}`) → container environment → Spring's relaxed property binding → `resilience4j.circuitbreaker.configs.default.*` in each service's `application.yml`. **Zero code changes or image rebuilds between the 324 runs** — only container recreation with new env values.
+The CB parameters flow: `runner.py` → `.env` file → compose variable substitution (`${CB_FAILURE_RATE_THRESHOLD:-50}`) → container environment → Spring's relaxed property binding → `resilience4j.circuitbreaker.configs.default.*` in each of the four downstream services' `application.yml` (the Gateway's three breakers are pinned to `measurement-plane` and never see these vars — §1.2). **Zero code changes or image rebuilds between runs** — only container recreation with new env values.
 
 ---
 
@@ -153,19 +176,33 @@ The CB parameters flow: `runner.py` → `.env` file → compose variable substit
 
 #### `src/main/resources/application.yml`
 * **Purpose:** Port (8080), downstream URLs (env-var first, sensible defaults), Resilience4j config, Actuator exposure.
-* **Mechanics — the Resilience4j block is the heart of the experiment:**
+* **Mechanics — the Resilience4j block, and why the Gateway's copy of it is dead code:**
   ```yaml
-  resilience4j.circuitbreaker.configs.default:
-    sliding-window-type: ${CB_SLIDING_WINDOW_TYPE:COUNT_BASED}     # swept
-    sliding-window-size: ${CB_SLIDING_WINDOW_SIZE:10}              # swept
-    failure-rate-threshold: ${CB_FAILURE_RATE_THRESHOLD:50}        # swept
-    wait-duration-in-open-state: ${CB_WAIT_DURATION_OPEN:15s}      # swept
-    permitted-number-of-calls-in-half-open-state: ${CB_PERMITTED_CALLS_HALF_OPEN:5}  # swept
-    automatic-transition-from-open-to-half-open-enabled: true
-    slow-call-duration-threshold: 2s        # latency fault injects 3s → counted slow
-    slow-call-rate-threshold: ${CB_FAILURE_RATE_THRESHOLD:50}
+  resilience4j.circuitbreaker.configs:
+    default:
+      sliding-window-type: ${CB_SLIDING_WINDOW_TYPE:COUNT_BASED}       # swept
+      sliding-window-size: ${CB_SLIDING_WINDOW_SIZE:10}                # swept
+      minimum-number-of-calls: ${CB_MINIMUM_CALLS:5}                   # swept (occupancy mode only)
+      failure-rate-threshold: ${CB_FAILURE_RATE_THRESHOLD:50}          # swept
+      wait-duration-in-open-state: ${CB_WAIT_DURATION_OPEN:15s}        # swept
+      permitted-number-of-calls-in-half-open-state: ${CB_PERMITTED_CALLS_HALF_OPEN:5}  # fixed baseline
+      automatic-transition-from-open-to-half-open-enabled: true
+      slow-call-duration-threshold: 2s        # latency fault injects 3s → counted slow
+      slow-call-rate-threshold: ${CB_FAILURE_RATE_THRESHOLD:50}
+      event-consumer-buffer-size: ${CB_EVENT_BUFFER_SIZE:50}
+      record-exceptions: [com.cascadeshield.gateway.exception.DownstreamUnavailableException]
+      ignore-exceptions: [com.cascadeshield.gateway.exception.DownstreamRejectedException]
+    measurement-plane:                        # Gateway-only — see §1.2. Hardcoded, no ${CB_*}.
+      minimum-number-of-calls: 1000000
+      failure-rate-threshold: 100
+      slow-call-rate-threshold: 100
+      slow-call-duration-threshold: 60s
+  instances:
+    orderServiceCB: { base-config: measurement-plane }
+    inventoryServiceCB: { base-config: measurement-plane }
+    paymentServiceCB: { base-config: measurement-plane }
   ```
-  All five independent variables bind to env vars with the *same names across all services*, so one `.env` file reconfigures the whole mesh atomically. `automatic-transition-from-open-to-half-open-enabled: true` means the `OPEN → HALF_OPEN` transition happens on a timer without requiring a probe call — making `time_to_recover` measurable even under zero load.
+  Every downstream service (order/inventory/payment/notification) declares this same `default` block and binds its own CB instances to it via `base-config: default` — that's what makes the seven `CB_*` env vars reconfigure the whole mesh atomically from one `.env` file. The Gateway is the one exception: it declares an identical `default` block but never uses it — all three of its instances are rebound to the hardcoded `measurement-plane` config instead (§1.2), so on the Gateway this `default` block is dead configuration, kept only so the file stays structurally consistent across services. `automatic-transition-from-open-to-half-open-enabled: true` means the `OPEN → HALF_OPEN` transition happens on a timer without requiring a probe call — making `time_to_recover` measurable even under zero load. `record-exceptions`/`ignore-exceptions` is the config-level half of the business-error firewall (§4.1): a `DownstreamUnavailableException` counts toward the failure rate, a `DownstreamRejectedException` is invisible to the breaker entirely.
 * **Actuator exposure:** `health, prometheus, circuitbreakers, circuitbreakerevents, info, metrics` — `circuitbreakerevents` gives a per-transition audit log used to verify `CLOSED → OPEN → HALF_OPEN` empirically.
 
 #### `Dockerfile`
@@ -400,15 +437,61 @@ Orchestration    Container starts out of order service_healthy gating + 60s star
 
 ## Appendix A — Experiment Matrix
 
-| Parameter | Values Swept |
+`experiments/runner.py` supports four sweep modes (`--mode canary|full|sweep|occupancy`), and a separate script (`canary_matrix.py` / `run_canary_matrix.py`) runs a fifth, independent design that isn't a `runner.py` mode at all. Each mode writes to its own CSV under `data/` (see `data/DATA_DICTIONARY.md`) so grids with different metric regimes are never accidentally pooled by a stray append.
+
+### `--mode full` — the main sweep
+
+| Parameter | Values swept |
 |---|---|
 | `failureRateThreshold` | 30, 50, 70 (%) |
 | `slidingWindowSize` | 5, 10, 20 |
 | `waitDurationInOpenState` | 5s, 15s, 30s |
 | `slidingWindowType` | `COUNT_BASED`, `TIME_BASED` |
-| `permittedCallsInHalfOpenState` | 3, 5, 10 |
 
-**162 configurations × 2 fault classes (latency / crash) = 324 runs per topology.**
+`permittedCallsInHalfOpenState` and `minimumNumberOfCalls` are **fixed baselines** here (5 and 5 respectively), not swept axes — `permittedCallsInHalfOpenState` was dropped from the matrix mid-project.
+
+**3 × 3 × 3 × 2 = 54 configurations × 2 fault classes (`latency`, `crash`) × 3 replicates = 324 runs per topology** (`--topology linear|fanout|mesh`; `mesh` is a routing alias for `fanout`, §1.4). Rows land in `data/master_dataset.csv` against the 36-column `DATASET_HEADERS` schema in `experiments/runner.py` (the source of truth for column count; `data/DATA_DICTIONARY.md`'s own column list has drifted and still describes a never-implemented 48-column D8 schema) — the two timing DVs (`time_to_open`, `time_to_recover`), blast radius (legacy CB-state and real per-leg-failure-rate variants), λ-fidelity columns (`lambda_target`/`lambda_achieved`/`lambda_cv`/`lambda_deviation_flag`), and a battery of precondition/validity columns (`precondition_ok`, `readiness_wait_s`, `warmup_requests`, `run_order_seed`, `machine_id`, `excluded_reason`, ...).
+
+### `--mode canary` — pipeline smoke test
+
+5 hand-picked configs (both extremes × both window types, plus the midpoint) that validate the full pipeline cheaply before committing to a multi-hour `full` run. Writes to `data/canary_runs.csv`.
+
+### `--mode occupancy` — the occupancy-ratio (ρ) study
+
+Holds `failureRateThreshold=50` / `waitDurationInOpenState=15s` fixed and instead sweeps arrival rate (λ) against `minimumNumberOfCalls` (n_min) and window size — the axes the occupancy-ratio theory (ρ = λ·window/n_min for `TIME_BASED`, ρ = window/n_min for `COUNT_BASED`) is actually about.
+
+| Arm | Grid | Configs |
+|---|---|---|
+| `TIME_BASED` | λ ∈ {5,10,20} × window ∈ {5,10,20}s × n_min ∈ {5,50,100,200} | 36 |
+| `COUNT_BASED` (control) | λ ∈ {5,20} × window ∈ {5,10,20} × n_min ∈ {5,50,200} | 18 |
+
+**54 configs × 3 replicates = 162 runs**, LINEAR + LATENCY only. Writes to `data/occupancy_dataset.csv` (adds `occupancy_ratio`, `inert` to the master schema).
+
+### `--mode sweep` — crash-toxicity grid
+
+Fixes window type/size/wait at the canonical midpoint (`COUNT_BASED`/10/15s) and sweeps `failureRateThreshold` ∈ {20, 40, 60, 80} against `--toxicity` (fraction of connections reset by the crash fault, 0.0–1.0), tracing the induced-failure-rate-vs-threshold trip boundary for the crash fault class. Writes to `data/crash_toxicity_sweep.csv` (adds `injected_toxicity`).
+
+### `canary_matrix.py` — the Day-2 hypothesis gate (not a `runner.py` mode)
+
+A standalone config generator that decided which paper direction the project pursued, independent of the main sweep:
+
+| Arm | Design | Runs |
+|---|---|---|
+| Base | λ ∈ {5,20,80,320} × window_type × window_size ∈ {5,10,20} × 5 replicates | 120 |
+| Matched-horizon | Derives a shared calls-observed horizon for both window types (`T = W/λ` or `W = λ·T`); infeasible cells are recorded with `feasible=0` rather than dropped | 120 generated (60 feasible in practice — most sub-second `T` values are unreachable) |
+| Null-fault control | `fault_type = NONE`, 10 replicates × (window_type × window_size) at the middle two λ values — establishes the false-trip rate φ | 120 |
+
+All three arms run at LINEAR/LATENCY, θ = 50, wait = 15s. Writes to `data/canary_matrix_runs.csv`, joined against the design file `data/canary_matrix.csv` for arm identity (the results file itself doesn't persist an `arm` column).
+
+### Fault classes
+
+| Fault | Mechanism (`fault_injector.py`) | Default target |
+|---|---|---|
+| `latency` | Toxiproxy `latency` toxic, fixed +3000ms | `inventory-service-proxy` |
+| `crash` | Toxiproxy `reset_peer` toxic at `--toxicity` fraction (1.0 = every connection reset, i.e. full outage) | `payment-service-proxy` |
+| `none` | No-op control replicate (`toxiproxy.reset_all()` only) | — |
+
+`--inject-point` overrides the default target for either fault class (used for the supplementary check on whether the fault-type contrast holds independent of which service/chain-depth it's injected at). A `throttle` fault class was tried and dropped entirely: it injects a 429, which the mesh's exception policy maps to the ignored `DownstreamRejectedException` on every breaker, making it structurally invisible to the study rather than a fixable bug.
 
 ## Appendix B — Quick Start
 
@@ -429,7 +512,7 @@ curl -s localhost:8080/api/v1/blast-radius      # {"blastRadius":0.0}
 # 4. Canary sweep (5 configs, validates the pipeline)
 python3 experiments/runner.py --mode canary --fault latency
 
-# 5. Full sweep (162 configs — run overnight)
+# 5. Full sweep (54 configs × 2 fault classes × 3 replicates = 324 runs — run overnight; see Appendix A)
 python3 experiments/runner.py --mode full --fault latency --topology linear
 
 # 6. Browse the results instead of staring at the terminal

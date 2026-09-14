@@ -6,3 +6,9 @@ numpy==2.0.2
 joblib==1.5.3
 # Used by the EDA / heatmap notebooks (analysis/), optional for the core pipeline.
 matplotlib==3.9.4
+# Required by analysis/common.py (D19: mann_whitney) and therefore by every script under
+# analysis/ that imports it -- all 8 of them. Previously undeclared and satisfied only as a
+# transitive dependency of scikit-learn (which requires scipy>=1.6.0), so a bare install of
+# just pandas+numpy would import-error on the whole analysis/ tree. Pinned to the version the
+# analyses were run against.
+scipy==1.13.1

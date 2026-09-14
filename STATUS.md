@@ -145,10 +145,25 @@ pending re-collection.
 3. ~~**`scipy` is an undeclared dependency.**~~ **Fixed — PR #52.** It had been satisfied only
    transitively via `scikit-learn`, so a bare `pandas`+`numpy` install would `ImportError`
    across all 8 scripts under `analysis/`. Now pinned in `ml/requirements.txt`.
-4. **The roadmap board that drives "B" items lives outside the repo.** Both B5 (D19) and B8
-   (the README regeneration) cite numbered backlog items, but no `BACKLOG.md` exists and no
-   B-numbered item appears in any tracked file. Work is being driven by a list no session can
-   read — the same memory gap this file exists to close, in a new place.
+4. ~~**The roadmap board that drives "B" items lives outside the repo.**~~ **Closed
+   2026-09-14 — the board is gone and is not being reconstructed.** Searched exhaustively:
+   both GitHub Projects exist but hold **0 items**, the repo has no linked project and no
+   milestones, the `.docx` planning files contain no B-numbers, no published artifact matches,
+   and no branch in history mentions any B-number except B5 and B8. The originating browser
+   session no longer has it either.
+
+   **This is a small loss, deliberately accepted.** Both known items shipped — **B5 → PR #51**,
+   **B8 → PR #49** — so the board indexed work, and the work survived. This file's *Remaining
+   work* table was derived from the decision log, hypotheses, the `DATASETS` registry and a
+   repo-wide sweep for open-work markers — never from the board — so nothing here depends on
+   it. The residual risk is unknowable but bounded: an item that lived only in that chat and
+   was written down nowhere else.
+
+   **Consequence: B-numbers are a dead reference.** Do not chase them. `docs/paper/statistical-
+   treatment.md` and D19 cite "B5 (roadmap board)" and PR #49 cites B8 — those citations stay
+   as historical record, but they point at nothing retrievable. **The backlog is the *Remaining
+   work* table in this file.** Add to it here; do not start a second list somewhere a session
+   can't read.
 5. **A stray `master_dataset.csv` sits at the repo root** (798 rows, matching the v4 archive),
    untracked and in no git history. **It is not the live file.** Delete it.
 

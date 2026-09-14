@@ -142,10 +142,9 @@ pending re-collection.
    `analysis/out/` today describes the pre-strip dataset.** Re-run before quoting.
 2. **`data/occupancy_dataset.csv` (162 rows) is not registered in `DATASETS`** — H2b/D18's whole
    evidence base cannot be loaded via `analysis/common.py::load()` like everything else.
-3. **`scipy` is an undeclared dependency.** Four analysis scripts import it and D19 moves the
-   import into `analysis/common.py`, which every analysis script loads — yet it is absent from
-   `ml/requirements.txt` and there is no `analysis/requirements.txt`. It works today only
-   because `scikit-learn` pulls it in transitively. Worth a one-line PR.
+3. ~~**`scipy` is an undeclared dependency.**~~ **Fixed — PR #52.** It had been satisfied only
+   transitively via `scikit-learn`, so a bare `pandas`+`numpy` install would `ImportError`
+   across all 8 scripts under `analysis/`. Now pinned in `ml/requirements.txt`.
 4. **The roadmap board that drives "B" items lives outside the repo.** Both B5 (D19) and B8
    (the README regeneration) cite numbered backlog items, but no `BACKLOG.md` exists and no
    B-numbered item appears in any tracked file. Work is being driven by a list no session can

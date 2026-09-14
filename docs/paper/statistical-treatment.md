@@ -133,7 +133,9 @@ Restating the existing metrics-contract rules alongside the two new ones, as one
 4. `excluded_reason`-marked rows are dropped from all of the above (unchanged, D-002) and their
    count is reported alongside, not silently absorbed into a smaller denominator.
 
-## 5. Known deviation, not yet migrated
+## 5. Known deviations, not yet resolved
+
+### 5.1 `canary_readout.py` still uses Welch's t
 
 `analysis/canary_readout.py::h1_matched_horizon` currently uses `stats.ttest_ind` (Welch's t)
 as its significance test, alongside `cliffs_delta` and a Brown-Forsythe variance check — it
@@ -145,3 +147,39 @@ side effect of writing this file. Flagged here so it isn't rediscovered from scr
 Cliff's delta itself (already computed there) does not need to change — it was already the
 project's rank-based effect size and is unaffected by which significance test runs alongside
 it.
+
+### 5.2 The conditional-timing significance test is not clustered, but its CIs are
+
+`censored_timing_summary` builds **both** its rate CI and its conditional-timing CI on
+`bootstrap_ci_grouped` — resampling whole configurations, per §2. But
+`compare_censored_groups`'s `conditional_timing_comparison` runs `compare_groups` on raw rows:
+
+```python
+"conditional_timing_comparison": compare_groups(
+    df_a[value_col].dropna(), df_b[value_col].dropna()),
+```
+
+With `N_REPLICATES = 3`, that treats 3 replicates of one `experiment_id` as 3 independent
+observations when §2 says the effective sample size is the number of *configurations*. The
+consequence is one-directional: the effective n fed to Mann-Whitney is inflated, so **the
+p-value is smaller than the design earns**. The CI beside it, computed over the same data, is
+not — so a single call can currently return a correctly-clustered interval and an
+insufficiently-clustered p-value.
+
+This is not asserted to be a bug in the finding of any existing result — no published number in
+this paper currently comes from `compare_censored_groups` — and there is precedent for
+row-level `cliffs_delta` elsewhere in the project (D16 compares n=159 vs n=18 rows). But it is
+an inconsistency inside the document that defines the standard, and it should be settled
+deliberately rather than found by a reviewer.
+
+**Not fixed here, and why.** The obvious fix — aggregate each config to its own mean (or
+median) before testing — reduces n from rows to configs (e.g. 78 → 26 in the D18 arm above),
+which can change whether a contrast reads as significant. Changing a significance test's unit
+of analysis is exactly the class of decision §5.1 declines to make as a side effect, and the
+same reasoning applies to it. Pending review by this standard's author and Soham.
+
+**One clarification while this is open.** In §3's validation figures, the two halves do not
+rest on the same number of configurations: the trip rate spans all **36** TIME_BASED configs,
+while the conditional-timing CI spans the **26** that tripped at least once — the other 10 are
+entirely censored and correctly drop out of a conditional quantity. That is expected behaviour,
+not a defect, but it means "36 configs" should not be read as applying to both numbers.

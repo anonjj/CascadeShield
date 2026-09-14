@@ -706,5 +706,17 @@ a side effect of defining the standard everything *else* should follow. Flagged 
 
 **Revisit if:** the H1 migration above is done — re-run `h1_matched_horizon` under
 `compare_censored_groups`/`mann_whitney`, confirm the conclusion is unchanged (or update D-004
-if it isn't), and remove the §5 flag.
+if it isn't), and remove the §5.1 flag.
+
+**Update (2026-09-14) — a second open item, found while merging this patch.**
+`compare_censored_groups` computes its CIs with the cluster bootstrap (correct, per §2) but
+runs its conditional-timing Mann-Whitney on raw rows, treating 3 replicates of one
+`experiment_id` as 3 independent observations. The effect is one-directional — the reported
+p-value is smaller than the design earns. No published number currently comes from this
+function, so nothing in the paper is affected today, but the standard contradicts itself as
+written. Recorded as `statistical-treatment.md` §5.2 rather than silently fixed: the fix
+(aggregate to per-config means before testing) changes the unit of analysis and can flip a
+contrast's significance, which is the same class of decision this entry's own **Rejected**
+paragraph declines to make as a side effect. Pending review by this standard's author and
+Soham.
 

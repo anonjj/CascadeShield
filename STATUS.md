@@ -36,6 +36,7 @@ Everything below is ordered by whether it blocks Paper B.
 | CRASH re-collection, **FANOUT** | 🔴 **Not collected** — needs a free machine, ~6h | **Yes** |
 | D15 / D-001 re-derivation after CRASH | 🔴 **Blocked** on the line above | **Yes** |
 | D13 / H3 replicate top-up | 🟡 **Preliminary** — real signal at n=1/bucket, ~45 min to fix | **Yes** |
+| Statistical treatment (D19) | ✅ **Defined** — Mann-Whitney + Cliff's δ, bootstrap CIs, censoring as rate + conditional timing. Two known deviations flagged, neither blocking | — |
 | Manuscript | 🔴 **Not started** — no draft exists anywhere in the repo | — |
 
 **Two things block writing:** the FANOUT CRASH re-collection (and the re-analysis it unblocks),
@@ -133,7 +134,7 @@ pending re-collection.
 | `v5_soham_linear_presweep` | 324 | Soham's independent LINEAR sweep; superseded, audit only |
 | `v6_pre_d17_leg_blend_crash` | 704 | Pre-D17-fix snapshot; every CRASH row saturated at 0.5000 |
 
-**Three traps, all real:**
+**Five traps, all real:**
 
 1. **7 of 8 analysis outputs are stale.** Only `analysis/out/canary_readout.json` postdates the
    2026-09-06 CRASH-strip. `order_leg_containment.json` and `tau_sweep.json` were written ~75
@@ -141,7 +142,15 @@ pending re-collection.
    `analysis/out/` today describes the pre-strip dataset.** Re-run before quoting.
 2. **`data/occupancy_dataset.csv` (162 rows) is not registered in `DATASETS`** — H2b/D18's whole
    evidence base cannot be loaded via `analysis/common.py::load()` like everything else.
-3. **A stray `master_dataset.csv` sits at the repo root** (798 rows, matching the v4 archive),
+3. **`scipy` is an undeclared dependency.** Four analysis scripts import it and D19 moves the
+   import into `analysis/common.py`, which every analysis script loads — yet it is absent from
+   `ml/requirements.txt` and there is no `analysis/requirements.txt`. It works today only
+   because `scikit-learn` pulls it in transitively. Worth a one-line PR.
+4. **The roadmap board that drives "B" items lives outside the repo.** Both B5 (D19) and B8
+   (the README regeneration) cite numbered backlog items, but no `BACKLOG.md` exists and no
+   B-numbered item appears in any tracked file. Work is being driven by a list no session can
+   read — the same memory gap this file exists to close, in a new place.
+5. **A stray `master_dataset.csv` sits at the repo root** (798 rows, matching the v4 archive),
    untracked and in no git history. **It is not the live file.** Delete it.
 
 ---
@@ -196,5 +205,8 @@ progress"). If you find a line here that is wrong, fix it rather than working ar
 
 **Reasoning lives elsewhere, on purpose:** `docs/paper/decision-log.md` (why each decision went
 the way it did), `docs/paper/hypotheses.md` (full hypothesis text and evidence),
+`docs/paper/statistical-treatment.md` (D19 — which test, which CI, how censored columns are
+reported; `analysis/common.py::compare_groups` / `compare_censored_groups` are the only
+sanctioned entry points),
 `data/DATA_DICTIONARY.md` (schema — note its column list has drifted; `DATASET_HEADERS` in
 `experiments/runner.py` is authoritative at **36 columns**).

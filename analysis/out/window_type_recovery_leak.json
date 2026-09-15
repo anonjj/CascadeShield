@@ -188,7 +188,8 @@
       "min_ratio": 2.0770758267275204,
       "max_ratio": 3.6379244852997035,
       "consistent_time_slower": true,
-      "consistent_count_slower": false
+      "consistent_count_slower": false,
+      "partial_ratios_agree": true
     },
     "time_to_open_anchor": {
       "by_wait_duration": [
@@ -355,7 +356,8 @@
       "min_ratio": 1.831473060493317,
       "max_ratio": 1.8403913347309573,
       "consistent_time_slower": true,
-      "consistent_count_slower": false
+      "consistent_count_slower": false,
+      "partial_ratios_agree": true
     },
     "excess_over_wait_duration": {
       "by_wait_duration": [
@@ -522,7 +524,8 @@
       "min_ratio": 11.977869111602907,
       "max_ratio": 28.508384458077707,
       "consistent_time_slower": true,
-      "consistent_count_slower": false
+      "consistent_count_slower": false,
+      "partial_ratios_agree": true
     },
     "paired": {
       "n_pairs": 54,
@@ -1300,7 +1303,8 @@
         "min_ratio": 9.003944298932057,
         "max_ratio": 10.354440936079715,
         "consistent_time_slower": false,
-        "consistent_count_slower": false
+        "consistent_count_slower": false,
+        "partial_ratios_agree": true
       },
       "open_to_half_open_sanity_check": {
         "by_wait_duration": [
@@ -1467,7 +1471,8 @@
         "min_ratio": 0.9997056503243794,
         "max_ratio": 1.0000559249445915,
         "consistent_time_slower": false,
-        "consistent_count_slower": false
+        "consistent_count_slower": false,
+        "partial_ratios_agree": false
       },
       "rows": [
         {

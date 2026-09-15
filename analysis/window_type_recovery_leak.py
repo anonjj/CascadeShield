@@ -170,6 +170,18 @@ def _censored_ratio_table(df, value_col):
         # migration exists to close off.
         "consistent_time_slower": bool(rows) and len(ratios) == len(rows) and all(r > RATIO_THRESHOLD for r in ratios),
         "consistent_count_slower": bool(rows) and len(ratios) == len(rows) and all(r < 1 / RATIO_THRESHOLD for r in ratios),
+        # Same directional check as consistent_time_slower/consistent_count_slower, but
+        # WITHOUT requiring len(ratios) == len(rows) -- i.e. "every level that COULD
+        # produce a ratio agrees," evaluated separately from whether every level did
+        # produce one. A fully-censored level correctly has no ratio and is silently
+        # excluded here rather than voiding the direction check outright; this is what
+        # _verdict's LEAK_SUGGESTIVE_INCOMPLETE_DUE_TO_CENSORING branch must gate on --
+        # partial coverage that still points one way is suggestive, partial coverage
+        # that CONTRADICTS itself (one level says TIME is slower, another says COUNT
+        # is) is not, and must not be reported as suggestive of anything.
+        "partial_ratios_agree": bool(ratios) and (
+            all(r > RATIO_THRESHOLD for r in ratios) or all(r < 1 / RATIO_THRESHOLD for r in ratios)
+        ),
     }
 
 
@@ -394,14 +406,20 @@ def _verdict(coarse, precise, precise_status):
         return "AMBIGUOUS"
     if hoc["consistent_time_slower"] or hoc["consistent_count_slower"]:
         return "LEAK_CONFIRMED_ON_HALF_OPEN_LEG"
-    if hoc["ratios"] and any(r["fully_censored"] for r in hoc["by_wait_duration"]):
-        # The levels that DID produce a ratio agree with each other (or there'd be no
-        # "ratios" to speak of below the consistency bar), but at least one level had
-        # zero observed events on one arm -- that arm didn't fail to show an effect
-        # there, it hit the ceiling of the observation window, which
-        # _censored_ratio_table deliberately refuses to fold into a median. Report the
-        # pattern as suggestive rather than confirmed until it is re-derived with a
-        # censoring-aware estimator (e.g. Kaplan-Meier / a Cox model), not a
+    if hoc["partial_ratios_agree"] and any(r["fully_censored"] for r in hoc["by_wait_duration"]):
+        # partial_ratios_agree already confirms every level that COULD produce a ratio
+        # points the same direction (see _censored_ratio_table) -- checked explicitly,
+        # not inferred from `ratios` being non-empty, which says nothing about whether
+        # those ratios agree with each other. (An earlier version of this check used
+        # `hoc["ratios"]` here and asserted in a comment that non-empty implied
+        # agreement; it didn't -- two ratios pointing opposite directions are both
+        # non-null and both land in `ratios`, and that version would call a flatly
+        # self-contradictory pair of measured levels "suggestive of a leak.") At least
+        # one level here also had zero observed events on one arm -- that arm didn't
+        # fail to show an effect there, it hit the ceiling of the observation window,
+        # which _censored_ratio_table deliberately refuses to fold into a median.
+        # Report the pattern as suggestive rather than confirmed until it is re-derived
+        # with a censoring-aware estimator (e.g. Kaplan-Meier / a Cox model), not a
         # median-of-observed-rows comparison, per D19.
         return "LEAK_SUGGESTIVE_INCOMPLETE_DUE_TO_CENSORING"
     coarse_rec = coarse["time_to_recover"]
@@ -713,10 +731,48 @@ def self_test_censoring():
     print("self-test: censoring regression (D13's D_w=30 shape) OK")
 
 
+def self_test_contradictory_ratios():
+    """Regression test for a bug found in code review of the censoring migration itself:
+    _verdict's LEAK_SUGGESTIVE_INCOMPLETE_DUE_TO_CENSORING branch checked only that
+    hoc["ratios"] was non-empty, not that those ratios agreed in direction. Two levels
+    that flatly contradict each other -- one showing TIME far slower, the other showing
+    COUNT far slower -- both produce non-null, non-empty ratios; a third, fully-censored
+    level was then enough to make the old code report "suggestive of a leak" over data
+    that doesn't even agree with itself. partial_ratios_agree (_censored_ratio_table)
+    exists specifically to gate this, and this test locks in that AMBIGUOUS is the
+    correct verdict here, not LEAK_SUGGESTIVE_INCOMPLETE_DUE_TO_CENSORING.
+    """
+    def rows(wd, window_type, prefix, values):
+        return [{"experiment_id": "{}-{}".format(prefix, i), COL_WAIT: wd,
+                  COL_WINDOW: window_type, "precise_half_open_to_closed": v}
+                for i, v in enumerate(values)]
+
+    # D_w=5: TIME far slower than COUNT. D_w=15: the OPPOSITE -- COUNT far slower than
+    # TIME. D_w=30: COUNT fully censored. The two measurable levels contradict each
+    # other outright; censoring at D_w=30 must not launder that into "suggestive."
+    data = (rows(5, "COUNT", "cnt5", [2.0, 2.0, 2.0]) + rows(5, "TIME", "tim5", [20.0, 20.0, 20.0])
+            + rows(15, "COUNT", "cnt15", [20.0, 20.0, 20.0]) + rows(15, "TIME", "tim15", [2.0, 2.0, 2.0])
+            + rows(30, "COUNT", "cnt30", [np.nan, np.nan, np.nan])
+            + rows(30, "TIME", "tim30", [30.0, 30.0, 30.0]))
+    df = pd.DataFrame(data)
+
+    table = _censored_ratio_table(df, "precise_half_open_to_closed")
+    assert table["ratios"] == [10.0, 0.1], table["ratios"]
+    assert table["partial_ratios_agree"] is False, "contradictory ratios must not agree"
+
+    verdict = _verdict(
+        {"time_to_recover": {"consistent_time_slower": False, "consistent_count_slower": False}},
+        {"half_open_to_closed": table}, "COMPUTED")
+    assert verdict == "AMBIGUOUS", verdict
+
+    print("self-test: contradictory-ratios-plus-censoring regression OK")
+
+
 if __name__ == "__main__":
     if "--self-test" in sys.argv:
         self_test()
         self_test_censoring()
+        self_test_contradictory_ratios()
     else:
         arg = sys.argv[1] if len(sys.argv) > 1 else "current"
         main(arg)

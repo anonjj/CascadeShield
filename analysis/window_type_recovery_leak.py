@@ -56,7 +56,7 @@ import sys
 import numpy as np
 import pandas as pd
 
-from common import DATA_DIR, OUT_DIR, bootstrap_ci_grouped, cliffs_delta, load, write_json
+from common import DATA_DIR, OUT_DIR, compare_censored_groups, load, write_json
 
 COL_WINDOW = "window_type"
 COL_WAIT = "wait_duration"
@@ -93,38 +93,69 @@ def norm(value):
 
 # --------------------------------------------------------------------- shared ratio math
 
-def _ratio_table(df, value_col):
-    """Median TIME/COUNT ratio of `value_col`, grouped by wait_duration.
+def _censored_ratio_table(df, value_col):
+    """Per-wait_duration TIME vs COUNT comparison for `value_col`, via D19's
+    compare_censored_groups (analysis/common.py) -- the rate at which the event was
+    observed at all is reported separately from the timing conditional on it having
+    happened, exactly as the metrics contract requires for time_to_open/time_to_recover
+    and their derived precise_* equivalents (DATA_DICTIONARY.md: "nulls ... are outcomes,
+    not missing data").
 
-    Returns per-wait-level rows (n, medians, ratio, Cliff's delta, cluster-bootstrap CI
-    per arm) plus the plain ratio list and a two-sided consistency verdict -- "TIME
-    slower at every level" and "COUNT slower at every level" are both reported, since a
-    leak could in principle run either direction.
+    This replaced a version that called .dropna() on `value_col` per arm before taking a
+    median, then skipped (`continue`d past) any wait_duration level where that left zero
+    rows on either side. That silently dropped a bucket exactly when it was most
+    informative: the D13 top-up (commit c59ef95) found TIME closing 6/6 at every
+    wait_duration while COUNT closed 6/6 at D_w=5, 2/6 at D_w=15, and **0/6 at D_w=30**
+    -- the D_w=30 row vanished from the table instead of reporting "0/6 recovered",
+    which is precisely why that commit's own message says D13 was not marked closed.
+
+    A wait_duration level with rows collected on both arms always gets a row now, even
+    when one arm has zero *observed* events -- `fully_censored=True`, its rate is 0.0,
+    and `ratio_time_over_count` is None (there is no finite time to ratio against; a
+    censored event took at least as long as the observation window, quite possibly the
+    single strongest data point in the arm's favor, not an absence of one). Such a row
+    is excluded from `ratios`/the consistency verdict below rather than forcing a
+    number out of it -- see the `fully_censored` flag on each row for which levels that
+    affects. A level is skipped entirely only when one arm collected literally no rows.
     """
     rows = []
     ratios = []
     for wd, g in df.groupby(COL_WAIT):
-        c = g[g[COL_WINDOW] == "COUNT"][value_col].dropna()
-        t = g[g[COL_WINDOW] == "TIME"][value_col].dropna()
+        c = g[g[COL_WINDOW] == "COUNT"]
+        t = g[g[COL_WINDOW] == "TIME"]
         if len(c) == 0 or len(t) == 0:
             continue
-        cm, tm = float(c.median()), float(t.median())
-        ratio = (tm / cm) if cm else None
+        cmp = compare_censored_groups(c, t, value_col, group_col="experiment_id")
+        n_obs_c = cmp["a"]["n_observed"]
+        n_obs_t = cmp["b"]["n_observed"]
+        median_c = float(c[value_col].median()) if n_obs_c else None
+        median_t = float(t[value_col].median()) if n_obs_t else None
+        ratio = (median_t / median_c) if (median_c is not None and median_t is not None and median_c) else None
+        fully_censored = (n_obs_c == 0 or n_obs_t == 0)
         if ratio is not None:
             ratios.append(ratio)
         rows.append({
             "wait_duration": float(wd),
             "n_count": int(len(c)),
             "n_time": int(len(t)),
-            "median_count": cm,
-            "median_time": tm,
+            "n_observed_count": n_obs_c,
+            "n_observed_time": n_obs_t,
+            "rate_count": cmp["a"]["rate"],
+            "rate_time": cmp["b"]["rate"],
+            "median_count": median_c,
+            "median_time": median_t,
             "ratio_time_over_count": ratio,
+            "fully_censored": fully_censored,
             # (COUNT, TIME) order -- matches canary_readout.py and order_leg_containment.py's
             # convention for this same conceptual comparison; keep it consistent so `delta`'s
-            # sign means the same thing across every script's JSON output.
-            "cliffs_delta": cliffs_delta(c.values, t.values),
-            "ci_count": bootstrap_ci_grouped(g[g[COL_WINDOW] == "COUNT"], value_col),
-            "ci_time": bootstrap_ci_grouped(g[g[COL_WINDOW] == "TIME"], value_col),
+            # sign means the same thing across every script's JSON output. Computed only over
+            # the observed (non-censored) rows on each side -- compare_groups degrades to
+            # delta=None/"undefined" and p=None when one side has zero observed rows, rather
+            # than raising.
+            "cliffs_delta": cmp["conditional_timing_comparison"]["cliffs_delta"],
+            "mann_whitney": cmp["conditional_timing_comparison"]["mann_whitney"],
+            "ci_count": cmp["a"]["conditional_timing"],
+            "ci_time": cmp["b"]["conditional_timing"],
         })
     return {
         "by_wait_duration": rows,
@@ -132,14 +163,40 @@ def _ratio_table(df, value_col):
         "median_ratio": float(np.median(ratios)) if ratios else None,
         "min_ratio": float(min(ratios)) if ratios else None,
         "max_ratio": float(max(ratios)) if ratios else None,
-        "consistent_time_slower": bool(ratios) and all(r > RATIO_THRESHOLD for r in ratios),
-        "consistent_count_slower": bool(ratios) and all(r < 1 / RATIO_THRESHOLD for r in ratios),
+        # Require every collected level to have produced a ratio before calling the
+        # pattern "consistent" -- a fully-censored level can't be folded into a median
+        # comparison, and asserting consistency over the remaining levels while quietly
+        # ignoring the one that couldn't produce a number is the exact overclaim this
+        # migration exists to close off.
+        "consistent_time_slower": bool(rows) and len(ratios) == len(rows) and all(r > RATIO_THRESHOLD for r in ratios),
+        "consistent_count_slower": bool(rows) and len(ratios) == len(rows) and all(r < 1 / RATIO_THRESHOLD for r in ratios),
+        # Same directional check as consistent_time_slower/consistent_count_slower, but
+        # WITHOUT requiring len(ratios) == len(rows) -- i.e. "every level that COULD
+        # produce a ratio agrees," evaluated separately from whether every level did
+        # produce one. A fully-censored level correctly has no ratio and is silently
+        # excluded here rather than voiding the direction check outright; this is what
+        # _verdict's LEAK_SUGGESTIVE_INCOMPLETE_DUE_TO_CENSORING branch must gate on --
+        # partial coverage that still points one way is suggestive, partial coverage
+        # that CONTRADICTS itself (one level says TIME is slower, another says COUNT
+        # is) is not, and must not be reported as suggestive of anything.
+        "partial_ratios_agree": bool(ratios) and (
+            all(r > RATIO_THRESHOLD for r in ratios) or all(r < 1 / RATIO_THRESHOLD for r in ratios)
+        ),
     }
 
 
 def _paired_view(df, value_col, match_keys):
     """Fully-matched paired view: same config on every listed key, only window_type
-    differs. `match_keys` must already be filtered to columns that exist in `df`."""
+    differs. `match_keys` must already be filtered to columns that exist in `df`.
+
+    Secondary cross-check only -- median()/unstack() here silently drops a (config,
+    window_type) cell that is fully censored (median of an all-null group is NaN, and
+    the subsequent dropna(subset=["COUNT","TIME"]) removes the row). That is a real
+    loss of information for the same reason _censored_ratio_table's docstring
+    describes; the by_wait_duration table above is the one that is safe to read a
+    verdict off of. This view exists for the paired-CSV export and is not otherwise
+    load-bearing.
+    """
     if not match_keys:
         return pd.DataFrame()
     piv = (df.groupby(match_keys + [COL_WINDOW])[value_col]
@@ -169,12 +226,12 @@ def coarse_ratio_check(df):
         "n_count": int((d[COL_WINDOW] == "COUNT").sum()),
         "n_time": int((d[COL_WINDOW] == "TIME").sum()),
         "match_keys": {"requested": MATCH_KEYS_WANTED, "used": used_keys, "missing": missing_keys},
-        "time_to_recover": _ratio_table(d, COL_RECOVERY),
+        "time_to_recover": _censored_ratio_table(d, COL_RECOVERY),
         # Separates "TIME opens later" (a flat anchor shift, not a recovery-side leak)
         # from "TIME's post-open excess grows with wait_duration" (not explainable by a
         # constant shift -- the pattern actually found against the real archive).
-        "time_to_open_anchor": _ratio_table(d, COL_OPEN),
-        "excess_over_wait_duration": _ratio_table(d, "excess"),
+        "time_to_open_anchor": _censored_ratio_table(d, COL_OPEN),
+        "excess_over_wait_duration": _censored_ratio_table(d, "excess"),
         "paired": {
             "n_pairs": int(len(piv)),
             "median_paired_ratio": float(piv["ratio"].median()) if len(piv) else None,
@@ -264,8 +321,14 @@ def precise_row_for(row, index):
         return {"status": "SKIPPED_UNMAPPED_TOPOLOGY_FAULT"}
     service, breakers = watch
 
+    # .get(): rows from an archive that predates D14's machine_id column (e.g. the
+    # v2/v3 legacy datasets) have no such key at all. Mirrors load_transition_index's
+    # own handling just above -- a bare row["machine_id"] turns one legacy row into a
+    # KeyError that takes down the whole analysis, which only stayed latent this long
+    # because no checkout had a real data/cb_transitions.jsonl to exercise this path
+    # against an archived (non-"current") dataset until now.
     key = (row["experiment_id"], str(row["replicate"]), row["mode"], row["environment"],
-           row["machine_id"])
+           row.get("machine_id", ""))
     rec = index.get(key)
     if rec is None:
         return {"status": "SKIPPED_NO_MATCHING_RECORD"}
@@ -325,9 +388,9 @@ def precise_recovery_from_transitions(cb_transitions_path, master_df):
     return {
         "status_counts": status_counts,
         "n_ok": int(len(ok)),
-        "half_open_to_closed": (_ratio_table(ok, "precise_half_open_to_closed")
+        "half_open_to_closed": (_censored_ratio_table(ok, "precise_half_open_to_closed")
                                  if "precise_half_open_to_closed" in ok.columns else None),
-        "open_to_half_open_sanity_check": (_ratio_table(ok, "precise_open_to_half_open")
+        "open_to_half_open_sanity_check": (_censored_ratio_table(ok, "precise_open_to_half_open")
                                             if "precise_open_to_half_open" in ok.columns else None),
         "rows": pdf.to_dict("records"),
     }
@@ -339,10 +402,26 @@ def _verdict(coarse, precise, precise_status):
     if precise_status != "COMPUTED":
         return "MECHANISM_UNTESTED_NO_SIDECAR"
     hoc = precise.get("half_open_to_closed")
-    if not hoc or not hoc["ratios"]:
+    if not hoc or not hoc["by_wait_duration"]:
         return "AMBIGUOUS"
     if hoc["consistent_time_slower"] or hoc["consistent_count_slower"]:
         return "LEAK_CONFIRMED_ON_HALF_OPEN_LEG"
+    if hoc["partial_ratios_agree"] and any(r["fully_censored"] for r in hoc["by_wait_duration"]):
+        # partial_ratios_agree already confirms every level that COULD produce a ratio
+        # points the same direction (see _censored_ratio_table) -- checked explicitly,
+        # not inferred from `ratios` being non-empty, which says nothing about whether
+        # those ratios agree with each other. (An earlier version of this check used
+        # `hoc["ratios"]` here and asserted in a comment that non-empty implied
+        # agreement; it didn't -- two ratios pointing opposite directions are both
+        # non-null and both land in `ratios`, and that version would call a flatly
+        # self-contradictory pair of measured levels "suggestive of a leak.") At least
+        # one level here also had zero observed events on one arm -- that arm didn't
+        # fail to show an effect there, it hit the ceiling of the observation window,
+        # which _censored_ratio_table deliberately refuses to fold into a median.
+        # Report the pattern as suggestive rather than confirmed until it is re-derived
+        # with a censoring-aware estimator (e.g. Kaplan-Meier / a Cox model), not a
+        # median-of-observed-rows comparison, per D19.
+        return "LEAK_SUGGESTIVE_INCOMPLETE_DUE_TO_CENSORING"
     coarse_rec = coarse["time_to_recover"]
     coarse_consistent = coarse_rec["consistent_time_slower"] or coarse_rec["consistent_count_slower"]
     if coarse_consistent:
@@ -386,28 +465,50 @@ def main(dataset="current"):
         pd.DataFrame(coarse["paired"]["rows"]).to_csv(
             OUT_DIR / "window_type_recovery_leak{}_paired.csv".format(suffix), index=False)
 
-    _print_summary(dataset, coarse, precise_status, verdict)
+    _print_summary(dataset, coarse, precise, precise_status, verdict)
     return payload
 
 
-def _print_summary(dataset, coarse, precise_status, verdict):
-    rec = coarse["time_to_recover"]
+def _fmt(v, spec="{:.3f}"):
+    return spec.format(v) if v is not None else "   n/a"
+
+
+def _print_censored_table(label, table):
+    print("\n[{}] rate (D19: event observed at all) + timing conditional on it".format(label))
+    print("wait_duration | COUNT obs/n (rate) | TIME obs/n (rate) | median C | median T | ratio T/C")
+    print("-" * 92)
+    for r in table["by_wait_duration"]:
+        rc = r["rate_count"]["point"]
+        rt = r["rate_time"]["point"]
+        rc_s = "{:.0%}".format(rc) if rc is not None else " n/a"
+        rt_s = "{:.0%}".format(rt) if rt is not None else " n/a"
+        flag = "  <-- FULLY CENSORED ONE ARM" if r["fully_censored"] else ""
+        print("{:>13.0f} | {:>3}/{:<3} ({:>4}) | {:>3}/{:<3} ({:>4}) | {:>8} | {:>8} | {:>7}{}".format(
+            r["wait_duration"], r["n_observed_count"], r["n_count"], rc_s,
+            r["n_observed_time"], r["n_time"], rt_s,
+            _fmt(r["median_count"]), _fmt(r["median_time"]),
+            "{:.2f}x".format(r["ratio_time_over_count"]) if r["ratio_time_over_count"] is not None else "  --  ",
+            flag))
+    if table["ratios"]:
+        print("-" * 92)
+        print("ratio, fully-observed levels only: median {:.2f}x (range {:.2f}-{:.2f})  |  "
+              "consistent_time_slower={}  consistent_count_slower={}".format(
+                  table["median_ratio"], table["min_ratio"], table["max_ratio"],
+                  table["consistent_time_slower"], table["consistent_count_slower"]))
+    censored_levels = [r["wait_duration"] for r in table["by_wait_duration"] if r["fully_censored"]]
+    if censored_levels:
+        print("fully-censored levels (excluded from the ratio/consistency verdict above): {}".format(
+            censored_levels))
+
+
+def _print_summary(dataset, coarse, precise, precise_status, verdict):
     print("dataset: {}  |  rows: {}  |  COUNT={}  TIME={}".format(
         dataset, coarse["n_rows"], coarse["n_count"], coarse["n_time"]))
     print("match_keys used: {}  (dropped, not in dataset: {})".format(
         coarse["match_keys"]["used"], coarse["match_keys"]["missing"]))
 
-    print("\n[COARSE] time_to_recover (OPEN -> left-OPEN, see docstring)")
-    print("wait_duration |  n(C/T) | median C | median T | ratio T/C")
-    print("-" * 62)
-    for r in rec["by_wait_duration"]:
-        print("{:>13.0f} | {:>2}/{:<3} | {:>8.3f} | {:>8.3f} | {:>6.2f}x".format(
-            r["wait_duration"], r["n_count"], r["n_time"],
-            r["median_count"], r["median_time"], r["ratio_time_over_count"]))
-    if rec["ratios"]:
-        print("-" * 62)
-        print("median ratio: {:.2f}x (range {:.2f}-{:.2f})".format(
-            rec["median_ratio"], rec["min_ratio"], rec["max_ratio"]))
+    _print_censored_table("COARSE time_to_recover (OPEN -> left-OPEN, see docstring)",
+                           coarse["time_to_recover"])
 
     anchor = coarse["time_to_open_anchor"]
     excess = coarse["excess_over_wait_duration"]
@@ -418,11 +519,19 @@ def _print_summary(dataset, coarse, precise_status, verdict):
     e_by_wd = {r["wait_duration"]: r for r in excess["by_wait_duration"]}
     for wd in sorted(a_by_wd):
         a, e = a_by_wd[wd], e_by_wd.get(wd)
-        print("{:>13.0f} | {:>15.3f} | {:>4.3f} | {:>16.3f} | {:>5.3f}".format(
-            wd, a["median_count"], a["median_time"],
-            e["median_count"] if e else float("nan"), e["median_time"] if e else float("nan")))
+        print("{:>13.0f} | {:>15} | {:>4} | {:>16} | {:>5}".format(
+            wd, _fmt(a["median_count"]), _fmt(a["median_time"]),
+            _fmt(e["median_count"]) if e else "n/a", _fmt(e["median_time"]) if e else "n/a"))
 
     print("\n[PRECISE] status: {}".format(precise_status))
+    if precise_status == "COMPUTED" and precise:
+        print("status_counts: {}".format(precise["status_counts"]))
+        if precise.get("half_open_to_closed"):
+            _print_censored_table("PRECISE half_open_to_closed", precise["half_open_to_closed"])
+        if precise.get("open_to_half_open_sanity_check"):
+            _print_censored_table("PRECISE open_to_half_open (sanity check, should be window-type-agnostic)",
+                                   precise["open_to_half_open_sanity_check"])
+
     print("\nVERDICT: {}".format(verdict))
 
 
@@ -565,9 +674,105 @@ def self_test():
     print("self-test: 8/8 fixtures OK")
 
 
+def self_test_censoring():
+    """Regression test for the exact bug that kept D13 open: a wait_duration level
+    where one arm has rows but zero *observed* events must still appear in
+    by_wait_duration (not silently dropped), must be flagged fully_censored, and must
+    not by itself support a blanket 'consistent' directional claim -- reproducing the
+    D13 top-up's own shape (commit c59ef95): TIME recovers every time; COUNT recovers
+    at D_w=5 and D_w=15 but 0/3 at D_w=30.
+    """
+    def rows(wd, window_type, prefix, values):
+        return [{"experiment_id": "{}-{}".format(prefix, i), COL_WAIT: wd,
+                  COL_WINDOW: window_type, "precise_half_open_to_closed": v}
+                for i, v in enumerate(values)]
+
+    data = (rows(5, "COUNT", "cnt5", [2.0, 2.1, 1.9])
+            + rows(5, "TIME", "tim5", [15.0, 14.0, 16.0])
+            + rows(15, "COUNT", "cnt15", [2.5, 2.6, 2.4])
+            + rows(15, "TIME", "tim15", [22.0, 21.0, 23.0])
+            + rows(30, "COUNT", "cnt30", [np.nan, np.nan, np.nan])   # 0/3 recovered
+            + rows(30, "TIME", "tim30", [30.0, 31.0, 29.0]))
+    df = pd.DataFrame(data)
+
+    table = _censored_ratio_table(df, "precise_half_open_to_closed")
+    by_wd = {r["wait_duration"]: r for r in table["by_wait_duration"]}
+
+    assert set(by_wd) == {5.0, 15.0, 30.0}, "D_w=30 must not vanish from by_wait_duration"
+    assert by_wd[30.0]["fully_censored"] is True
+    assert by_wd[30.0]["n_observed_count"] == 0
+    assert by_wd[30.0]["rate_count"]["point"] == 0.0
+    assert by_wd[30.0]["ratio_time_over_count"] is None
+    assert by_wd[5.0]["fully_censored"] is False and by_wd[15.0]["fully_censored"] is False
+
+    # D_w=5 and D_w=15 alone would both clear RATIO_THRESHOLD (~7x, ~8.7x) -- confirm
+    # the fully-censored D_w=30 level blocks the blanket "consistent" claim rather than
+    # being quietly excluded from it.
+    assert len(table["ratios"]) == 2
+    assert table["consistent_time_slower"] is False
+
+    verdict = _verdict(
+        {"time_to_recover": {"consistent_time_slower": False, "consistent_count_slower": False}},
+        {"half_open_to_closed": table}, "COMPUTED")
+    assert verdict == "LEAK_SUGGESTIVE_INCOMPLETE_DUE_TO_CENSORING", verdict
+
+    # Sanity: with no censoring at all, three clean levels DO earn "consistent".
+    clean = pd.DataFrame(
+        rows(5, "COUNT", "c5", [2.0, 2.1, 1.9]) + rows(5, "TIME", "t5", [15.0, 14.0, 16.0])
+        + rows(15, "COUNT", "c15", [2.5, 2.6, 2.4]) + rows(15, "TIME", "t15", [22.0, 21.0, 23.0])
+        + rows(30, "COUNT", "c30", [2.8, 2.9, 2.7]) + rows(30, "TIME", "t30", [30.0, 31.0, 29.0]))
+    clean_table = _censored_ratio_table(clean, "precise_half_open_to_closed")
+    assert clean_table["consistent_time_slower"] is True
+    clean_verdict = _verdict(
+        {"time_to_recover": {"consistent_time_slower": False, "consistent_count_slower": False}},
+        {"half_open_to_closed": clean_table}, "COMPUTED")
+    assert clean_verdict == "LEAK_CONFIRMED_ON_HALF_OPEN_LEG", clean_verdict
+
+    print("self-test: censoring regression (D13's D_w=30 shape) OK")
+
+
+def self_test_contradictory_ratios():
+    """Regression test for a bug found in code review of the censoring migration itself:
+    _verdict's LEAK_SUGGESTIVE_INCOMPLETE_DUE_TO_CENSORING branch checked only that
+    hoc["ratios"] was non-empty, not that those ratios agreed in direction. Two levels
+    that flatly contradict each other -- one showing TIME far slower, the other showing
+    COUNT far slower -- both produce non-null, non-empty ratios; a third, fully-censored
+    level was then enough to make the old code report "suggestive of a leak" over data
+    that doesn't even agree with itself. partial_ratios_agree (_censored_ratio_table)
+    exists specifically to gate this, and this test locks in that AMBIGUOUS is the
+    correct verdict here, not LEAK_SUGGESTIVE_INCOMPLETE_DUE_TO_CENSORING.
+    """
+    def rows(wd, window_type, prefix, values):
+        return [{"experiment_id": "{}-{}".format(prefix, i), COL_WAIT: wd,
+                  COL_WINDOW: window_type, "precise_half_open_to_closed": v}
+                for i, v in enumerate(values)]
+
+    # D_w=5: TIME far slower than COUNT. D_w=15: the OPPOSITE -- COUNT far slower than
+    # TIME. D_w=30: COUNT fully censored. The two measurable levels contradict each
+    # other outright; censoring at D_w=30 must not launder that into "suggestive."
+    data = (rows(5, "COUNT", "cnt5", [2.0, 2.0, 2.0]) + rows(5, "TIME", "tim5", [20.0, 20.0, 20.0])
+            + rows(15, "COUNT", "cnt15", [20.0, 20.0, 20.0]) + rows(15, "TIME", "tim15", [2.0, 2.0, 2.0])
+            + rows(30, "COUNT", "cnt30", [np.nan, np.nan, np.nan])
+            + rows(30, "TIME", "tim30", [30.0, 30.0, 30.0]))
+    df = pd.DataFrame(data)
+
+    table = _censored_ratio_table(df, "precise_half_open_to_closed")
+    assert table["ratios"] == [10.0, 0.1], table["ratios"]
+    assert table["partial_ratios_agree"] is False, "contradictory ratios must not agree"
+
+    verdict = _verdict(
+        {"time_to_recover": {"consistent_time_slower": False, "consistent_count_slower": False}},
+        {"half_open_to_closed": table}, "COMPUTED")
+    assert verdict == "AMBIGUOUS", verdict
+
+    print("self-test: contradictory-ratios-plus-censoring regression OK")
+
+
 if __name__ == "__main__":
     if "--self-test" in sys.argv:
         self_test()
+        self_test_censoring()
+        self_test_contradictory_ratios()
     else:
         arg = sys.argv[1] if len(sys.argv) > 1 else "current"
         main(arg)

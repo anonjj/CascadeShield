@@ -290,6 +290,61 @@ Resilience4j 2.2.0, so *something else* is causing this), but too thin to close 
 
 ---
 
+**Update (2026-09-14, top-up + a new problem).** The replicate top-up ran: 36 runs on
+`jay-mac` (commit `c59ef95`), `n=6` per $D_w$ bucket both window types — well above the "raise
+`n_time` past 1" bar. But it surfaced that the *sample size* was never the real blocker: at
+$D_w=30$, **COUNT closed 0 of 6** HALF_OPEN→CLOSED transitions within the observation
+window — TIME closed 6/6 at every $D_w$. `analysis/window_type_recovery_leak.py`'s ratio
+table computed a median over `.dropna()`ed values per arm, so a bucket with zero non-null
+values had nothing to take a median of — the code `continue`d past it, and the $D_w=30$ row
+silently disappeared from the table entirely rather than reporting "0/6 recovered." That is
+exactly why commit `c59ef95`'s own message says D13 was not marked closed: the tool could not
+honestly report what it had found.
+
+**Update (2026-09-15, tool fixed — D19 censoring protocol applied).**
+`analysis/window_type_recovery_leak.py` is migrated to D19's `compare_censored_groups` /
+`censored_timing_summary` (`analysis/common.py`) — the same protocol `throughput_loss`'s
+retirement (D20) and the statistical-treatment doc already mandate for any right-censored
+timing DV. Every `wait_duration` level that collected rows on both arms now gets a row, even
+when one arm has zero *observed* events; the row reports that arm's recovery **rate** (with a
+cluster-bootstrap CI) separately from timing conditional on recovery, and is excluded from the
+ratio/consistency verdict rather than forced into one. A regression test
+(`self_test_censoring`, run via `--self-test`) reproduces this exact shape and asserts the
+$D_w=30$ row survives.
+
+**Corrected numbers**, re-run against the top-up data (`analysis/out/window_type_recovery_leak.json`):
+
+| $D_w$ | COUNT recovered | TIME recovered | median COUNT | median TIME | ratio T/C |
+|---|---|---|---|---|---|
+| 5  | 6/6 (100%) | 6/6 (100%) | 1.907s | 19.748s | 10.35x |
+| 15 | 2/6 (33%)  | 6/6 (100%) | 2.360s | 21.251s | 9.00x |
+| 30 | **0/6 (0%)** | 6/6 (100%) | — (never recovered) | 35.576s | **undefined** |
+
+**Verdict, corrected: `LEAK_SUGGESTIVE_INCOMPLETE_DUE_TO_CENSORING`** — not
+`LEAK_CONFIRMED_ON_HALF_OPEN_LEG`. This is a downgrade in *label*, not in the strength of the
+evidence: COUNT failing to recover at all within the observation window at $D_w=30$ is, if
+anything, a **more** extreme version of "TIME is not the slow one, COUNT is" than the finite
+ratios at $D_w=5/15$ show — a censored observation means "took at least as long as the window,"
+never "showed no effect." But a censored cell cannot be folded into a median-ratio comparison
+honestly, which is the whole reason the label changes: the pattern is directionally consistent
+everywhere it *can* be measured (10.35x, 9.00x, both well past the 1.15x bar) plus one cell
+that couldn't be measured at all in the same direction the other two already point.
+
+**H3's status stays "re-opened, preliminary."** The blocker is no longer sample size (n=6/bucket
+is adequate) — it is the **estimator**: closing D13 for real needs a censoring-aware analysis
+(Kaplan–Meier or a Cox model on `precise_half_open_to_closed`, right-censored at the
+observation-window cap) rather than a median of the rows that happened to finish. That
+estimation work is not done as part of this update — the tool now reports the true shape of
+the data instead of an artifact of the reporting code masking it, which is the load-bearing
+fix `c59ef95` was waiting on. `data/cb_transitions.jsonl` (37 records, force-tracked) is the
+input a Kaplan–Meier pass would read.
+
+**Revisit if:** a Kaplan–Meier/Cox estimator is added to `window_type_recovery_leak.py` (or a
+new script) for `precise_half_open_to_closed`, or a further top-up extends the observation
+window past $D_w=30$'s cap so COUNT's 0/6 stops being censored and starts being a real number.
+
+---
+
 ## D14 · `machine_id` is added to the canonical schema, before `excluded_reason`
 
 **Date:** 27 Aug 2026 · **Status:** final

@@ -28,16 +28,39 @@
       "by_wait_duration": [
         {
           "wait_duration": 5.0,
-          "n_count": 16,
+          "n_count": 17,
           "n_time": 17,
+          "n_observed_count": 16,
+          "n_observed_time": 17,
+          "rate_count": {
+            "n_rows": 17,
+            "n_groups": 6,
+            "point": 0.9411764705882353,
+            "lo": 0.8235294117647058,
+            "hi": 1.0
+          },
+          "rate_time": {
+            "n_rows": 17,
+            "n_groups": 6,
+            "point": 1.0,
+            "lo": 1.0,
+            "hi": 1.0
+          },
           "median_count": 6.471,
           "median_time": 23.953,
           "ratio_time_over_count": 3.7015917168907433,
+          "fully_censored": false,
           "cliffs_delta": {
-            "delta": 1.0,
+            "delta": -1.0,
             "magnitude": "large",
-            "n_a": 17,
-            "n_b": 16
+            "n_a": 16,
+            "n_b": 17
+          },
+          "mann_whitney": {
+            "U": 0.0,
+            "p": 1.0556608808577622e-06,
+            "n_a": 16,
+            "n_b": 17
           },
           "ci_count": {
             "n_rows": 16,
@@ -56,16 +79,39 @@
         },
         {
           "wait_duration": 15.0,
-          "n_count": 13,
+          "n_count": 14,
           "n_time": 15,
+          "n_observed_count": 13,
+          "n_observed_time": 15,
+          "rate_count": {
+            "n_rows": 14,
+            "n_groups": 5,
+            "point": 0.9285714285714286,
+            "lo": 0.7857142857142857,
+            "hi": 1.0
+          },
+          "rate_time": {
+            "n_rows": 15,
+            "n_groups": 5,
+            "point": 1.0,
+            "lo": 1.0,
+            "hi": 1.0
+          },
           "median_count": 16.578,
           "median_time": 35.106,
           "ratio_time_over_count": 2.117625769091567,
+          "fully_censored": false,
           "cliffs_delta": {
-            "delta": 1.0,
+            "delta": -1.0,
             "magnitude": "large",
-            "n_a": 15,
-            "n_b": 13
+            "n_a": 13,
+            "n_b": 15
+          },
+          "mann_whitney": {
+            "U": 0.0,
+            "p": 7.882954408147018e-06,
+            "n_a": 13,
+            "n_b": 15
           },
           "ci_count": {
             "n_rows": 13,
@@ -86,14 +132,37 @@
           "wait_duration": 30.0,
           "n_count": 15,
           "n_time": 14,
+          "n_observed_count": 15,
+          "n_observed_time": 14,
+          "rate_count": {
+            "n_rows": 15,
+            "n_groups": 5,
+            "point": 1.0,
+            "lo": 1.0,
+            "hi": 1.0
+          },
+          "rate_time": {
+            "n_rows": 14,
+            "n_groups": 5,
+            "point": 1.0,
+            "lo": 1.0,
+            "hi": 1.0
+          },
           "median_count": 31.575,
           "median_time": 65.07249999999999,
           "ratio_time_over_count": 2.0608867775138555,
+          "fully_censored": false,
           "cliffs_delta": {
-            "delta": 0.7619047619047619,
+            "delta": -0.7619047619047619,
             "magnitude": "large",
-            "n_a": 14,
-            "n_b": 15
+            "n_a": 15,
+            "n_b": 14
+          },
+          "mann_whitney": {
+            "U": 25.0,
+            "p": 0.0005211089374879339,
+            "n_a": 15,
+            "n_b": 14
           },
           "ci_count": {
             "n_rows": 15,
@@ -126,16 +195,39 @@
       "by_wait_duration": [
         {
           "wait_duration": 5.0,
-          "n_count": 16,
+          "n_count": 17,
           "n_time": 17,
+          "n_observed_count": 16,
+          "n_observed_time": 17,
+          "rate_count": {
+            "n_rows": 17,
+            "n_groups": 6,
+            "point": 0.9411764705882353,
+            "lo": 0.8235294117647058,
+            "hi": 1.0
+          },
+          "rate_time": {
+            "n_rows": 17,
+            "n_groups": 6,
+            "point": 1.0,
+            "lo": 1.0,
+            "hi": 1.0
+          },
           "median_count": 3.7515,
           "median_time": 6.652,
           "ratio_time_over_count": 1.7731574037051847,
+          "fully_censored": false,
           "cliffs_delta": {
-            "delta": 0.5808823529411765,
+            "delta": -0.5808823529411765,
             "magnitude": "large",
-            "n_a": 17,
-            "n_b": 16
+            "n_a": 16,
+            "n_b": 17
+          },
+          "mann_whitney": {
+            "U": 57.0,
+            "p": 0.004688082347629476,
+            "n_a": 16,
+            "n_b": 17
           },
           "ci_count": {
             "n_rows": 16,
@@ -154,16 +246,39 @@
         },
         {
           "wait_duration": 15.0,
-          "n_count": 13,
+          "n_count": 14,
           "n_time": 15,
+          "n_observed_count": 13,
+          "n_observed_time": 15,
+          "rate_count": {
+            "n_rows": 14,
+            "n_groups": 5,
+            "point": 0.9285714285714286,
+            "lo": 0.7857142857142857,
+            "hi": 1.0
+          },
+          "rate_time": {
+            "n_rows": 15,
+            "n_groups": 5,
+            "point": 1.0,
+            "lo": 1.0,
+            "hi": 1.0
+          },
           "median_count": 3.431,
           "median_time": 6.552,
           "ratio_time_over_count": 1.9096473331390265,
+          "fully_censored": false,
           "cliffs_delta": {
-            "delta": 0.7846153846153846,
+            "delta": -0.7846153846153846,
             "magnitude": "large",
-            "n_a": 15,
-            "n_b": 13
+            "n_a": 13,
+            "n_b": 15
+          },
+          "mann_whitney": {
+            "U": 21.0,
+            "p": 0.0004635747357955021,
+            "n_a": 13,
+            "n_b": 15
           },
           "ci_count": {
             "n_rows": 13,
@@ -184,14 +299,37 @@
           "wait_duration": 30.0,
           "n_count": 15,
           "n_time": 14,
+          "n_observed_count": 15,
+          "n_observed_time": 14,
+          "rate_count": {
+            "n_rows": 15,
+            "n_groups": 5,
+            "point": 1.0,
+            "lo": 1.0,
+            "hi": 1.0
+          },
+          "rate_time": {
+            "n_rows": 14,
+            "n_groups": 5,
+            "point": 1.0,
+            "lo": 1.0,
+            "hi": 1.0
+          },
           "median_count": 3.587,
           "median_time": 6.6915,
           "ratio_time_over_count": 1.86548647895177,
+          "fully_censored": false,
           "cliffs_delta": {
-            "delta": 0.9380952380952381,
+            "delta": -0.9380952380952381,
             "magnitude": "large",
-            "n_a": 14,
-            "n_b": 15
+            "n_a": 15,
+            "n_b": 14
+          },
+          "mann_whitney": {
+            "U": 6.5,
+            "p": 1.889212372775291e-05,
+            "n_a": 15,
+            "n_b": 14
           },
           "ci_count": {
             "n_rows": 15,
@@ -224,16 +362,39 @@
       "by_wait_duration": [
         {
           "wait_duration": 5.0,
-          "n_count": 16,
+          "n_count": 17,
           "n_time": 17,
+          "n_observed_count": 16,
+          "n_observed_time": 17,
+          "rate_count": {
+            "n_rows": 17,
+            "n_groups": 6,
+            "point": 0.9411764705882353,
+            "lo": 0.8235294117647058,
+            "hi": 1.0
+          },
+          "rate_time": {
+            "n_rows": 17,
+            "n_groups": 6,
+            "point": 1.0,
+            "lo": 1.0,
+            "hi": 1.0
+          },
           "median_count": 1.471,
           "median_time": 18.953,
           "ratio_time_over_count": 12.884432358939495,
+          "fully_censored": false,
           "cliffs_delta": {
-            "delta": 1.0,
+            "delta": -1.0,
             "magnitude": "large",
-            "n_a": 17,
-            "n_b": 16
+            "n_a": 16,
+            "n_b": 17
+          },
+          "mann_whitney": {
+            "U": 0.0,
+            "p": 1.0556608808577622e-06,
+            "n_a": 16,
+            "n_b": 17
           },
           "ci_count": {
             "n_rows": 16,
@@ -252,16 +413,39 @@
         },
         {
           "wait_duration": 15.0,
-          "n_count": 13,
+          "n_count": 14,
           "n_time": 15,
+          "n_observed_count": 13,
+          "n_observed_time": 15,
+          "rate_count": {
+            "n_rows": 14,
+            "n_groups": 5,
+            "point": 0.9285714285714286,
+            "lo": 0.7857142857142857,
+            "hi": 1.0
+          },
+          "rate_time": {
+            "n_rows": 15,
+            "n_groups": 5,
+            "point": 1.0,
+            "lo": 1.0,
+            "hi": 1.0
+          },
           "median_count": 1.5779999999999994,
           "median_time": 20.106,
           "ratio_time_over_count": 12.741444866920158,
+          "fully_censored": false,
           "cliffs_delta": {
-            "delta": 1.0,
+            "delta": -1.0,
             "magnitude": "large",
-            "n_a": 15,
-            "n_b": 13
+            "n_a": 13,
+            "n_b": 15
+          },
+          "mann_whitney": {
+            "U": 0.0,
+            "p": 7.882954408147018e-06,
+            "n_a": 13,
+            "n_b": 15
           },
           "ci_count": {
             "n_rows": 13,
@@ -282,14 +466,37 @@
           "wait_duration": 30.0,
           "n_count": 15,
           "n_time": 14,
+          "n_observed_count": 15,
+          "n_observed_time": 14,
+          "rate_count": {
+            "n_rows": 15,
+            "n_groups": 5,
+            "point": 1.0,
+            "lo": 1.0,
+            "hi": 1.0
+          },
+          "rate_time": {
+            "n_rows": 14,
+            "n_groups": 5,
+            "point": 1.0,
+            "lo": 1.0,
+            "hi": 1.0
+          },
           "median_count": 1.5749999999999993,
           "median_time": 35.0725,
           "ratio_time_over_count": 22.268253968253976,
+          "fully_censored": false,
           "cliffs_delta": {
-            "delta": 0.7619047619047619,
+            "delta": -0.7619047619047619,
             "magnitude": "large",
-            "n_a": 14,
-            "n_b": 15
+            "n_a": 15,
+            "n_b": 14
+          },
+          "mann_whitney": {
+            "U": 25.0,
+            "p": 0.0005211089374879339,
+            "n_a": 15,
+            "n_b": 14
           },
           "ci_count": {
             "n_rows": 15,
@@ -487,9 +694,662 @@
     }
   },
   "precise": {
-    "status": "SKIPPED_NO_SIDECAR",
-    "note": "data/cb_transitions.jsonl is real-runs-only and gitignored; it does not exist in this checkout. The precise HALF_OPEN->CLOSED metric cannot be computed until a run of experiments/runner.py retains it. This script's join logic is exercised by --self-test against a synthetic fixture only.",
-    "result": null
+    "status": "COMPUTED",
+    "note": null,
+    "result": {
+      "status_counts": {
+        "SKIPPED_NO_MATCHING_RECORD": 92
+      },
+      "n_ok": 0,
+      "half_open_to_closed": null,
+      "open_to_half_open_sanity_check": null,
+      "rows": [
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T30-W5-D5",
+          "replicate": 2,
+          "window_type": "COUNT",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T30-W5-D5",
+          "replicate": 3,
+          "window_type": "COUNT",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T30-W5-D5",
+          "replicate": 1,
+          "window_type": "TIME",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T30-W5-D5",
+          "replicate": 2,
+          "window_type": "TIME",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T30-W5-D5",
+          "replicate": 3,
+          "window_type": "TIME",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T30-W5-D15",
+          "replicate": 1,
+          "window_type": "COUNT",
+          "wait_duration": 15
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T30-W5-D15",
+          "replicate": 2,
+          "window_type": "COUNT",
+          "wait_duration": 15
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T30-W5-D15",
+          "replicate": 3,
+          "window_type": "COUNT",
+          "wait_duration": 15
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T30-W5-D15",
+          "replicate": 1,
+          "window_type": "TIME",
+          "wait_duration": 15
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T30-W5-D15",
+          "replicate": 2,
+          "window_type": "TIME",
+          "wait_duration": 15
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T30-W5-D15",
+          "replicate": 3,
+          "window_type": "TIME",
+          "wait_duration": 15
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T30-W5-D30",
+          "replicate": 1,
+          "window_type": "COUNT",
+          "wait_duration": 30
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T30-W5-D30",
+          "replicate": 2,
+          "window_type": "COUNT",
+          "wait_duration": 30
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T30-W5-D30",
+          "replicate": 3,
+          "window_type": "COUNT",
+          "wait_duration": 30
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T30-W5-D30",
+          "replicate": 1,
+          "window_type": "TIME",
+          "wait_duration": 30
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T30-W5-D30",
+          "replicate": 2,
+          "window_type": "TIME",
+          "wait_duration": 30
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T30-W5-D30",
+          "replicate": 3,
+          "window_type": "TIME",
+          "wait_duration": 30
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T30-W10-D5",
+          "replicate": 1,
+          "window_type": "COUNT",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T30-W10-D5",
+          "replicate": 2,
+          "window_type": "COUNT",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T30-W10-D5",
+          "replicate": 3,
+          "window_type": "COUNT",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T30-W10-D5",
+          "replicate": 1,
+          "window_type": "TIME",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T30-W10-D5",
+          "replicate": 2,
+          "window_type": "TIME",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T30-W10-D5",
+          "replicate": 3,
+          "window_type": "TIME",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T30-W10-D15",
+          "replicate": 1,
+          "window_type": "COUNT",
+          "wait_duration": 15
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T30-W10-D15",
+          "replicate": 2,
+          "window_type": "COUNT",
+          "wait_duration": 15
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T30-W10-D15",
+          "replicate": 3,
+          "window_type": "COUNT",
+          "wait_duration": 15
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T30-W10-D15",
+          "replicate": 1,
+          "window_type": "TIME",
+          "wait_duration": 15
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T30-W10-D15",
+          "replicate": 2,
+          "window_type": "TIME",
+          "wait_duration": 15
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T30-W10-D15",
+          "replicate": 3,
+          "window_type": "TIME",
+          "wait_duration": 15
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T30-W10-D30",
+          "replicate": 1,
+          "window_type": "COUNT",
+          "wait_duration": 30
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T30-W10-D30",
+          "replicate": 2,
+          "window_type": "COUNT",
+          "wait_duration": 30
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T30-W10-D30",
+          "replicate": 3,
+          "window_type": "COUNT",
+          "wait_duration": 30
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T30-W10-D30",
+          "replicate": 1,
+          "window_type": "TIME",
+          "wait_duration": 30
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T30-W10-D30",
+          "replicate": 2,
+          "window_type": "TIME",
+          "wait_duration": 30
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T30-W10-D30",
+          "replicate": 3,
+          "window_type": "TIME",
+          "wait_duration": 30
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T30-W20-D5",
+          "replicate": 1,
+          "window_type": "COUNT",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T30-W20-D5",
+          "replicate": 2,
+          "window_type": "COUNT",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T30-W20-D5",
+          "replicate": 3,
+          "window_type": "COUNT",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T30-W20-D5",
+          "replicate": 1,
+          "window_type": "TIME",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T30-W20-D5",
+          "replicate": 2,
+          "window_type": "TIME",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T30-W20-D5",
+          "replicate": 3,
+          "window_type": "TIME",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T30-W20-D15",
+          "replicate": 1,
+          "window_type": "COUNT",
+          "wait_duration": 15
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T30-W20-D15",
+          "replicate": 2,
+          "window_type": "COUNT",
+          "wait_duration": 15
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T30-W20-D15",
+          "replicate": 1,
+          "window_type": "TIME",
+          "wait_duration": 15
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T30-W20-D15",
+          "replicate": 2,
+          "window_type": "TIME",
+          "wait_duration": 15
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T30-W20-D15",
+          "replicate": 3,
+          "window_type": "TIME",
+          "wait_duration": 15
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T30-W20-D30",
+          "replicate": 1,
+          "window_type": "COUNT",
+          "wait_duration": 30
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T30-W20-D30",
+          "replicate": 2,
+          "window_type": "COUNT",
+          "wait_duration": 30
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T30-W20-D30",
+          "replicate": 3,
+          "window_type": "COUNT",
+          "wait_duration": 30
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T30-W20-D30",
+          "replicate": 1,
+          "window_type": "TIME",
+          "wait_duration": 30
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T30-W20-D30",
+          "replicate": 2,
+          "window_type": "TIME",
+          "wait_duration": 30
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T30-W20-D30",
+          "replicate": 3,
+          "window_type": "TIME",
+          "wait_duration": 30
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T50-W5-D5",
+          "replicate": 1,
+          "window_type": "COUNT",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T50-W5-D5",
+          "replicate": 2,
+          "window_type": "COUNT",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T50-W5-D5",
+          "replicate": 3,
+          "window_type": "COUNT",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T50-W5-D5",
+          "replicate": 1,
+          "window_type": "TIME",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T50-W5-D5",
+          "replicate": 2,
+          "window_type": "TIME",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T50-W5-D5",
+          "replicate": 3,
+          "window_type": "TIME",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T50-W5-D15",
+          "replicate": 1,
+          "window_type": "COUNT",
+          "wait_duration": 15
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T50-W5-D15",
+          "replicate": 2,
+          "window_type": "COUNT",
+          "wait_duration": 15
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T50-W5-D15",
+          "replicate": 3,
+          "window_type": "COUNT",
+          "wait_duration": 15
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T50-W5-D15",
+          "replicate": 1,
+          "window_type": "TIME",
+          "wait_duration": 15
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T50-W5-D15",
+          "replicate": 2,
+          "window_type": "TIME",
+          "wait_duration": 15
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T50-W5-D15",
+          "replicate": 3,
+          "window_type": "TIME",
+          "wait_duration": 15
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T50-W5-D30",
+          "replicate": 1,
+          "window_type": "COUNT",
+          "wait_duration": 30
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T50-W5-D30",
+          "replicate": 2,
+          "window_type": "COUNT",
+          "wait_duration": 30
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T50-W5-D30",
+          "replicate": 3,
+          "window_type": "COUNT",
+          "wait_duration": 30
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T50-W5-D30",
+          "replicate": 1,
+          "window_type": "TIME",
+          "wait_duration": 30
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T50-W5-D30",
+          "replicate": 2,
+          "window_type": "TIME",
+          "wait_duration": 30
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T50-W10-D5",
+          "replicate": 1,
+          "window_type": "COUNT",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T50-W10-D5",
+          "replicate": 2,
+          "window_type": "COUNT",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T50-W10-D5",
+          "replicate": 3,
+          "window_type": "COUNT",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T50-W10-D5",
+          "replicate": 1,
+          "window_type": "TIME",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T50-W10-D5",
+          "replicate": 2,
+          "window_type": "TIME",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T50-W10-D5",
+          "replicate": 3,
+          "window_type": "TIME",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T50-W10-D15",
+          "replicate": 1,
+          "window_type": "COUNT",
+          "wait_duration": 15
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T50-W10-D15",
+          "replicate": 2,
+          "window_type": "COUNT",
+          "wait_duration": 15
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T50-W10-D15",
+          "replicate": 3,
+          "window_type": "COUNT",
+          "wait_duration": 15
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T50-W10-D15",
+          "replicate": 1,
+          "window_type": "TIME",
+          "wait_duration": 15
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T50-W10-D15",
+          "replicate": 2,
+          "window_type": "TIME",
+          "wait_duration": 15
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T50-W10-D15",
+          "replicate": 3,
+          "window_type": "TIME",
+          "wait_duration": 15
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T50-W10-D30",
+          "replicate": 1,
+          "window_type": "COUNT",
+          "wait_duration": 30
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T50-W10-D30",
+          "replicate": 2,
+          "window_type": "COUNT",
+          "wait_duration": 30
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T50-W10-D30",
+          "replicate": 3,
+          "window_type": "COUNT",
+          "wait_duration": 30
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T50-W10-D30",
+          "replicate": 1,
+          "window_type": "TIME",
+          "wait_duration": 30
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T50-W10-D30",
+          "replicate": 2,
+          "window_type": "TIME",
+          "wait_duration": 30
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T50-W10-D30",
+          "replicate": 3,
+          "window_type": "TIME",
+          "wait_duration": 30
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T50-W20-D5",
+          "replicate": 1,
+          "window_type": "COUNT",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T50-W20-D5",
+          "replicate": 2,
+          "window_type": "COUNT",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-CNT-T50-W20-D5",
+          "replicate": 3,
+          "window_type": "COUNT",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T50-W20-D5",
+          "replicate": 1,
+          "window_type": "TIME",
+          "wait_duration": 5
+        },
+        {
+          "status": "SKIPPED_NO_MATCHING_RECORD",
+          "experiment_id": "LIN-LAT-TIM-T50-W20-D5",
+          "replicate": 2,
+          "window_type": "TIME",
+          "wait_duration": 5
+        }
+      ]
+    }
   },
-  "verdict": "MECHANISM_UNTESTED_NO_SIDECAR"
+  "verdict": "AMBIGUOUS"
 }

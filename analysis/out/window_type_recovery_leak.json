@@ -29,12 +29,35 @@
           "wait_duration": 5.0,
           "n_count": 60,
           "n_time": 60,
+          "n_observed_count": 60,
+          "n_observed_time": 60,
+          "rate_count": {
+            "n_rows": 60,
+            "n_groups": 18,
+            "point": 1.0,
+            "lo": 1.0,
+            "hi": 1.0
+          },
+          "rate_time": {
+            "n_rows": 60,
+            "n_groups": 18,
+            "point": 1.0,
+            "lo": 1.0,
+            "hi": 1.0
+          },
           "median_count": 6.5815,
           "median_time": 23.942999999999998,
           "ratio_time_over_count": 3.6379244852997035,
+          "fully_censored": false,
           "cliffs_delta": {
             "delta": -1.0,
             "magnitude": "large",
+            "n_a": 60,
+            "n_b": 60
+          },
+          "mann_whitney": {
+            "U": 0.0,
+            "p": 3.556014119241608e-21,
             "n_a": 60,
             "n_b": 60
           },
@@ -57,12 +80,35 @@
           "wait_duration": 15.0,
           "n_count": 60,
           "n_time": 60,
+          "n_observed_count": 60,
+          "n_observed_time": 60,
+          "rate_count": {
+            "n_rows": 60,
+            "n_groups": 18,
+            "point": 1.0,
+            "lo": 1.0,
+            "hi": 1.0
+          },
+          "rate_time": {
+            "n_rows": 60,
+            "n_groups": 18,
+            "point": 1.0,
+            "lo": 1.0,
+            "hi": 1.0
+          },
           "median_count": 16.2425,
           "median_time": 35.114999999999995,
           "ratio_time_over_count": 2.1619208865630286,
+          "fully_censored": false,
           "cliffs_delta": {
             "delta": -1.0,
             "magnitude": "large",
+            "n_a": 60,
+            "n_b": 60
+          },
+          "mann_whitney": {
+            "U": 0.0,
+            "p": 3.554344052013685e-21,
             "n_a": 60,
             "n_b": 60
           },
@@ -85,12 +131,35 @@
           "wait_duration": 30.0,
           "n_count": 60,
           "n_time": 60,
+          "n_observed_count": 60,
+          "n_observed_time": 60,
+          "rate_count": {
+            "n_rows": 60,
+            "n_groups": 18,
+            "point": 1.0,
+            "lo": 1.0,
+            "hi": 1.0
+          },
+          "rate_time": {
+            "n_rows": 60,
+            "n_groups": 18,
+            "point": 1.0,
+            "lo": 1.0,
+            "hi": 1.0
+          },
           "median_count": 31.2225,
           "median_time": 64.8515,
           "ratio_time_over_count": 2.0770758267275204,
+          "fully_censored": false,
           "cliffs_delta": {
             "delta": -1.0,
             "magnitude": "large",
+            "n_a": 60,
+            "n_b": 60
+          },
+          "mann_whitney": {
+            "U": 0.0,
+            "p": 3.5549006577678414e-21,
             "n_a": 60,
             "n_b": 60
           },
@@ -127,12 +196,35 @@
           "wait_duration": 5.0,
           "n_count": 60,
           "n_time": 60,
+          "n_observed_count": 60,
+          "n_observed_time": 60,
+          "rate_count": {
+            "n_rows": 60,
+            "n_groups": 18,
+            "point": 1.0,
+            "lo": 1.0,
+            "hi": 1.0
+          },
+          "rate_time": {
+            "n_rows": 60,
+            "n_groups": 18,
+            "point": 1.0,
+            "lo": 1.0,
+            "hi": 1.0
+          },
           "median_count": 3.6285,
           "median_time": 6.6455,
           "ratio_time_over_count": 1.831473060493317,
+          "fully_censored": false,
           "cliffs_delta": {
             "delta": -0.7644444444444445,
             "magnitude": "large",
+            "n_a": 60,
+            "n_b": 60
+          },
+          "mann_whitney": {
+            "U": 424.0,
+            "p": 5.214919067062051e-13,
             "n_a": 60,
             "n_b": 60
           },
@@ -155,12 +247,35 @@
           "wait_duration": 15.0,
           "n_count": 60,
           "n_time": 60,
+          "n_observed_count": 60,
+          "n_observed_time": 60,
+          "rate_count": {
+            "n_rows": 60,
+            "n_groups": 18,
+            "point": 1.0,
+            "lo": 1.0,
+            "hi": 1.0
+          },
+          "rate_time": {
+            "n_rows": 60,
+            "n_groups": 18,
+            "point": 1.0,
+            "lo": 1.0,
+            "hi": 1.0
+          },
           "median_count": 3.5775,
           "median_time": 6.584,
           "ratio_time_over_count": 1.8403913347309573,
+          "fully_censored": false,
           "cliffs_delta": {
             "delta": -0.7666666666666667,
             "magnitude": "large",
+            "n_a": 60,
+            "n_b": 60
+          },
+          "mann_whitney": {
+            "U": 420.0,
+            "p": 4.4695981715321693e-13,
             "n_a": 60,
             "n_b": 60
           },
@@ -183,12 +298,35 @@
           "wait_duration": 30.0,
           "n_count": 60,
           "n_time": 60,
+          "n_observed_count": 60,
+          "n_observed_time": 60,
+          "rate_count": {
+            "n_rows": 60,
+            "n_groups": 18,
+            "point": 1.0,
+            "lo": 1.0,
+            "hi": 1.0
+          },
+          "rate_time": {
+            "n_rows": 60,
+            "n_groups": 18,
+            "point": 1.0,
+            "lo": 1.0,
+            "hi": 1.0
+          },
           "median_count": 3.62,
           "median_time": 6.647500000000001,
           "ratio_time_over_count": 1.836325966850829,
+          "fully_censored": false,
           "cliffs_delta": {
             "delta": -0.7708333333333334,
             "magnitude": "large",
+            "n_a": 60,
+            "n_b": 60
+          },
+          "mann_whitney": {
+            "U": 412.5,
+            "p": 3.340052458256216e-13,
             "n_a": 60,
             "n_b": 60
           },
@@ -225,12 +363,35 @@
           "wait_duration": 5.0,
           "n_count": 60,
           "n_time": 60,
+          "n_observed_count": 60,
+          "n_observed_time": 60,
+          "rate_count": {
+            "n_rows": 60,
+            "n_groups": 18,
+            "point": 1.0,
+            "lo": 1.0,
+            "hi": 1.0
+          },
+          "rate_time": {
+            "n_rows": 60,
+            "n_groups": 18,
+            "point": 1.0,
+            "lo": 1.0,
+            "hi": 1.0
+          },
           "median_count": 1.5815000000000001,
           "median_time": 18.942999999999998,
           "ratio_time_over_count": 11.977869111602907,
+          "fully_censored": false,
           "cliffs_delta": {
             "delta": -1.0,
             "magnitude": "large",
+            "n_a": 60,
+            "n_b": 60
+          },
+          "mann_whitney": {
+            "U": 0.0,
+            "p": 3.556014119241608e-21,
             "n_a": 60,
             "n_b": 60
           },
@@ -253,12 +414,35 @@
           "wait_duration": 15.0,
           "n_count": 60,
           "n_time": 60,
+          "n_observed_count": 60,
+          "n_observed_time": 60,
+          "rate_count": {
+            "n_rows": 60,
+            "n_groups": 18,
+            "point": 1.0,
+            "lo": 1.0,
+            "hi": 1.0
+          },
+          "rate_time": {
+            "n_rows": 60,
+            "n_groups": 18,
+            "point": 1.0,
+            "lo": 1.0,
+            "hi": 1.0
+          },
           "median_count": 1.2424999999999997,
           "median_time": 20.115,
           "ratio_time_over_count": 16.189134808853122,
+          "fully_censored": false,
           "cliffs_delta": {
             "delta": -1.0,
             "magnitude": "large",
+            "n_a": 60,
+            "n_b": 60
+          },
+          "mann_whitney": {
+            "U": 0.0,
+            "p": 3.554344052013685e-21,
             "n_a": 60,
             "n_b": 60
           },
@@ -281,12 +465,35 @@
           "wait_duration": 30.0,
           "n_count": 60,
           "n_time": 60,
+          "n_observed_count": 60,
+          "n_observed_time": 60,
+          "rate_count": {
+            "n_rows": 60,
+            "n_groups": 18,
+            "point": 1.0,
+            "lo": 1.0,
+            "hi": 1.0
+          },
+          "rate_time": {
+            "n_rows": 60,
+            "n_groups": 18,
+            "point": 1.0,
+            "lo": 1.0,
+            "hi": 1.0
+          },
           "median_count": 1.2225000000000001,
           "median_time": 34.8515,
           "ratio_time_over_count": 28.508384458077707,
+          "fully_censored": false,
           "cliffs_delta": {
             "delta": -1.0,
             "magnitude": "large",
+            "n_a": 60,
+            "n_b": 60
+          },
+          "mann_whitney": {
+            "U": 0.0,
+            "p": 3.5549006577678414e-21,
             "n_a": 60,
             "n_b": 60
           },
@@ -935,12 +1142,35 @@
             "wait_duration": 5.0,
             "n_count": 6,
             "n_time": 6,
+            "n_observed_count": 6,
+            "n_observed_time": 6,
+            "rate_count": {
+              "n_rows": 6,
+              "n_groups": 3,
+              "point": 1.0,
+              "lo": 1.0,
+              "hi": 1.0
+            },
+            "rate_time": {
+              "n_rows": 6,
+              "n_groups": 3,
+              "point": 1.0,
+              "lo": 1.0,
+              "hi": 1.0
+            },
             "median_count": 1.9071879999999999,
             "median_time": 19.7478655,
             "ratio_time_over_count": 10.354440936079715,
+            "fully_censored": false,
             "cliffs_delta": {
               "delta": -1.0,
               "magnitude": "large",
+              "n_a": 6,
+              "n_b": 6
+            },
+            "mann_whitney": {
+              "U": 0.0,
+              "p": 0.0021645021645021645,
               "n_a": 6,
               "n_b": 6
             },
@@ -961,14 +1191,37 @@
           },
           {
             "wait_duration": 15.0,
-            "n_count": 2,
+            "n_count": 6,
             "n_time": 6,
+            "n_observed_count": 2,
+            "n_observed_time": 6,
+            "rate_count": {
+              "n_rows": 6,
+              "n_groups": 3,
+              "point": 0.3333333333333333,
+              "lo": 0.0,
+              "hi": 1.0
+            },
+            "rate_time": {
+              "n_rows": 6,
+              "n_groups": 3,
+              "point": 1.0,
+              "lo": 1.0,
+              "hi": 1.0
+            },
             "median_count": 2.3602420000000004,
             "median_time": 21.2514875,
             "ratio_time_over_count": 9.003944298932057,
+            "fully_censored": false,
             "cliffs_delta": {
               "delta": -1.0,
               "magnitude": "large",
+              "n_a": 2,
+              "n_b": 6
+            },
+            "mann_whitney": {
+              "U": 0.0,
+              "p": 0.07142857142857142,
               "n_a": 2,
               "n_b": 6
             },
@@ -986,6 +1239,57 @@
               "lo": 20.655849,
               "hi": 39.270011499999995
             }
+          },
+          {
+            "wait_duration": 30.0,
+            "n_count": 6,
+            "n_time": 6,
+            "n_observed_count": 0,
+            "n_observed_time": 6,
+            "rate_count": {
+              "n_rows": 6,
+              "n_groups": 3,
+              "point": 0.0,
+              "lo": 0.0,
+              "hi": 0.0
+            },
+            "rate_time": {
+              "n_rows": 6,
+              "n_groups": 3,
+              "point": 1.0,
+              "lo": 1.0,
+              "hi": 1.0
+            },
+            "median_count": null,
+            "median_time": 35.576449,
+            "ratio_time_over_count": null,
+            "fully_censored": true,
+            "cliffs_delta": {
+              "delta": null,
+              "magnitude": "undefined",
+              "n_a": 0,
+              "n_b": 6
+            },
+            "mann_whitney": {
+              "U": null,
+              "p": null,
+              "n_a": 0,
+              "n_b": 6
+            },
+            "ci_count": {
+              "n_rows": 0,
+              "n_groups": 0,
+              "point": null,
+              "lo": null,
+              "hi": null
+            },
+            "ci_time": {
+              "n_rows": 6,
+              "n_groups": 3,
+              "point": 35.60330066666668,
+              "lo": 35.439931,
+              "hi": 35.919914
+            }
           }
         ],
         "ratios": [
@@ -995,7 +1299,7 @@
         "median_ratio": 9.679192617505887,
         "min_ratio": 9.003944298932057,
         "max_ratio": 10.354440936079715,
-        "consistent_time_slower": true,
+        "consistent_time_slower": false,
         "consistent_count_slower": false
       },
       "open_to_half_open_sanity_check": {
@@ -1004,12 +1308,35 @@
             "wait_duration": 5.0,
             "n_count": 6,
             "n_time": 6,
+            "n_observed_count": 6,
+            "n_observed_time": 6,
+            "rate_count": {
+              "n_rows": 6,
+              "n_groups": 3,
+              "point": 1.0,
+              "lo": 1.0,
+              "hi": 1.0
+            },
+            "rate_time": {
+              "n_rows": 6,
+              "n_groups": 3,
+              "point": 1.0,
+              "lo": 1.0,
+              "hi": 1.0
+            },
             "median_count": 5.004439,
             "median_time": 5.003441499999999,
             "ratio_time_over_count": 0.9998006769589958,
+            "fully_censored": false,
             "cliffs_delta": {
               "delta": 0.2777777777777778,
               "magnitude": "small",
+              "n_a": 6,
+              "n_b": 6
+            },
+            "mann_whitney": {
+              "U": 23.0,
+              "p": 0.48484848484848486,
               "n_a": 6,
               "n_b": 6
             },
@@ -1032,12 +1359,35 @@
             "wait_duration": 15.0,
             "n_count": 6,
             "n_time": 6,
+            "n_observed_count": 6,
+            "n_observed_time": 6,
+            "rate_count": {
+              "n_rows": 6,
+              "n_groups": 3,
+              "point": 1.0,
+              "lo": 1.0,
+              "hi": 1.0
+            },
+            "rate_time": {
+              "n_rows": 6,
+              "n_groups": 3,
+              "point": 1.0,
+              "lo": 1.0,
+              "hi": 1.0
+            },
             "median_count": 15.0076605,
             "median_time": 15.003243000000001,
             "ratio_time_over_count": 0.9997056503243794,
+            "fully_censored": false,
             "cliffs_delta": {
               "delta": 0.3333333333333333,
               "magnitude": "medium",
+              "n_a": 6,
+              "n_b": 6
+            },
+            "mann_whitney": {
+              "U": 24.0,
+              "p": 0.3939393939393939,
               "n_a": 6,
               "n_b": 6
             },
@@ -1060,12 +1410,35 @@
             "wait_duration": 30.0,
             "n_count": 6,
             "n_time": 6,
+            "n_observed_count": 6,
+            "n_observed_time": 6,
+            "rate_count": {
+              "n_rows": 6,
+              "n_groups": 3,
+              "point": 1.0,
+              "lo": 1.0,
+              "hi": 1.0
+            },
+            "rate_time": {
+              "n_rows": 6,
+              "n_groups": 3,
+              "point": 1.0,
+              "lo": 1.0,
+              "hi": 1.0
+            },
             "median_count": 30.0045,
             "median_time": 30.006178,
             "ratio_time_over_count": 1.0000559249445915,
+            "fully_censored": false,
             "cliffs_delta": {
               "delta": -0.16666666666666666,
               "magnitude": "small",
+              "n_a": 6,
+              "n_b": 6
+            },
+            "mann_whitney": {
+              "U": 15.0,
+              "p": 0.6991341991341992,
               "n_a": 6,
               "n_b": 6
             },
@@ -5420,5 +5793,5 @@
       ]
     }
   },
-  "verdict": "LEAK_CONFIRMED_ON_HALF_OPEN_LEG"
+  "verdict": "LEAK_SUGGESTIVE_INCOMPLETE_DUE_TO_CENSORING"
 }

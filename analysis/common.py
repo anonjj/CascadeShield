@@ -111,7 +111,7 @@ DATASETS = {
     },
     "current": {
         "path": DATA_DIR / "master_dataset.csv",
-        "n_expected": 324,   # 324 retained LATENCY rows; CRASH rows removed pending re-collection (v6 above)
+        "n_expected": 360,   # 324 retained LATENCY rows; CRASH rows removed pending re-collection (v6 above)
         "blast_scale": 1.0,
         "blast_denominator": 4,
         "leg_node_set": "4",

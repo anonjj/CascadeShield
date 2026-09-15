@@ -201,8 +201,13 @@ def load_transition_index(path):
             if not line:
                 continue
             rec = json.loads(line)
+            # machine_id via .get: records written before breaker_observer started
+            # stamping it (pre-D14) have no such key at all, and D14's own rule is that
+            # machine_id goes BLANK -- never a sentinel -- when the harness did not
+            # record one. A bare rec["machine_id"] turns one legacy line into a KeyError
+            # that takes down the whole analysis.
             key = (rec["experiment_id"], str(rec["replicate"]), rec["mode"], rec["environment"],
-                   rec["machine_id"])
+                   rec.get("machine_id", ""))
             index[key] = rec
     return index
 

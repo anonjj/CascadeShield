@@ -1425,7 +1425,7 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
     cb_transitions_path = CANARY_CB_TRANSITIONS_PATH if mode == "canary" else CB_TRANSITIONS_PATH
     observer.log(cb_transitions_path, make_experiment_id(topology, fault_type, config, mode=mode),
                  topology, fault_type, config, mode, replicate,
-                 fault_injected_at, fault_cleared_at, transitions)
+                 fault_injected_at, fault_cleared_at, transitions, machine_id=machine_id)
     return True
 
 def generate_occupancy_combinations():

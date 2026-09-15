@@ -187,7 +187,7 @@ class BreakerObserver:
         time.sleep(2)
 
     def log(self, path, experiment_id, topology, fault_type, config, mode, replicate,
-            fault_injected_at, fault_cleared_at, transitions):
+            fault_injected_at, fault_cleared_at, transitions, machine_id=None):
         """Appends one JSON line per run recording every circuit breaker's real
         CLOSED/OPEN/HALF_OPEN transitions -- kept as a sidecar (not master_dataset.csv
         columns) because the transition list is variable-length per run and a CSV
@@ -207,7 +207,12 @@ class BreakerObserver:
             "fault_type": fault_type.upper(),
             "window_type": config["slidingWindowType"],
             "environment": ENVIRONMENT,
-            "machine_id": MACHINE_ID,
+            # --machine-id wins when the caller passes it, falling back to this module's
+            # own auto-detection otherwise -- identical semantics to log_results'
+            # effective_machine_id (runner.py). Without this the sidecar records the
+            # hostname while the CSV records the flag, and the join below -- keyed on
+            # machine_id -- silently matches nothing.
+            "machine_id": machine_id or MACHINE_ID,
             "mode": mode,
             "replicate": replicate,
             "fault_injected_at": fault_injected_at,

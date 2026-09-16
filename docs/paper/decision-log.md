@@ -406,6 +406,81 @@ a fair chance to show its true recovery time at high $D_w$, censored or not.
 
 ---
 
+**Update (2026-09-16, closed — D21's fix landed, re-collected, H3 confirmed).** The blocker
+named above was not `_poll_for_recovery`'s deadline (that had 17–27s of slack even at
+$D_w$=30, verified against real `fault_cleared_at` values — see D21). It was
+`_drive_half_open_probes`: called unconditionally after `_poll_for_recovery` exits, running a
+**fixed ~4.1 seconds** of driven traffic regardless of `wait_duration` or whether a real
+transition had happened yet. Every one of the real censored COUNT records showed exactly 2
+logged events (`CLOSED_TO_OPEN`, `OPEN_TO_HALF_OPEN`) and then silence — the shape of "this
+window ended before anything else could happen," not "this genuinely never resolves."
+
+Rewritten as poll-until-transition with a `3*wait_duration+60s` hard ceiling (D21, PR #57),
+live-verified against the mesh before merging. Re-collected the same 18 LINEAR/LATENCY
+configs × 2 replicates × 2 window types = 36 runs under the fixed harness
+(`data/master_dataset_d21_recollect.csv`, registered as
+`d21_poll_until_transition_verification` in `analysis/common.py` — standalone, not merged
+into `current`; every `(experiment_id, replicate)` key here collides with rows already in
+`current` from the main sweep, and the coarse `time_to_recover` metric was never actually
+censored there in the first place, so there is nothing to fold in).
+
+**Result: `half_open_probe_timed_out=False` on 36 of 36 runs.** Zero censoring anywhere, at
+any $D_w$, on either arm. `data/cb_transitions.jsonl` is a running, never-purged log (D21's own
+convention: mark/archive, never delete), so the pre-fix records from the original D13 top-up
+still sit in it alongside these — `analysis/half_open_survival.py` gained a `--since` filter
+for exactly this situation, and `--since 2026-09-16` (the committed
+`analysis/out/half_open_survival_since_2026-09-16.json`) isolates just the post-fix slice:
+
+| $D_w$ | COUNT | TIME | ratio | log-rank |
+|---|---|---|---|---|
+| 5  | 6/6, median 2.04s | 6/6, median 19.34s | **9.49×** | **p = 0.0005** |
+| 15 | 6/6, median 9.83s | 6/6, median 21.27s | **2.16×** | **p = 0.0005** |
+| 30 | 6/6, median 14.99s | 6/6, median 35.90s | **2.40×** | **p = 0.0005** |
+
+**Verdict: `LEAK_CONFIRMED_ON_HALF_OPEN_LEG`.** H3 closes. TIME is slower than COUNT at every
+$D_w$, significantly, with a complete (uncensored) sample on both arms.
+
+**The corrected shape is genuinely new information, not a recovery of the original guess.**
+The pre-fix censored data could only see $D_w$=5 cleanly; at $D_w$=15/30 it had no real COUNT
+numbers to compare against at all. The true picture — now that COUNT's actual recovery times
+are known instead of unresolved lower bounds — is that the ratio **shrinks** with $D_w$
+(9.49× → 2.16× → 2.40×), not flat and not growing. COUNT's own recovery time scales with
+$D_w$ almost exactly as expected (2.04/9.83/14.99s, tracking a modest constant above zero) —
+what changes is that TIME's *relative* slowdown is largest at the shortest wait and shrinks
+(then holds roughly steady) as $D_w$ grows. This is worth stating as the finding, not "TIME is
+~9x slower" flatly, which the D_w=5-only view before this fix would have overclaimed as
+constant across the range.
+
+**One data-quality note, unrelated to the fix.** 2 of the 36 runs' *coarse* `time_to_recover`
+(the wall-clock `_poll_for_recovery` duration, a separate metric from
+`precise_half_open_to_closed` above) came back at 704.6s and 2657.1s — both `run_timestamp`s
+hours apart from the rest of the sweep, consistent with a real-world system-suspend event
+(the collecting laptop's lid closing) pausing the poll loop mid-wait; Python's wall clock
+cannot distinguish "paused by the OS" from "actively elapsed." Caught automatically by
+`analysis/quarantine.py`'s existing `RECOVERY_TIMEOUT_HANG` rule (`RECOVERY_CAP_S=120.0`,
+already in the codebase, no new detection logic needed) once run against the new dataset.
+Their `half_open_probe_timed_out` is still correctly `False` — the sleep hit
+`_poll_for_recovery`'s loop specifically, not `_drive_half_open_probes`' separate, much
+shorter poll-until-transition window that runs immediately after it. Neither row touches the
+precise-metric result above, which is derived from real transition timestamps, not a live
+poll duration, and is immune to this artifact by construction.
+
+**Rejected:** merging the 36 new CSV rows into `current`. They use fresh replicates 1–2 for
+experiment_ids that already carry replicates 1–5 in `current` (main sweep + the D13 top-up,
+PR #54) — appending would create duplicate `(experiment_id, replicate)` keys. Not needed
+regardless: `current`'s own coarse `time_to_recover` was independently confirmed to have
+0/360 nulls (never actually censored, see this entry's earlier close-out of that separate
+worry), so there is no number in `current` this re-collection would have corrected. The
+sidecar (`data/cb_transitions.jsonl`) already carries everything the precise-metric verdict
+above needed.
+
+**Revisit if:** the mechanism behind TIME_BASED's HALF_OPEN leg being slower than
+COUNT_BASED's — real, confirmed, but still unexplained — becomes tractable to investigate
+directly (e.g. instrumenting the actual probe-call latencies during HALF_OPEN, not just the
+transition timestamps either side of it).
+
+---
+
 ## D14 · `machine_id` is added to the canonical schema, before `excluded_reason`
 
 **Date:** 27 Aug 2026 · **Status:** final
@@ -994,3 +1069,12 @@ widened, poll-until-transition window at $D_w$=15/30 — H3 gets closeable real 
 (b) `half_open_probe_timed_out=True` persists even under the new harness — a genuine,
 directly-provable finding (COUNT_BASED's HALF_OPEN probes structurally fail more often at
 higher $D_w$) rather than an instrument-ceiling artifact.
+
+**Update (2026-09-16) — outcome (a).** The 36-run targeted re-collection landed
+(`d21_poll_until_transition_verification`, `analysis/common.py`) with
+`half_open_probe_timed_out=False` on 36 of 36 runs — zero censoring at any $D_w$, on either
+arm. H3 closes: `LEAK_CONFIRMED_ON_HALF_OPEN_LEG`, significant at every level (log-rank
+p=0.0005), TIME slower throughout with the ratio shrinking from 9.49× at $D_w$=5 to
+2.16×/2.40× at $D_w$=15/30. Full numbers and the corrected-shape discussion are in D13's own
+closing update, appended just above D14 — this entry's job was the fix and the observability
+columns, D13's is the hypothesis outcome, and both are now closed.

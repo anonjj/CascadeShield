@@ -39,6 +39,12 @@ from typing import Any, Iterable
 
 import numpy as np
 
+# half_open_probe_deadline_s is stdlib-only (breaker_observer.py's only imports are
+# json/os/socket/sys/time/urllib.request), so no try/except fallback is needed here --
+# same reasoning canary_readout.py already uses for its own experiments/ import.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "experiments"))
+from breaker_observer import half_open_probe_deadline_s  # noqa: E402
+
 # --------------------------------------------------------------------------
 # Schema tolerance
 #
@@ -287,6 +293,20 @@ def extract_observations(records: list[dict], breaker_filter: str | None = None)
 
         if all_recovered and closed_times:
             duration, observed = max(closed_times) - t0, True
+            ceiling = half_open_probe_deadline_s(meta["wait_duration"])
+            if duration > ceiling:
+                # Physically impossible: exceeds the harness's own hard ceiling for a
+                # recovered (non-censored) run. Every instance found so far traces to a
+                # real-world host wall-clock stall (e.g. a laptop's lid closing mid-poll)
+                # rather than a harness bug -- confirmed via half_open_probe_timed_out=False
+                # on the matching master_dataset row (the sleep hits the poll loop, not the
+                # deadline check itself). Flagged and excluded, not silently dropped, matching
+                # this repo's mark/archive-don't-delete philosophy elsewhere (D21).
+                print(f"WARN: {exp_id} replicate {replicate}: duration_s={duration:.1f} "
+                      f"exceeds half_open_probe_deadline_s({meta['wait_duration']})={ceiling:.1f} "
+                      "-- excluded as an implausible (host-sleep-artifact) duration",
+                      file=sys.stderr)
+                continue
         else:
             deadline = _recovery_deadline(rec, meta["wait_duration"])
             if deadline is None:
@@ -303,6 +323,11 @@ def extract_observations(records: list[dict], breaker_filter: str | None = None)
             "breaker": f"{watch_service}:{'+'.join(sorted(opened))}",
             "duration_s": float(duration),
             "observed": observed,
+            # Count of watched breakers (BREAKER_WATCH) that entered HALF_OPEN at least
+            # once -- bounded by len(BREAKER_WATCH) (1 or 2 here), NOT a bounce count:
+            # t_half_open_first is captured once per breaker in _walk_breaker, so a
+            # breaker that bounces HALF_OPEN->OPEN->HALF_OPEN several times before
+            # closing still contributes exactly 1 here. Use n_failed_probes for bounces.
             "n_half_open_entries": len(half_opens),
             "n_failed_probes": sum(w["bounces"] for w in opened.values()),
             **meta,
@@ -618,6 +643,18 @@ def self_test() -> bool:
         print("FAIL: experiment_id parse"); ok = False
     if parse_timestamp("2026-09-14T11:02:31.417538+05:30[Asia/Kolkata]") is None:
         print("FAIL: ZonedDateTime parse"); ok = False
+
+    # Implausible-duration exclusion (host-sleep artifact, e.g. a laptop lid closing
+    # mid-poll): a "recovered" run whose duration exceeds half_open_probe_deadline_s
+    # for its own wait_duration is physically impossible and must be excluded, not
+    # silently averaged in. half_open_probe_deadline_s(5) = 3*5+60 = 75.
+    impossible = mk("LIN-LAT-TIM-T50-W5-D5", 99, 1000.0, 5, closed_after=700.0)
+    plausible = mk("LIN-LAT-TIM-T50-W5-D5", 98, 1000.0, 5, closed_after=19.3)
+    obs_ceiling = extract_observations([impossible, plausible])
+    if len(obs_ceiling) != 1 or obs_ceiling[0]["replicate"] != 98:
+        print(f"FAIL: implausible-duration exclusion -- expected 1 observation (replicate "
+              f"98 only), got {len(obs_ceiling)}: {[o['replicate'] for o in obs_ceiling]}")
+        ok = False
 
     print("self-test PASSED" if ok else "self-test FAILED")
     if ok:

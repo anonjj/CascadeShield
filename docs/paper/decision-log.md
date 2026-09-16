@@ -1078,3 +1078,116 @@ p=0.0005), TIME slower throughout with the ratio shrinking from 9.49× at $D_w$=
 2.16×/2.40× at $D_w$=15/30. Full numbers and the corrected-shape discussion are in D13's own
 closing update, appended just above D14 — this entry's job was the fix and the observability
 columns, D13's is the hypothesis outcome, and both are now closed.
+
+---
+
+## D23 · The gateway's "never-opens" measurement-plane isolation is incomplete — it does open, live-verified, under COUNT_BASED
+
+**Date:** 2026-09-17 · **Decided by:** Jay, live-verified against the real mesh with the same
+`CB_CONFIG_DUMP`/`CircuitBreaker`-event diagnostic used for D18 · **Status:** final — the
+isolation claim in `hypotheses.md` §7 and its H6 row is corrected; H6's untestability verdict
+needs re-deciding separately (not done in this entry)
+
+**How this was found.** While investigating D22's unexplained 0-bounce COUNT_BASED
+`W20/D30` outlier (~25.3s, vs 2–3s for other COUNT cells), the raw `cb_transitions.jsonl`
+records for those runs showed a *second* breaker — `gateway:orderServiceCB`, outside
+`BREAKER_WATCH`'s scope — independently cycling `CLOSED_TO_OPEN → OPEN_TO_HALF_OPEN →
+HALF_OPEN_TO_CLOSED` on its own clock. Order's breaker closed **1.5–1.6s after gateway's own
+`OPEN_TO_HALF_OPEN`**, not 1.5s after order's own HALF_OPEN began — order was waiting on
+gateway to let traffic through, not slow to recover itself.
+
+**Decision.** `services/gateway-service/src/main/resources/application.yml`'s
+`measurement-plane` config (added `dcb9214`, 2026-07-30, specifically to keep gateway's three
+outbound breakers from engaging and confounding the sweep) sets
+`minimum-number-of-calls: 1000000`, `failure-rate-threshold: 100`,
+`slow-call-rate-threshold: 100`, `slow-call-duration-threshold: 60s` — but never sets
+`sliding-window-size` or `sliding-window-type`, and doesn't declare `base-config: default`.
+Live-verified via a disposable `CB_CONFIG_DUMP` listener on `gateway-service` (same code as
+D18's, worktree-only, never merged): the two unset fields silently track `default`'s swept
+values anyway (`slidingWindowSize=20, slidingWindowType=COUNT_BASED` when `.env` was set to
+those, `=10/COUNT_BASED` — the compose file's own inline fallback — when no `.env` was
+present at all). This is Resilience4j Spring Boot's own `configs` fallback behavior, not
+something this repo's code sets explicitly anywhere.
+
+Combined with D18's already-published, live-confirmed mechanism (a `COUNT_BASED` window
+evaluates once its ring buffer — sized by `slidingWindowSize`, not `minimumNumberOfCalls` —
+fills, regardless of the configured minimum), this means gateway's real evaluation gate is
+`min(1000000, slidingWindowSize)` = `slidingWindowSize` itself. `minimumNumberOfCalls`'s
+"1,000,000, never reached" design **never applies to COUNT_BASED sweeps** — only
+`failureRateThreshold=100`/`slowCallRateThreshold=100` stand between gateway and a trip, and
+a window that fills entirely with real failures (every call gateway makes while order's own
+breaker is OPEN and fast-failing) clears that bar easily.
+
+**Live confirmation, call-by-call**, replaying `LIN-LAT-CNT-T50-W20-D30` (the exact config
+behind the D22 outlier) against the real mesh: `orderServiceCB`'s `bufferedCalls` climbs
+0→20 on ordinary pre-fault traffic; `failureRate` flips from `-1.0` (not-yet-evaluated) to
+`0.0` the instant `bufferedCalls` hits 20 — evaluation gated by ring-buffer fill, exactly as
+D18 found for the swept breakers, not by the configured 1,000,000 floor. During the fault
+window, the same ring buffer refills with real failures and trips:
+`CLOSED_TO_OPEN` at `bufferedCalls=20, failedCalls=20, failureRate=100.0`.
+
+**This is not isolated to the two D22 outlier runs.** Across the full `data/cb_transitions.jsonl`
+history (73 records, spanning both before and after D21's unrelated HALF_OPEN fix — this bug
+predates and is independent of that one), **20 records show a real gateway
+`CLOSED_TO_OPEN`**, spanning exactly 5 experiment_ids — `W5/D15`, `W5/D30`, `W10/D15`,
+`W10/D30`, `W20/D30` — **all `COUNT_BASED`, all `wait_duration ∈ {15, 30}`, zero among
+`TIME_BASED`** (0 of every `TIME_BASED` record in the sidecar). This matches D18's TIME_BASED
+finding exactly: `minimumNumberOfCalls` genuinely gates evaluation for `TIME_BASED` windows
+(no ring-buffer bypass), so the 1,000,000 floor *does* hold there — the isolation is real for
+`TIME_BASED` sweeps and broken for `COUNT_BASED` ones.
+
+**Scope: is this confined to the D13/D21 recovery-focused re-collection, or does it reach the
+main dataset too?** `experiments/runner.py`'s `PARAM_VALUES` — the grid the *main* full sweep
+draws from — covers the identical space (`slidingWindowSize ∈ {5,10,20}`,
+`waitDurationInOpenState ∈ {5,15,30}`, both window types). The mechanism has no dependency on
+which sweep invokes it; it is a property of `gateway-service`'s own YAML, present since
+2026-07-30, unchanged since. **Directly confirmed only for the 73 sidecar-covered records**
+(`data/cb_transitions.jsonl` does not reach back to the original historical full-sweep
+collection) — stated honestly as structurally implicated by an unchanged, shared code path,
+not row-by-row verified for the full historical dataset. This is the answer to "dataset-scoped
+or never as complete as believed": **not dataset-scoped** — the same YAML, same bug, same
+parameter grid underlies every `COUNT_BASED` sweep this repo has ever run at
+`wait_duration ≥ 15`, `full` mode or otherwise.
+
+**On `cb_state_pre` (D8) — precise about what it does and doesn't show.** `check_breaker_precondition()`
+(`experiments/runner.py:802`) runs immediately after `update_containers()` force-recreates
+every container and **before** any load or fault injection (`run_experiment_run`'s step 2b) —
+a pre-load snapshot. It does cover gateway's three breakers (`SERVICE_BREAKERS` includes
+`orderServiceCB`/`inventoryServiceCB`/`paymentServiceCB` under `gateway`), so "every breaker
+including gateway's read CLOSED at load start, every replicate" is real and remains valid —
+it is the correct, unaffected evidence that breaker state does not leak between replicates.
+**It has never measured, and is not evidence for, breaker state *during* a run.** Any claim
+built on `cb_state_pre` (or on it alone) that gateway "stays closed" or "never engages" for
+the duration of a run is not supported by what this column actually checks — that broader
+claim is what `hypotheses.md` §7 got wrong, corrected below.
+
+**Corrected: `hypotheses.md`'s H6 §7 bullet** ("H6's condition was removed by the
+`measurement-plane` isolation block... Every current row is `isolated`") — false as a
+universal claim. Replaced with a statement scoped to what's actually true: the isolation
+holds for `TIME_BASED` sweeps, and for `COUNT_BASED` sweeps below the `slidingWindowSize`/`wait_duration`
+combination needed to fill gateway's leaked window, and does not hold above it.
+**`STATUS.md`'s H6 row** ("Gateway CLOSED in all 704 rows") is corrected the same way — no
+row-level source for that specific figure was found anywhere in this repo (not in
+`hypotheses.md`, not elsewhere), and it is contradicted directly by the 20 sidecar records
+above regardless of its original basis.
+
+**Not decided here: what this means for H6 itself.** H6 ("a uniformly configured edge breaker
+suppresses interior breaker engagement") was marked untestable *because* the isolation was
+believed complete. It no longer is, for the `COUNT_BASED`/higher-`wait_duration` cells — which
+means H6 may be directly testable from data already partially in hand (the 5 gateway-tripping
+experiment_ids are natural instances of the H6 condition), not only via "deliberate
+reconstruction of a removed confound" as `hypotheses.md` currently frames the only path to
+testing it. Re-deciding H6's testability verdict is a separate, follow-up decision, not made
+in this entry — this entry's scope is the isolation claim's correctness, not H6's disposition.
+
+**Rejected:** fixing `measurement-plane`'s YAML (adding explicit `sliding-window-size`/
+`sliding-window-type`, or `base-config: default` plus overrides) as part of this entry. That
+would change what future sweeps measure — a decision for whoever re-derives D15/D-001 and
+decides whether the historical (leaky) isolation or a genuinely-fixed one is what the paper's
+existing 324–360 rows should be described as having used. Silently patching it here would
+retroactively change the meaning of already-collected data without a decision record saying
+so.
+
+**Revisit if:** the YAML gets fixed (own decision-log entry, per this repo's schema/config-change
+convention) — or if H6's testability verdict gets re-decided using the data this entry
+surfaces.

@@ -1,0 +1,423 @@
+{
+  "metric": "precise_half_open_to_closed",
+  "estimator": "Kaplan-Meier, Greenwood log-log CI, log-rank two-sample test",
+  "n_observations": 36,
+  "verdict": "LEAK_SUPPORTED_WITH_CENSORED_BUCKET",
+  "direction_consistent": true,
+  "any_fully_censored_bucket": true,
+  "per_bucket": {
+    "D5_COUNT_BASED": {
+      "wait_duration": 5,
+      "window_type": "COUNT_BASED",
+      "n": 6,
+      "n_events": 6,
+      "n_censored": 0,
+      "fully_censored": false,
+      "median_s": 1.9007060527801514,
+      "median_is_lower_bound": false,
+      "times": [
+        1.8892059326171875,
+        1.8971309661865234,
+        1.9007060527801514,
+        1.9136722087860107,
+        1.924008846282959,
+        1.99137282371521
+      ],
+      "survival": [
+        0.8333333333333334,
+        0.6666666666666667,
+        0.5,
+        0.33333333333333337,
+        0.16666666666666669,
+        0.0
+      ],
+      "survival_ci": [
+        [
+          0.2731100659793658,
+          0.9747133270509547
+        ],
+        [
+          0.19460846916556668,
+          0.904436493745897
+        ],
+        [
+          0.11094308586665062,
+          0.8037129622242473
+        ],
+        [
+          0.046079559410940336,
+          0.6755693728810206
+        ],
+        [
+          0.007722414836598566,
+          0.516808041469721
+        ],
+        [
+          0.0,
+          0.0
+        ]
+      ],
+      "at_risk": [
+        6,
+        5,
+        4,
+        3,
+        2,
+        1
+      ],
+      "events": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "max_observed_s": 1.99137282371521
+    },
+    "D5_TIME_BASED": {
+      "wait_duration": 5,
+      "window_type": "TIME_BASED",
+      "n": 6,
+      "n_events": 6,
+      "n_censored": 0,
+      "fully_censored": false,
+      "median_s": 19.72546410560608,
+      "median_is_lower_bound": false,
+      "times": [
+        18.975327014923096,
+        19.4930260181427,
+        19.72546410560608,
+        19.770267963409424,
+        27.57240390777588,
+        27.638219118118286
+      ],
+      "survival": [
+        0.8333333333333334,
+        0.6666666666666667,
+        0.5,
+        0.33333333333333337,
+        0.16666666666666669,
+        0.0
+      ],
+      "survival_ci": [
+        [
+          0.2731100659793658,
+          0.9747133270509547
+        ],
+        [
+          0.19460846916556668,
+          0.904436493745897
+        ],
+        [
+          0.11094308586665062,
+          0.8037129622242473
+        ],
+        [
+          0.046079559410940336,
+          0.6755693728810206
+        ],
+        [
+          0.007722414836598566,
+          0.516808041469721
+        ],
+        [
+          0.0,
+          0.0
+        ]
+      ],
+      "at_risk": [
+        6,
+        5,
+        4,
+        3,
+        2,
+        1
+      ],
+      "events": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "max_observed_s": 27.638219118118286
+    },
+    "D15_COUNT_BASED": {
+      "wait_duration": 15,
+      "window_type": "COUNT_BASED",
+      "n": 6,
+      "n_events": 2,
+      "n_censored": 4,
+      "fully_censored": false,
+      "median_s": 12.860879898071289,
+      "median_is_lower_bound": true,
+      "times": [
+        2.3176000118255615,
+        2.402884006500244
+      ],
+      "survival": [
+        0.8333333333333334,
+        0.6666666666666667
+      ],
+      "survival_ci": [
+        [
+          0.2731100659793658,
+          0.9747133270509547
+        ],
+        [
+          0.19460846916556668,
+          0.904436493745897
+        ]
+      ],
+      "at_risk": [
+        6,
+        5
+      ],
+      "events": [
+        1,
+        1
+      ],
+      "max_observed_s": 12.860879898071289
+    },
+    "D15_TIME_BASED": {
+      "wait_duration": 15,
+      "window_type": "TIME_BASED",
+      "n": 6,
+      "n_events": 6,
+      "n_censored": 0,
+      "fully_censored": false,
+      "median_s": 21.21594500541687,
+      "median_is_lower_bound": false,
+      "times": [
+        20.54308795928955,
+        20.768610954284668,
+        21.21594500541687,
+        21.287031888961792,
+        39.206583976745605,
+        39.333438873291016
+      ],
+      "survival": [
+        0.8333333333333334,
+        0.6666666666666667,
+        0.5,
+        0.33333333333333337,
+        0.16666666666666669,
+        0.0
+      ],
+      "survival_ci": [
+        [
+          0.2731100659793658,
+          0.9747133270509547
+        ],
+        [
+          0.19460846916556668,
+          0.904436493745897
+        ],
+        [
+          0.11094308586665062,
+          0.8037129622242473
+        ],
+        [
+          0.046079559410940336,
+          0.6755693728810206
+        ],
+        [
+          0.007722414836598566,
+          0.516808041469721
+        ],
+        [
+          0.0,
+          0.0
+        ]
+      ],
+      "at_risk": [
+        6,
+        5,
+        4,
+        3,
+        2,
+        1
+      ],
+      "events": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "max_observed_s": 39.333438873291016
+    },
+    "D30_COUNT_BASED": {
+      "wait_duration": 30,
+      "window_type": "COUNT_BASED",
+      "n": 6,
+      "n_events": 0,
+      "n_censored": 6,
+      "fully_censored": true,
+      "median_s": 12.880681037902832,
+      "median_is_lower_bound": true,
+      "times": [],
+      "survival": [],
+      "survival_ci": [],
+      "at_risk": [],
+      "events": [],
+      "max_observed_s": 12.880681037902832
+    },
+    "D30_TIME_BASED": {
+      "wait_duration": 30,
+      "window_type": "TIME_BASED",
+      "n": 6,
+      "n_events": 6,
+      "n_censored": 0,
+      "fully_censored": false,
+      "median_s": 35.528578996658325,
+      "median_is_lower_bound": false,
+      "times": [
+        35.275794982910156,
+        35.35128378868103,
+        35.528578996658325,
+        35.624319076538086,
+        35.77097511291504,
+        36.06885290145874
+      ],
+      "survival": [
+        0.8333333333333334,
+        0.6666666666666667,
+        0.5,
+        0.33333333333333337,
+        0.16666666666666669,
+        0.0
+      ],
+      "survival_ci": [
+        [
+          0.2731100659793658,
+          0.9747133270509547
+        ],
+        [
+          0.19460846916556668,
+          0.904436493745897
+        ],
+        [
+          0.11094308586665062,
+          0.8037129622242473
+        ],
+        [
+          0.046079559410940336,
+          0.6755693728810206
+        ],
+        [
+          0.007722414836598566,
+          0.516808041469721
+        ],
+        [
+          0.0,
+          0.0
+        ]
+      ],
+      "at_risk": [
+        6,
+        5,
+        4,
+        3,
+        2,
+        1
+      ],
+      "events": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "max_observed_s": 36.06885290145874
+    }
+  },
+  "comparisons": [
+    {
+      "wait_duration": 5,
+      "count": {
+        "n": 6,
+        "n_events": 6,
+        "n_censored": 0,
+        "fully_censored": false,
+        "median_s": 1.9007060527801514,
+        "median_is_lower_bound": false
+      },
+      "time": {
+        "n": 6,
+        "n_events": 6,
+        "n_censored": 0,
+        "fully_censored": false,
+        "median_s": 19.72546410560608,
+        "median_is_lower_bound": false
+      },
+      "median_ratio_time_over_count": 10.377966691248108,
+      "ratio_caveat": "",
+      "logrank": {
+        "statistic": 12.093984200670235,
+        "p_value": 0.0005058476622104973,
+        "df": 1,
+        "observed_group1": 6.0,
+        "expected_group1": 2.0807359307359308
+      }
+    },
+    {
+      "wait_duration": 15,
+      "count": {
+        "n": 6,
+        "n_events": 2,
+        "n_censored": 4,
+        "fully_censored": false,
+        "median_s": 12.860879898071289,
+        "median_is_lower_bound": true
+      },
+      "time": {
+        "n": 6,
+        "n_events": 6,
+        "n_censored": 0,
+        "fully_censored": false,
+        "median_s": 21.21594500541687,
+        "median_is_lower_bound": false
+      },
+      "median_ratio_time_over_count": 1.6496495709129955,
+      "ratio_caveat": "COUNT median is a lower bound (never reached 50% recovery); the true TIME/COUNT ratio is SMALLER than reported, possibly below 1",
+      "logrank": {
+        "statistic": 2.1950207468879666,
+        "p_value": 0.13845734482155123,
+        "df": 1,
+        "observed_group1": 2.0,
+        "expected_group1": 0.9545454545454546
+      }
+    },
+    {
+      "wait_duration": 30,
+      "count": {
+        "n": 6,
+        "n_events": 0,
+        "n_censored": 6,
+        "fully_censored": true,
+        "median_s": 12.880681037902832,
+        "median_is_lower_bound": true
+      },
+      "time": {
+        "n": 6,
+        "n_events": 6,
+        "n_censored": 0,
+        "fully_censored": false,
+        "median_s": 35.528578996658325,
+        "median_is_lower_bound": false
+      },
+      "median_ratio_time_over_count": 2.758284200354899,
+      "ratio_caveat": "COUNT median is a lower bound (never reached 50% recovery); the true TIME/COUNT ratio is SMALLER than reported, possibly below 1",
+      "logrank": {
+        "statistic": null,
+        "p_value": null,
+        "note": "zero variance"
+      }
+    }
+  ]
+}

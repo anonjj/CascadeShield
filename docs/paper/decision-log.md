@@ -345,6 +345,67 @@ window past $D_w=30$'s cap so COUNT's 0/6 stops being censored and starts being 
 
 ---
 
+**Update (2026-09-16, the Kaplan–Meier estimator this entry called for, run for real).**
+`analysis/half_open_survival.py` (new) — the estimator this entry's own Revisit-if named.
+Two extraction bugs were found and fixed before its numbers could be trusted (a legacy
+occupancy-mode record polluting the $D_w=15$ bucket; the observation span and censoring
+bound both needing to match `window_type_recovery_leak.py`'s own definitions exactly, not an
+independently-reinvented one) — see that commit for the full account. $D_w$=5 (fully observed
+on both arms) reproduces `window_type_recovery_leak.py`'s numbers almost exactly (10.38× here
+vs 10.35× there), confirming the two scripts agree wherever there is nothing for an estimator
+choice to disagree about.
+
+**The corrected, full picture — neither of the two possible outcomes this entry anticipated:**
+
+| $D_w$ | COUNT | TIME | ratio | log-rank |
+|---|---|---|---|---|
+| 5  | 6/6 recovered, median 1.90s | 6/6, median 19.73s | **10.38×** | **p = 0.0005** |
+| 15 | 2/6 recovered, **≥12.86s** (true value unresolved) | 6/6, median 21.22s | 1.65× (lower bound) | p = 0.14 (not significant) |
+| 30 | 0/6 recovered, **≥12.88s** (true value unresolved) | 6/6, median 35.53s | 2.76× (lower bound) | **undefined** — COUNT has zero events at all, so the test has no discriminating power here, not merely a null result |
+
+**H3 does not close, and does not reverse.** $D_w$=5 — the only bucket with a fully-observed
+COUNT arm — shows a real, large, statistically significant effect in the expected direction.
+$D_w$=15 and $D_w$=30 are *directionally consistent* with that same pattern (COUNT's lower
+bound is smaller than TIME's actual value at both, so a reversal is not supported either) but
+are **not independently confirmable**: at $D_w$=15 the test is underpowered by censoring
+(4 of 6 COUNT runs never recovered); at $D_w$=30 no valid significance test can even be
+constructed, because COUNT recovered zero times across all six replicates.
+
+**A genuine new finding, distinct from H3 itself: the harness's own recovery-observation
+window doesn't scale with $D_w$.** `breaker_observer.py::_poll_for_recovery` bounds the
+post-fault-clear observation at a flat `wait_duration + 10` seconds — and since
+Resilience4j's `OPEN → HALF_OPEN` transition itself consumes almost exactly `wait_duration`
+of that budget (it fires purely on elapsed time), only the fixed **~10-second remainder** is
+ever available to observe the `HALF_OPEN → CLOSED` leg, *regardless of $D_w$*. Verified
+directly against the sidecar: every one of the 26 real closures in the dataset lands inside
+that ~10s budget, and the two fully/partially-censored buckets' lower bounds (12.86s, 12.88s)
+sit right at its edge. This means COUNT's censoring rate rising with $D_w$ (0/6 → 4/6 → 6/6
+recovered, reading $D_w$ 5→15→30) is at least partly an **instrument ceiling**, not
+necessarily evidence that COUNT itself recovers more slowly at higher $D_w$ — the measurement
+apparatus gives it proportionally less room to show a close as $D_w$ grows, independent of
+window_type.
+
+**Consequence for H3's status:** stays "re-opened, preliminary" — but the blocker has moved
+again. It is no longer sample size (D13's own prior update already closed that gap, n=6),
+and now it is no longer "no estimator" (this update supplies one). The blocker is the
+**harness's fixed +10s recovery-observation budget**, which caps how much a censoring-aware
+estimator can ever recover at high $D_w$ regardless of replicate count. Closing H3 for real
+needs the observation budget itself widened (e.g. `wait_duration`-scaled, not a flat +10s)
+and re-collected — not more analysis of the data already in hand.
+
+**Rejected:** reporting this as "H3 confirmed" on the strength of the $D_w$=5 result alone, or
+as "H3 refuted / an interaction" on the strength of the lower bounds not exceeding TIME's
+values. Neither is what the data supports; both would be an overclaim in one direction or the
+other, the exact failure mode this whole analysis chain (D19 → PR #55 → this update) exists to
+close off.
+
+**Revisit if:** `breaker_observer.py::_poll_for_recovery`'s deadline is changed to scale with
+`wait_duration` (e.g. `2 * wait_duration` or similar) rather than a flat `+ 10`, and the
+$D_w$=15/30 cells are re-collected under it — that would be the first design that gives COUNT
+a fair chance to show its true recovery time at high $D_w$, censored or not.
+
+---
+
 ## D14 · `machine_id` is added to the canonical schema, before `excluded_reason`
 
 **Date:** 27 Aug 2026 · **Status:** final

@@ -911,3 +911,86 @@ baseline and fault phases measured at the same offered rate, concurrency and dur
 `max(0.0, ...)` clamp at `runner.py:1391` reconsidered, since it floors throughput *gain* at
 zero loss. The clamp never bites in the current all-LATENCY dataset (0 of 324 rows sit at
 0.0000) but will under CRASH, where an open breaker's fast-fail can push TPS above baseline.
+
+---
+
+## D21 · `half_open_probe_timed_out` / `half_open_probe_deadline_s` — censoring becomes observable, not inferred; the coarse `time_to_recover` ceiling worry is closed
+
+**Date:** 2026-09-16 · **Decided by:** Jay, from PR #56's Kaplan-Meier finding · **Status:** final (schema + harness fix); the targeted re-collection is a follow-up, not part of this entry
+
+**Decision.** Two new schema columns, positioned immediately after `machine_id` (D14's
+precedent — appended, never inserted, and always before `excluded_reason`, D8):
+
+- `half_open_probe_timed_out` (nullable bool) — did `BreakerObserver._drive_half_open_probes`'
+  poll-until-transition loop ever observe a real `HALF_OPEN_TO_CLOSED` for this run, or did it
+  hit its own ceiling first? Blank — never a sentinel — when `cb_open_at` was `None` (nothing
+  to probe), matching `lambda_deviation_flag`'s own established None-vs-False convention.
+- `half_open_probe_deadline_s` (nullable float) — the ceiling that run's probe-driving loop was
+  actually watching against (`3 * wait_duration + 60`, deterministic from `wait_duration` but
+  recorded directly, matching `readiness_wait_s`'s own precedent for not making a reader
+  recompute or assume a value later).
+
+**Why.** PR #56's KM analysis found that every real censored COUNT record in the tracked
+sidecar shows exactly 2 logged events (`CLOSED_TO_OPEN`, `OPEN_TO_HALF_OPEN`) and then
+silence — and until now, "was this censored, or did it just never get logged for some other
+reason" could only be answered by counting sidecar events after the fact and inferring intent.
+That is the same shape of gap `machine_id` (D14) and `cb_state_pre` (D8) each closed for their
+own kind of silent failure — this closes it for HALF_OPEN-probe censoring specifically.
+
+**The harness fix that makes the new column meaningful, not just a name.** Tracing why those
+records show exactly 2 events found the real constraint: `observe_recovery()` called
+`_drive_half_open_probes()` **unconditionally** for a **fixed** `(permitted_calls_half_open + 2)
+× 0.3s + 2s ≈ 4.1 seconds` of driven traffic, regardless of `wait_duration` and regardless of
+whether a real transition had happened yet — not `_poll_for_recovery`'s much larger,
+`wait_duration`-scaled deadline, which turned out to have 17–27 seconds of slack even at
+$D_w$=30 (verified directly against 6 real `fault_cleared_at` values, 0 violations of the
+bound in all 26 real closures on record).
+
+`_drive_half_open_probes` is now **poll-until-transition**, mirroring `_poll_for_recovery`'s own
+pattern: drive light traffic, check `collect(snapshot)` after each round, and stop the moment
+any watched breaker's transitions include `HALF_OPEN_TO_CLOSED`. A bounce back to `OPEN` does
+**not** stop the loop — that isn't a terminal outcome, and ending observation on a bounce would
+just be the same under-observation bug with a different trigger. A hard ceiling
+(`3 × wait_duration + 60s`, exposed as its own pure function `half_open_probe_deadline_s` for
+testability) exists so a genuinely stuck breaker can't hang a run; hitting it is the real,
+logged `half_open_probe_timed_out=True` outcome, not a silent exit.
+
+`_poll_for_recovery`'s own deadline is separately widened from a flat `+10` to
+`wait_duration + max(30, 2 * wait_duration)`, as originally proposed — kept even though the
+evidence says it was never the binding constraint on COUNT's censoring, because it's harmless
+(the loop exits early on success regardless) and removes one more place a fixed constant didn't
+scale with the thing it was bounding.
+
+**A separate worry, investigated and closed — no code change needed.** Does the same ceiling
+that censors the *precise* `precise_half_open_to_closed` metric also censor the *coarse*
+`time_to_recover` column already published as H3's headline figures? **No, provably:**
+`_poll_for_recovery` has exactly two outcomes — a real number, or `None` on timeout — with no
+path that returns a truncated value, and `runner.py` writes `None` as an explicit blank
+(`""`), never a fabricated number. `df.time_to_recover.isna().sum() == 0` across all 360 rows
+in the live dataset: every single run detected recovery before its own deadline. This
+return-value logic was introduced once (`8106199`) and never changed since, so the argument
+holds for the dataset's entire collection history, not just current code. Directly
+cross-checked against real `fault_cleared_at` values for the tightest-margin cell
+(TIME_BASED, $D_w$=30): margins of 17.7–27.1 seconds to spare, because that fault window's own
+load generation runs 42–52 seconds *after* the breaker already trips (sized to fill a large
+sliding window), pushing the deadline far later than a naive small-gap estimate would suggest.
+H3's originally published coarse figures do not need re-reading on account of this ceiling.
+
+**Rejected:** widening only `_poll_for_recovery`'s deadline and stopping there, as first
+proposed. The evidence (every censored record's identical 2-event shape, and the
+17–27s of unused slack on `_poll_for_recovery`'s own budget) points at
+`_drive_half_open_probes`'s fixed window as the actual constraint; widening the wrong constant
+would have consumed the ~1–2h re-collection window without resolving anything.
+
+**Consequence.** `data/master_dataset.csv`'s existing 360 rows predate these two columns and
+will read blank for both once the header is updated to include them (standard for every prior
+schema addition — D14's `machine_id` did the same for the rows that predated it). Not done in
+this commit — this entry is the harness fix and schema definition; merging the header update
+and the targeted $D_w$∈{5,15,30} re-collection (control-inclusive, per the plan) into the live
+file is a follow-up commit once that data exists.
+
+**Revisit if:** the targeted re-collection lands and either (a) COUNT now recovers within the
+widened, poll-until-transition window at $D_w$=15/30 — H3 gets closeable real numbers — or
+(b) `half_open_probe_timed_out=True` persists even under the new harness — a genuine,
+directly-provable finding (COUNT_BASED's HALF_OPEN probes structurally fail more often at
+higher $D_w$) rather than an instrument-ceiling artifact.

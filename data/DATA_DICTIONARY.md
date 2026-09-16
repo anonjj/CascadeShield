@@ -192,6 +192,8 @@ past 324 (e.g. 324 configs × 2 environments × 3 replicates = 1,944 rows).
 | `replicate` | int | `1..R` (R ≥ 3 recommended) | Repeat index. Enables mean ± variance per config instead of a single noisy run. |
 | `run_timestamp` | string (ISO 8601) | `2026-06-21T14:32:05Z` | Provenance. Never used as a model feature. |
 | `machine_id` | string | free-form host label, e.g. `codespace-abc123`; **nullable** (blank when the harness didn't record one) | Identifies which machine/Codespace produced this row, used for D6 cross-machine calibration. Provenance only; **excluded from features**. |
+| `half_open_probe_timed_out` | bool | `True`/`False`; **nullable** (blank when `cb_open_at` was `None` — nothing was probed) | **Added D21.** Did `BreakerObserver._drive_half_open_probes`' poll-until-transition loop see a real `HALF_OPEN_TO_CLOSED` before its own ceiling, or hit the ceiling first? Makes a censored `precise_half_open_to_closed` reading (`analysis/half_open_survival.py`) directly observable instead of only inferable from sidecar event counts. Validity/diagnostic column; **excluded from features**. |
+| `half_open_probe_deadline_s` | float | seconds, `3 * wait_duration + 60`; **nullable** (blank alongside `half_open_probe_timed_out`) | **Added D21.** The ceiling that run's probe-driving loop actually watched against — recorded directly rather than left for a reader to recompute from `wait_duration`. Provenance/diagnostic; **excluded from features**. |
 
 > **29-column schema.** Beyond the original 15-column skeleton the schema now carries:
 > `permitted_calls_half_open` and `mode` (operational); `real_blast_radius` and

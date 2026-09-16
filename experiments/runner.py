@@ -129,6 +129,16 @@ DATASET_HEADERS = [
     # row came from after the fact. Sits immediately BEFORE excluded_reason -- see the
     # note below on why that column stays last (D14).
     "machine_id",
+    # D21: whether BreakerObserver._drive_half_open_probes' poll-until-transition loop
+    # ever saw a real HALF_OPEN_TO_CLOSED land for this run, and the ceiling
+    # (3*wait_duration+60, breaker_observer.py::half_open_probe_deadline_s) it was
+    # watching against. Both blank when cb_open_at is None -- nothing was probed,
+    # never a sentinel. Added so a censored analysis/half_open_survival.py reading is
+    # directly observable in the dataset itself rather than only inferable after the
+    # fact by counting sidecar transitions -- the same move machine_id/D6 and
+    # cb_state_pre/precondition already made for their own kinds of silent gaps.
+    "half_open_probe_timed_out",
+    "half_open_probe_deadline_s",
     # Quarantine marker, written by analysis/quarantine.py -- NOT by a run. Empty means the
     # row is analysable; anything else is a "+"-joined list of exclusion codes (see
     # data/DATA_DICTIONARY.md). Rows are marked rather than deleted so a reviewer can see
@@ -1136,6 +1146,10 @@ def log_results(config, fault_type, mode, topology, metrics, replicate, machine_
         "lambda_deviation_flag": metrics.get("lambda_deviation_flag") if metrics.get("lambda_deviation_flag") is not None else "",
         "effective_horizon": _fmt(metrics, "effective_horizon"),
         "machine_id": effective_machine_id,  # --machine-id if passed, else auto-detected MACHINE_ID (D14/D6)
+        # D21: blank (not False/0) when cb_open_at was None -- nothing was probed,
+        # matching lambda_deviation_flag's own None-vs-False convention just above.
+        "half_open_probe_timed_out": metrics.get("half_open_probe_timed_out") if metrics.get("half_open_probe_timed_out") is not None else "",
+        "half_open_probe_deadline_s": _fmt(metrics, "half_open_probe_deadline_s", 1),
         "excluded_reason": "",  # always empty at write time; only analysis/quarantine.py fills it
     }
     if mode == "sweep":
@@ -1384,8 +1398,9 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
     if cb_opened:
         time_to_open = round(cb_open_at[0] - load_start, 3)
 
-    time_to_recover, transitions = observer.observe_recovery(
-        before_cb_counts, cb_open_at[0], config["waitDurationInOpenState"])
+    time_to_recover, transitions, half_open_probe_timed_out, half_open_probe_deadline_s = (
+        observer.observe_recovery(
+            before_cb_counts, cb_open_at[0], config["waitDurationInOpenState"]))
 
     # 8. Save results
     throughput_loss = max(0.0, 1.0 - (throughput / baseline_throughput))
@@ -1398,6 +1413,14 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
         "avg_latency_ms": avg_latency,
         "time_to_open": time_to_open,
         "time_to_recover": time_to_recover,
+        # D21: whether _drive_half_open_probes' poll-until-transition loop ever saw a
+        # real HALF_OPEN_TO_CLOSED land, and the ceiling it was watching against --
+        # both None when cb_open_at is None (nothing to probe), never a sentinel.
+        # Makes a censored precise_half_open_to_closed reading directly observable in
+        # the dataset instead of only inferable after the fact from sidecar event
+        # counts -- the same move D14's cb_state_pre made for stale breaker state.
+        "half_open_probe_timed_out": half_open_probe_timed_out,
+        "half_open_probe_deadline_s": half_open_probe_deadline_s,
         "precondition_ok": True,
         "precondition_fail_reason": "",
         "readiness_wait_s": readiness_wait_s,

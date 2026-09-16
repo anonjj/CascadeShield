@@ -1,16 +1,41 @@
 {
   "recovery_cap_s": 120.0,
-  "applied": false,
+  "applied": true,
   "per_dataset": [
     {
-      "dataset": "current",
-      "n_rows": 704,
-      "n_excluded": 0,
-      "share_excluded": 0.0,
-      "n_analysable": 704,
-      "by_reason": {},
+      "dataset": "d21_poll_until_transition_verification",
+      "n_rows": 45,
+      "n_excluded": 3,
+      "share_excluded": 0.06666666666666667,
+      "n_analysable": 42,
+      "by_reason": {
+        "RECOVERY_TIMEOUT_HANG+LAMBDA_DEVIATION": 2,
+        "LAMBDA_DEVIATION": 1
+      },
       "column_level_notes": {},
-      "rows": []
+      "rows": [
+        {
+          "experiment_id": "LIN-LAT-TIM-T50-W10-D15",
+          "replicate": 1,
+          "time_to_open": 6.617,
+          "time_to_recover": 83.066,
+          "excluded_reason": "LAMBDA_DEVIATION"
+        },
+        {
+          "experiment_id": "LIN-LAT-TIM-T50-W20-D5",
+          "replicate": 2,
+          "time_to_open": 11.864,
+          "time_to_recover": 704.564,
+          "excluded_reason": "RECOVERY_TIMEOUT_HANG+LAMBDA_DEVIATION"
+        },
+        {
+          "experiment_id": "LIN-LAT-TIM-T50-W20-D15",
+          "replicate": 1,
+          "time_to_open": 11.857,
+          "time_to_recover": 2657.107,
+          "excluded_reason": "RECOVERY_TIMEOUT_HANG+LAMBDA_DEVIATION"
+        }
+      ]
     }
   ]
 }

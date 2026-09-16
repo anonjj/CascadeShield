@@ -109,6 +109,36 @@ DATASETS = {
                 "decision, not because they're unaffected. Superseded once CRASH re-collection "
                 "lands in 'current'.",
     },
+    "d21_poll_until_transition_verification": {
+        "path": DATA_DIR / "master_dataset_d21_recollect.csv",
+        "n_expected": 36,
+        "blast_scale": 1.0,
+        "blast_denominator": 4,
+        "leg_node_set": "4",
+        "note": "Standalone, NOT merged into 'current' (D21, 2026-09-16). 18 LINEAR/LATENCY "
+                "configs x 2 window types x 2 replicates, run under the post-D21 harness "
+                "(BreakerObserver._drive_half_open_probes now polls until a real transition "
+                "instead of a fixed ~4.1s window) to verify the fix against real_data before "
+                "trusting analysis/half_open_survival.py's KM read. Deliberately used fresh "
+                "replicates 1-2 for these 18 experiment_ids -- which already exist in "
+                "'current' from the original main sweep + the D13 top-up (PR #54) -- so every "
+                "(experiment_id, replicate) key here COLLIDES with 'current' and this file "
+                "must never be appended to it. Not needed there anyway: the coarse "
+                "time_to_recover metric was never actually censored (0/360 nulls in "
+                "'current', confirmed independently of this run), so there is nothing here "
+                "that improves 'current''s own numbers -- the entire payload of this "
+                "re-collection is the precise_half_open_to_closed evidence, already fully "
+                "captured in data/cb_transitions.jsonl (the sidecar half_open_survival.py "
+                "reads directly). Two rows (LIN-LAT-TIM-T50-W20-D5 rep 2,  "
+                "LIN-LAT-TIM-T50-W20-D15 rep 1) have a coarse time_to_recover inflated by a "
+                "real-world system-sleep event mid-poll (704.6s / 2657.1s, run_timestamps "
+                "hours apart from the rest of the sweep) -- caught by the EXISTING "
+                "RECOVERY_TIMEOUT_HANG rule (RECOVERY_CAP_S=120.0) once quarantine.py runs "
+                "against this dataset, no new detection logic needed. Their "
+                "half_open_probe_timed_out is still correctly False -- the sleep happened "
+                "during _poll_for_recovery's own loop, not during _drive_half_open_probes' "
+                "separate, much shorter poll-until-transition window that runs after it.",
+    },
     "current": {
         "path": DATA_DIR / "master_dataset.csv",
         "n_expected": 360,   # 324 retained LATENCY rows; CRASH rows removed pending re-collection (v6 above)

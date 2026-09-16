@@ -1,6 +1,6 @@
 # CascadeShield — Project Status
 
-**Last updated:** 2026-09-15 · **Update this file whenever a PR lands or a sweep finishes.**
+**Last updated:** 2026-09-16 · **Update this file whenever a PR lands or a sweep finishes.**
 
 > This is the single source of truth for *where the project is*. It is meant to be read first,
 > from any tool — Claude Code, Claude in the browser, Cowork, or a human. The reasoning behind
@@ -35,13 +35,13 @@ Everything below is ordered by whether it blocks Paper B.
 | CRASH re-collection, **LINEAR** | ✅ **Done** — 162/162; PR #47, unmerged | — |
 | CRASH re-collection, **FANOUT** | 🔴 **Not collected** — needs a free machine, ~6h | **Yes** |
 | D15 / D-001 re-derivation after CRASH | 🔴 **Blocked** on the line above | **Yes** |
-| D13 / H3 (recovery leak) | 🟡 **Preliminary** — KM estimator run; D_w=5 significant (p=0.0005, 10.4×), D_w=15/30 inconclusive: harness's fixed +10s recovery-observation budget doesn't scale with D_w, capping how much any estimator can recover | **Yes** |
+| D13 / H3 (recovery leak) | ✅ **Confirmed** — `LEAK_CONFIRMED_ON_HALF_OPEN_LEG`, 36/36 recovered on both arms at all three D_w after the poll-until-transition fix (D21), significant everywhere (p=0.0005) | — |
 | Statistical treatment (D19) | ✅ **Defined** — Mann-Whitney + Cliff's δ, bootstrap CIs, censoring as rate + conditional timing. Two known deviations flagged, neither blocking | — |
 | Throughput / TPS reporting (D20) | ✅ **Retired** — `throughput_loss`'s measurement window is sized by the swept window params, so it is confounded with the IV and not repairable post hoc. No TPS number appears in the paper | — |
 | Manuscript | 🔴 **Not started** — no draft exists anywhere in the repo | — |
 
-**Two things block writing:** the FANOUT CRASH re-collection (and the re-analysis it unblocks),
-and re-collecting D13/H3's D_w=15/30 cells under a widened recovery-observation window (the KM estimator itself is done — see below; it's the harness's fixed +10s budget that's the remaining gap). Nothing else.
+**One thing blocks writing:** the FANOUT CRASH re-collection (and the re-analysis it unblocks).
+D13/H3 closed 2026-09-16 — see below. Nothing else.
 
 ---
 
@@ -52,7 +52,7 @@ and re-collecting D13/H3's D_w=15/30 cells under a widened recovery-observation 
 | **H1** | At matched horizon H, COUNT vs TIME differ in variance, not mean, of `time_to_open` | ⚪ **Not testable** on collected data — COUNT horizons {25…800} and TIME {5,10,20} are disjoint, zero overlap. Generator fixed (`6b045b4`) but the data predates it | D-004, D-003 |
 | **H2** | A crossover λ\* exists below which TIME_BASED cannot trip | ❌ **No effect found.** Trip rate 1.00 at every λ ∈ {5,20,80,320}, both window types. This is what selected Paper B | D-004 |
 | **H2b** | Occupancy ratio ρ = effective_horizon / n_min crossing 1 predicts inertness | ✅ **Confirmed for TIME_BASED** (clean crossover, no overlap) · ❌ **cleanly falsified for COUNT_BASED** (0/54 rows ever inert). Mechanism: COUNT's ring buffer caps `minimumNumberOfCalls` | D18 |
-| **H3** | Double dissociation: window params → detection, wait_duration → recovery | 🟡 **Re-opened, preliminary — KM run, does not close.** $D_w$=5 (fully observed): TIME 10.38× slower, **p=0.0005, significant**. $D_w$=15: COUNT only 2/6 recovered, true value ≥12.86s (unresolved, not confirmed slower or faster), **p=0.14, not significant**. $D_w$=30: COUNT 0/6 recovered, ≥12.88s, **no valid significance test exists** (zero events → zero variance). Neither "confirmed" nor "reversed" — the pattern holds where measurable and is silent elsewhere. New finding along the way: the harness's recovery-observation window is a flat +10s regardless of D_w (verified against every real closure, 0 violations), so COUNT gets proportionally less room to show a close as D_w grows — an **instrument ceiling**, not necessarily a property of COUNT itself. Closing H3 needs that budget widened and re-collected, not more analysis. Mechanism unidentified; the originally suspected one is architecturally ruled out for Resilience4j 2.2.0 | D13 |
+| **H3** | Double dissociation: window params → detection, wait_duration → recovery | ✅ **Confirmed 2026-09-16.** `LEAK_CONFIRMED_ON_HALF_OPEN_LEG` — after D21's poll-until-transition fix, **36/36 recovered on both arms at all three $D_w$** (was 2/6, 0/6 for COUNT under the old fixed-~4.1s probe window — a pure instrument artifact, not a property of COUNT_BASED). TIME slower at every level, significant throughout (log-rank p=0.0005): **9.49× at $D_w$=5, 2.16× at $D_w$=15, 2.40× at $D_w$=30** (medians COUNT 2.04/9.83/14.99s vs TIME 19.34/21.27/35.90s). The ratio *shrinking* with $D_w$ — not flat, not growing — is a genuinely new shape versus the pre-fix censored read, which could only see the two extremes and had no real COUNT numbers at $D_w$≥15 to compare against. Verification data kept standalone (`d21_poll_until_transition_verification`, not merged into `current` — see `analysis/common.py`), since the coarse `time_to_recover` metric was never actually censored (confirmed independently, 0/360 nulls) and needed no fix. Mechanism for *why* TIME_BASED's HALF_OPEN leg is slower remains unidentified; the originally suspected one is still architecturally ruled out for Resilience4j 2.2.0 | D13, D21 |
 | **H4** | Competing containment definitions rank configs differently (Kendall τ < 1) | ✅ **Supported.** 36/36 pairs below τ=1.0. Magnitude moved a lot after FAN_OUT data: min pairwise τ is now **0.891**, was 0.238 — rankings agree *more* than first measured, but never perfectly | D-001 |
 | **H5** | Blast-radius resolution is topology-dependent: Var(B)=0 on a chain, >0 with parallel subjects | ❌ **Tested and NOT supported.** FANOUT+LATENCY gives Var(B)=0 too, identical to LINEAR — 162/162 rows each side, exactly one leg firing | D15 |
 | **H6** | A uniform edge breaker suppresses interior breaker engagement (gateway shadowing) | ⚪ **Untestable as instrumented.** The `measurement-plane` isolation block removed the condition by design. Gateway CLOSED in all 704 rows. Testing it means deliberately reconstructing a removed confound, and the paper must say so | hypotheses.md §7 |
@@ -128,9 +128,37 @@ real closures in the dataset: 0 violations of this bound. This means COUNT's ris
 rate at higher D_w (0/6 → 4/6 → 6/6 uncensored, reading D_w 5→15→30) is at least partly an
 **instrument ceiling**, not necessarily COUNT itself recovering more slowly.
 
-**What's actually left:** widen `_poll_for_recovery`'s deadline to scale with `wait_duration`
-(not a flat +10s) and re-collect the D_w=15/30 cells under it. Not started — see D13 in
-`docs/paper/decision-log.md` for the full numbers and reasoning.
+**Update (2026-09-16) — fixed the real constant, re-collected, H3 closes.** Tracing WHY
+every censored COUNT record showed exactly 2 events (`CLOSED_TO_OPEN`, `OPEN_TO_HALF_OPEN`)
+then silence found the actual cause: not `_poll_for_recovery`'s deadline (which had 17-27s of
+slack even at $D_w$=30, verified against real `fault_cleared_at` values), but
+`_drive_half_open_probes` — called unconditionally for a **fixed ~4.1 seconds** regardless of
+`wait_duration` or whether a transition had happened yet. Rewritten as poll-until-transition
+(D21, PR #57): drive traffic, stop the moment `HALF_OPEN_TO_CLOSED` lands, hard ceiling
+`3*wait_duration+60s`. Two new columns (`half_open_probe_timed_out`,
+`half_open_probe_deadline_s`) make censoring observable going forward instead of inferred.
+
+Re-collected 18 configs × 2 replicates × 2 window types = 36 runs under the fixed harness
+(`d21_poll_until_transition_verification`, standalone — not merged into `current`, see
+`analysis/common.py`). **Result: `half_open_probe_timed_out=False` on all 36/36 runs.** Zero
+censoring anywhere, at any $D_w$, on either arm. `analysis/half_open_survival.py` against just
+this post-fix data: verdict `LEAK_CONFIRMED_ON_HALF_OPEN_LEG`, log-rank p=0.0005 at every
+level, TIME slower throughout — **9.49× at $D_w$=5, 2.16× at $D_w$=15, 2.40× at $D_w$=30**
+(medians COUNT 2.04/9.83/14.99s, TIME 19.34/21.27/35.90s). The censoring was purely the fixed
+harness window — not a property of COUNT_BASED's HALF_OPEN behavior — and the corrected shape
+(ratio shrinking with $D_w$, not flat) is new information the censored data literally could
+not have shown, since it never had real COUNT numbers at $D_w$≥15 to compare against.
+
+One data-quality note found along the way, not related to the fix: 2 of the 36 runs' *coarse*
+`time_to_recover` (a wall-clock poll duration, separate from the precise sidecar-timestamp
+metric above) came back at 704.6s and 2657.1s — a real-world system-sleep event mid-poll on
+the collecting machine, not a code defect. Caught automatically by `quarantine.py`'s existing
+`RECOVERY_TIMEOUT_HANG` rule (`RECOVERY_CAP_S=120.0`), no new detection logic needed. Their
+`half_open_probe_timed_out` is still correctly `False` — the sleep hit `_poll_for_recovery`'s
+loop, not the separate, much shorter window `_drive_half_open_probes` runs afterward.
+
+**D13/H3 is closed.** Full numbers and reasoning in `docs/paper/decision-log.md`'s D13 and
+D21 entries.
 
 ---
 
@@ -218,10 +246,10 @@ pending re-collection.
 |---|---|---|---|
 | 1 | FANOUT CRASH re-collection | ~6 h | A free machine (see below) |
 | 2 | Merge #47 + FANOUT, bump `n_expected` to ~648, re-run `tau_sweep.py` + `order_leg_containment.py`, update D15 / D-001 / hypotheses §5.4 | ~1 h | #1 |
-| 3 | ~~D13/H3 replicate top-up~~ ✅ done (PR #54). ~~KM estimator~~ ✅ done — `analysis/half_open_survival.py`. **New:** widen `breaker_observer.py::_poll_for_recovery`'s deadline to scale with `wait_duration` instead of a flat +10s, then re-collect D_w=15/30 — the current fixed budget caps how much any estimator can ever recover at high D_w | small harness change + ~20min re-collect, unscoped | KM estimator (done 2026-09-16) |
+| 3 | ~~D13/H3~~ ✅ **closed 2026-09-16** — poll-until-transition fix (D21, PR #57), re-collected 36/36 clean, `LEAK_CONFIRMED_ON_HALF_OPEN_LEG` | — | — |
 | 4 | Merge #43 and #47 (#47 waits for FANOUT) | minutes | #1 for #47 |
 | 5 | Conditional — **only if an ML result enters the paper**: drop `throughput_loss` from `ml/preprocessing.py::IF_NUMERIC_FEATURES` and re-fit, per D20's carried item. The Isolation Forest currently inherits the confound | ~min | — |
-| 6 | **Start writing Paper B** | — | #1–#3 |
+| 6 | **Start writing Paper B** | — | #1 |
 
 **Optional, no longer required:** re-running the `matched_horizon` arm against the regenerated
 design to make H1 testable (~1.5 h). Paper B doesn't need H1; per D-004 a positive result would
@@ -252,6 +280,13 @@ automatically.
    or the run is wasted (this is exactly why D13 needed a second top-up before landing at n=6).
 5. **Never push or merge directly to `main`.** Branch per unit of work, PR via `gh pr create`.
 6. **Use a `git worktree`** when the local checkout has unrelated uncommitted work.
+7. **On a laptop, `caffeinate -dims` does not survive a closed lid.** Clamshell sleep suspends
+   the whole process tree regardless of caffeinate flags; a poll loop mid-sleep just sees a huge
+   wall-clock jump on wake, not a crash — silently inflating any wall-clock-duration measurement
+   (2 of 36 rows in the D21 re-collection hit 704s/2657s this way). Keep the lid open (or add
+   `-s` and stay on AC power, which still won't survive an actual lid close) for any long
+   detached run; `quarantine.py`'s `RECOVERY_TIMEOUT_HANG` rule catches the symptom after the
+   fact, but doesn't stop it happening.
 
 ---
 

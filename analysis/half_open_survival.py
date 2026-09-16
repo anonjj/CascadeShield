@@ -632,6 +632,15 @@ def main() -> int:
     ap.add_argument("--out", default="analysis/out/half_open_survival.json")
     ap.add_argument("--breaker", default=None,
                     help="substring filter, e.g. 'inventoryServiceCB'")
+    ap.add_argument("--since", default=None,
+                    help="YYYY-MM-DD -- keep only records whose fault_injected_at falls on or "
+                         "after this date. cb_transitions.jsonl is a running, never-purged log "
+                         "(D21: 'never delete, mark/archive instead'), so a harness fix landing "
+                         "mid-history means the default (no filter) pools pre- and post-fix "
+                         "records together in one verdict. Use this to isolate one side of a "
+                         "before/after comparison -- e.g. the D21 poll-until-transition "
+                         "verification read the post-2026-09-16 slice on its own before it was "
+                         "trusted, rather than pooling it with the still-censored pre-fix rows.")
     ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args()
 
@@ -655,6 +664,11 @@ def main() -> int:
         except json.JSONDecodeError as exc:
             print(f"WARN: line {i} is not valid JSON ({exc}); skipped", file=sys.stderr)
     print(f"loaded {len(records)} records from {path}")
+
+    if args.since:
+        before = len(records)
+        records = [r for r in records if r.get("fault_injected_at", "") >= args.since]
+        print(f"--since {args.since}: kept {len(records)} of {before} records")
 
     obs = extract_observations(records, breaker_filter=args.breaker)
     if not obs:

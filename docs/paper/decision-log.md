@@ -479,6 +479,63 @@ COUNT_BASED's — real, confirmed, but still unexplained — becomes tractable t
 directly (e.g. instrumenting the actual probe-call latencies during HALF_OPEN, not just the
 transition timestamps either side of it).
 
+**Update (2026-09-17, the revisit condition above is met — HALF_OPEN's gate is identified,
+and it is not the mechanism that would have tied H3 to H2b).** Two things, done in order:
+
+**Step 1 (free, no runs).** Regressed `precise_half_open_to_closed` on `window_size`, split by
+`window_type`, using `analysis/half_open_survival.py`'s existing `extract_observations()`
+against the post-D21-fix slice of `data/cb_transitions.jsonl` (`fault_injected_at >=
+2026-09-16`; 36 observations, zero censoring). Found and excluded 2 further records
+(`TIME-W20-D5-rep2`: 700.4s, `TIME-W20-D15-rep1`: 1703.4s) that exceed
+`half_open_probe_deadline_s(wait_duration)` and are therefore physically impossible — the
+same Mac-lid-sleep artifact this entry already documented for the *coarse* `time_to_recover`
+column, but `half_open_survival.py` has no equivalent sanity ceiling on the *precise* metric
+today (flagged as a real gap, not fixed here — out of scope for this entry). With those
+excluded (2 replicates per fully-crossed `(window_type, window_size, wait_duration)` cell —
+descriptive, not a powered regression): **TIME_BASED's recovery duration increases with
+`window_size`** at $D_w$=5 (19.3→19.3→28.7s) and $D_w$=15 (20.9→30.5→39.6s), flattening at
+$D_w$=30. **COUNT_BASED shows no such relationship** at $D_w$=5/15 (flat), with an unexplained
+increase at $D_w$=30 (10.0→15.1→25.3s, n=2, not over-interpreted). Suggestive of TIME_BASED's
+recovery scaling with real wall-clock window-fill time; not mechanistic on its own.
+
+**Step 2 (live discriminator, decisive).** Jay's proposal: if HALF_OPEN exit gates on
+`minimumNumberOfCalls` (the javadoc's literal claim) rather than
+`permittedNumberOfCallsInHalfOpenState` (this repo's §IV-A assumption), then a TIME_BASED
+config with `permittedNumberOfCallsInHalfOpenState=3` fixed and `minimumNumberOfCalls` raised
+from 3 (baseline) to 30 (discriminator) should recover ~10× slower — or, since HALF_OPEN only
+*admits* `permittedNumberOfCallsInHalfOpenState` calls per episode (rest rejected, not
+recorded), should never recover at all, running every replicate to PR #57's hard ceiling
+(pre-registered as confirmation of n_min-governs, not a failed run, before executing).
+6 replicates each, live mesh, `--mode full`/`topology=linear`/`fault=latency`, everything else
+at canonical values (`failureRateThreshold=50, slidingWindowSize=10, waitDurationInOpenState=15,
+targetRps=10`), same disposable `order-service` `CircuitBreaker`-event-trace diagnostic used to
+settle D18 (worktree-only, never merged).
+
+**Result: no difference.** Baseline (n_min=3): 6/6 recovered, `precise_half_open_to_closed`
+19.75–20.20s (tight). Discriminator (n_min=30): 6/6 recovered, 19.65–20.13s — statistically
+indistinguishable from baseline, not ~10× slower, not censored. The live `CircuitBreaker`
+event trace settles *why*, unambiguously: every HALF_OPEN episode in both arms admits exactly
+`permittedNumberOfCallsInHalfOpenState` (3) calls — every call beyond the 3rd is logged
+`NOT_PERMITTED` immediately, including mid-episode before the 3rd completes — and evaluates
+the instant all 3 finish (`bufferedCalls=3` at the transition event, both arms, both the
+CLOSED→OPEN bounce and the eventual →CLOSED). `minimumNumberOfCalls` (3 vs 30) never appears
+anywhere in this trace; the two arms' event logs are behaviorally identical apart from the
+config value neither ever used.
+
+**Conclusion: HALF_OPEN→CLOSED is governed by `permittedNumberOfCallsInHalfOpenState`, not
+`minimumNumberOfCalls`.** The javadoc's literal claim ("HALF_OPEN persists until
+`minimumNumberOfCalls` completes") does not match Resilience4j 2.2.0's observed runtime
+behavior for this repo's breaker configuration — §IV-A's original assumption was correct, now
+confirmed by direct per-call evidence rather than an unstated assumption. **This also means
+H2b and H3 do *not* share a root cause** — D18's n_min-effective-clamping mechanism (confirmed
+live, PR #59) governs the CLOSED-side evaluation gate; HALF_OPEN's exit gate is a completely
+separate, already-correctly-assumed mechanism. The hoped-for unifying claim doesn't hold; what
+does hold, now with call-level evidence instead of an inference, is more useful than the
+un-investigated status quo. **TIME_BASED's HALF_OPEN leg being slower than COUNT_BASED's
+remains a confirmed effect with an unidentified mechanism** — Step 1's window_size trend is
+still the best lead, but window_size itself doesn't appear in `permittedNumberOfCallsInHalfOpenState`'s
+admission logic either, so it isn't yet an explanation, only a correlate.
+
 ---
 
 ## D14 · `machine_id` is added to the canonical schema, before `excluded_reason`

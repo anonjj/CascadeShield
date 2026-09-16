@@ -35,13 +35,13 @@ Everything below is ordered by whether it blocks Paper B.
 | CRASH re-collection, **LINEAR** | ✅ **Done** — 162/162; PR #47, unmerged | — |
 | CRASH re-collection, **FANOUT** | 🔴 **Not collected** — needs a free machine, ~6h | **Yes** |
 | D15 / D-001 re-derivation after CRASH | 🔴 **Blocked** on the line above | **Yes** |
-| D13 / H3 replicate top-up | 🟡 **Preliminary** — top-up done (n=6/bucket); blocked on a censoring-aware estimator, not sample size | **Yes** |
+| D13 / H3 (recovery leak) | 🟡 **Preliminary** — KM estimator run; D_w=5 significant (p=0.0005, 10.4×), D_w=15/30 inconclusive: harness's fixed +10s recovery-observation budget doesn't scale with D_w, capping how much any estimator can recover | **Yes** |
 | Statistical treatment (D19) | ✅ **Defined** — Mann-Whitney + Cliff's δ, bootstrap CIs, censoring as rate + conditional timing. Two known deviations flagged, neither blocking | — |
 | Throughput / TPS reporting (D20) | ✅ **Retired** — `throughput_loss`'s measurement window is sized by the swept window params, so it is confounded with the IV and not repairable post hoc. No TPS number appears in the paper | — |
 | Manuscript | 🔴 **Not started** — no draft exists anywhere in the repo | — |
 
 **Two things block writing:** the FANOUT CRASH re-collection (and the re-analysis it unblocks),
-and D13's censoring-aware estimator (the replicate top-up itself is done). Nothing else.
+and re-collecting D13/H3's D_w=15/30 cells under a widened recovery-observation window (the KM estimator itself is done — see below; it's the harness's fixed +10s budget that's the remaining gap). Nothing else.
 
 ---
 
@@ -52,7 +52,7 @@ and D13's censoring-aware estimator (the replicate top-up itself is done). Nothi
 | **H1** | At matched horizon H, COUNT vs TIME differ in variance, not mean, of `time_to_open` | ⚪ **Not testable** on collected data — COUNT horizons {25…800} and TIME {5,10,20} are disjoint, zero overlap. Generator fixed (`6b045b4`) but the data predates it | D-004, D-003 |
 | **H2** | A crossover λ\* exists below which TIME_BASED cannot trip | ❌ **No effect found.** Trip rate 1.00 at every λ ∈ {5,20,80,320}, both window types. This is what selected Paper B | D-004 |
 | **H2b** | Occupancy ratio ρ = effective_horizon / n_min crossing 1 predicts inertness | ✅ **Confirmed for TIME_BASED** (clean crossover, no overlap) · ❌ **cleanly falsified for COUNT_BASED** (0/54 rows ever inert). Mechanism: COUNT's ring buffer caps `minimumNumberOfCalls` | D18 |
-| **H3** | Double dissociation: window params → detection, wait_duration → recovery | 🟡 **Re-opened, preliminary.** `LEAK_SUGGESTIVE_INCOMPLETE_DUE_TO_CENSORING` at real n (6/bucket) — TIME's HALF_OPEN→CLOSED is 9.0×–10.35× COUNT's at D_w=5/15, and at D_w=30 **COUNT never recovers at all (0/6)**, which the analysis script now reports as censored instead of silently dropping the row. Downgraded from "confirmed" only because a censored cell can't be folded into a median ratio — the underlying pattern, where it's measurable, is more consistent, not less. Needs a Kaplan–Meier/Cox estimator to close for real. Mechanism unidentified; the originally suspected one is architecturally ruled out for Resilience4j 2.2.0 | D13 |
+| **H3** | Double dissociation: window params → detection, wait_duration → recovery | 🟡 **Re-opened, preliminary — KM run, does not close.** $D_w$=5 (fully observed): TIME 10.38× slower, **p=0.0005, significant**. $D_w$=15: COUNT only 2/6 recovered, true value ≥12.86s (unresolved, not confirmed slower or faster), **p=0.14, not significant**. $D_w$=30: COUNT 0/6 recovered, ≥12.88s, **no valid significance test exists** (zero events → zero variance). Neither "confirmed" nor "reversed" — the pattern holds where measurable and is silent elsewhere. New finding along the way: the harness's recovery-observation window is a flat +10s regardless of D_w (verified against every real closure, 0 violations), so COUNT gets proportionally less room to show a close as D_w grows — an **instrument ceiling**, not necessarily a property of COUNT itself. Closing H3 needs that budget widened and re-collected, not more analysis. Mechanism unidentified; the originally suspected one is architecturally ruled out for Resilience4j 2.2.0 | D13 |
 | **H4** | Competing containment definitions rank configs differently (Kendall τ < 1) | ✅ **Supported.** 36/36 pairs below τ=1.0. Magnitude moved a lot after FAN_OUT data: min pairwise τ is now **0.891**, was 0.238 — rankings agree *more* than first measured, but never perfectly | D-001 |
 | **H5** | Blast-radius resolution is topology-dependent: Var(B)=0 on a chain, >0 with parallel subjects | ❌ **Tested and NOT supported.** FANOUT+LATENCY gives Var(B)=0 too, identical to LINEAR — 162/162 rows each side, exactly one leg firing | D15 |
 | **H6** | A uniform edge breaker suppresses interior breaker engagement (gateway shadowing) | ⚪ **Untestable as instrumented.** The `measurement-plane` isolation block removed the condition by design. Gateway CLOSED in all 704 rows. Testing it means deliberately reconstructing a removed confound, and the paper must say so | hypotheses.md §7 |
@@ -106,9 +106,31 @@ script reports `LEAK_SUGGESTIVE_INCOMPLETE_DUE_TO_CENSORING` (D_w=5 10.35x, D_w=
 D_w=30 COUNT never recovers) — see decision-log.md's D13 entry for the full numbers and why
 that label is a change in what's provable, not a weakening of the finding.
 
-**What's actually left**, since sample size is no longer the gap: a censoring-aware estimator
-(Kaplan–Meier or a Cox model) on `precise_half_open_to_closed`, right-censored at the
-observation-window cap. Not started.
+**Update (2026-09-16) — the estimator is done, and it moves the blocker again.**
+`analysis/half_open_survival.py` (new) implements Kaplan-Meier + log-rank, dependency-light
+(numpy only). Two extraction bugs found and fixed first (a legacy occupancy-mode record
+polluting the D_w=15 bucket; the observation span and censoring bound both needed to match
+`window_type_recovery_leak.py`'s own definitions exactly). $D_w$=5 agrees with that script
+almost exactly (10.38× vs 10.35×) — confirms the two scripts agree wherever there's nothing
+for an estimator choice to disagree about.
+
+**Result: neither closes nor reverses.** $D_w$=5 is real and significant (p=0.0005, TIME
+10.4× slower). $D_w$=15 is directionally consistent but not significant (p=0.14, COUNT only
+2/6 recovered). $D_w$=30 has **no valid significance test at all** — COUNT recovered 0/6
+times, so the log-rank test has zero variance to work with, not merely a null result.
+
+**New finding: the harness's recovery-observation window is a flat +10s, not scaled to D_w.**
+`breaker_observer.py::_poll_for_recovery`'s deadline is `wait_duration + 10` from when the
+fault clears — and since the OPEN→HALF_OPEN transition itself consumes ~wait_duration of that
+budget (Resilience4j auto-transitions purely on elapsed time), only ~10s ever remains to
+observe the HALF_OPEN→CLOSED leg, *regardless of D_w*. Verified against every one of the 26
+real closures in the dataset: 0 violations of this bound. This means COUNT's rising censoring
+rate at higher D_w (0/6 → 4/6 → 6/6 uncensored, reading D_w 5→15→30) is at least partly an
+**instrument ceiling**, not necessarily COUNT itself recovering more slowly.
+
+**What's actually left:** widen `_poll_for_recovery`'s deadline to scale with `wait_duration`
+(not a flat +10s) and re-collect the D_w=15/30 cells under it. Not started — see D13 in
+`docs/paper/decision-log.md` for the full numbers and reasoning.
 
 ---
 
@@ -196,7 +218,7 @@ pending re-collection.
 |---|---|---|---|
 | 1 | FANOUT CRASH re-collection | ~6 h | A free machine (see below) |
 | 2 | Merge #47 + FANOUT, bump `n_expected` to ~648, re-run `tau_sweep.py` + `order_leg_containment.py`, update D15 / D-001 / hypotheses §5.4 | ~1 h | #1 |
-| 3 | ~~D13/H3 replicate top-up~~ ✅ done (PR #54). **New:** add a Kaplan–Meier/Cox estimator for `precise_half_open_to_closed` (right-censored at the observation cap) — D_w=30's COUNT 0/6 blocks a plain median-ratio verdict | ~1 h, unscoped | `analysis/window_type_recovery_leak.py`'s D19 migration (done 2026-09-15) |
+| 3 | ~~D13/H3 replicate top-up~~ ✅ done (PR #54). ~~KM estimator~~ ✅ done — `analysis/half_open_survival.py`. **New:** widen `breaker_observer.py::_poll_for_recovery`'s deadline to scale with `wait_duration` instead of a flat +10s, then re-collect D_w=15/30 — the current fixed budget caps how much any estimator can ever recover at high D_w | small harness change + ~20min re-collect, unscoped | KM estimator (done 2026-09-16) |
 | 4 | Merge #43 and #47 (#47 waits for FANOUT) | minutes | #1 for #47 |
 | 5 | Conditional — **only if an ML result enters the paper**: drop `throughput_loss` from `ml/preprocessing.py::IF_NUMERIC_FEATURES` and re-fit, per D20's carried item. The Isolation Forest currently inherits the confound | ~min | — |
 | 6 | **Start writing Paper B** | — | #1–#3 |

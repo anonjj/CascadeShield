@@ -67,7 +67,7 @@ whole design turns on the Day-2 canary.
 | **H3** | Window parameters drive $t_{\text{open}}$ and not $t_{\text{rec}}$; $D_w$ drives $t_{\text{rec}}$ and not $t_{\text{open}}$ (double dissociation) | Evidence in hand ($t_{\text{rec}}$ = 16.95 / 27.85 / 49.31 s across $D_w$ = 5/15/30, negative control on $t_{\text{open}}$ at 7.39 / 7.35 / 7.49). Leak audit clears it — see §4. Additionally stress-tested directly against window_type, see §4.1 (`analysis/out/window_type_recovery_leak.json`) | Day 3 analysis |
 | **H4** | Competing containment definitions rank configurations differently ($\tau_{\text{Kendall}} < 1$, significantly) | **Supported on Day 1** from the persisted leg vectors, with no new runs — see §5 | ✅ Day 1 |
 | **H5** | Blast-radius resolution is topology-dependent: $\text{Var}(B) = 0$ on chain topologies, $> 0$ where parallel reachable subjects exist | **Tested and NOT supported (§5.5, 2026-09-06).** FAN_OUT+LATENCY shows $\text{Var}(B)=0$ too — identical to LINEAR, 162/162 rows each side, exactly one leg firing | ✅ Day 4 sweep (negative result) |
-| **H6** | A uniformly configured edge breaker suppresses interior breaker engagement (gateway shadowing) | Evidence exists in the archived 162-run data (gateway leg 0.70–1.00 in every row, interior legs 0.0000 in 154 of 162) but the condition was **removed** by the `measurement-plane` isolation block | Day 3, if time |
+| **H6** | A uniformly configured edge breaker suppresses interior breaker engagement (gateway shadowing) | Evidence exists in the archived 162-run data (gateway leg 0.70–1.00 in every row, interior legs 0.0000 in 154 of 162). The `measurement-plane` isolation block was believed to remove the condition entirely — **corrected 2026-09-17 (§7, decision-log D23): it only removes it for TIME_BASED; COUNT_BASED at higher `wait_duration` still trips gateway**, live-verified | Day 3, if time — testability verdict needs re-deciding, see §7 |
 
 **H1 + H2 are the novelty. H3 + H5 are the floor.** If the Day-2 canary kills H1/H2, the
 fallback is Paper B (construct validity), which §5 has already moved substantially forward.
@@ -422,9 +422,24 @@ Day 6:
   identical ~10-run LINEAR block executed on both machines) reads
   `MACHINE_EFFECT_NEGLIGIBLE`. `order_leg`/blast-radius-style comparisons (§5.4) are not
   gated by this — only the timing DVs are.
-- H6's condition was removed by the `measurement-plane` isolation block. If the arm is run, the
-  paper must state it as a **deliberate reconstruction of a removed confound**, not as a
-  pre-existing condition. Every current row is `isolated`.
+- **(2026-09-17 correction, decision-log D23): "every current row is isolated" is false.**
+  The `measurement-plane` config (`services/gateway-service/src/main/resources/application.yml`)
+  hardcodes `minimum-number-of-calls: 1000000`/`failure-rate-threshold: 100`, but never sets
+  `sliding-window-size`/`sliding-window-type` and doesn't inherit from `default` — both fields
+  silently track the swept `default` values instead. Combined with D18's confirmed COUNT_BASED
+  mechanism (a window evaluates once its ring buffer fills, independent of the configured
+  minimum), gateway's real gate is `min(1000000, slidingWindowSize)`, not 1,000,000 —
+  live-verified call-by-call against the real mesh. **The isolation holds for TIME_BASED
+  sweeps** (`minimumNumberOfCalls` genuinely gates evaluation there, confirmed: 0 gateway
+  trips across every `TIME_BASED` record in `data/cb_transitions.jsonl`) **and fails for
+  COUNT_BASED sweeps at `wait_duration ∈ {15, 30}`** (20 real gateway trips across 5
+  experiment_ids, spanning both before and after D21's unrelated fix — this bug is
+  independent of that one and has been present since `dcb9214`, 2026-07-30). H6's condition
+  is therefore not fully "removed" — it recurs under COUNT_BASED at the higher end of the
+  swept `wait_duration`/`window_size` range, and any arm run under those conditions is a
+  naturally-occurring instance, not a "deliberate reconstruction of a removed confound." H6's
+  untestability verdict needs re-deciding against this — not done as part of this correction.
+  Full evidence: decision-log D23.
 - Matched-horizon coverage is **not** the full $(\lambda, H)$ plane. Whole regions are
   unreachable: $T = W/\lambda$ falls below Resilience4j's one-second resolution above
   $\lambda = 5$, and $W = \lambda T$ exceeds the configurable window ceiling above

@@ -1527,3 +1527,39 @@ fixed) — that would finally give H3 a testable $D_w$=30 `COUNT_BASED` arm. Als
 ~2x/1x batch artifact found in step 1 gets investigated and turns out to be gateway-related
 after all (it currently shows no relationship to D23's parameter region, but its actual cause
 is still unknown).
+
+**Update (2026-09-18, both cleaned-data p-values were asymptotic artifacts — corrected;
+direction survives at both $D_w$, significance survives but is weaker than reported at
+$D_w$=15).** `half_open_survival.logrank()`'s p-values come from a chi-square approximation,
+valid only asymptotically; it has no floor and can report values a permutation test could
+never produce at small n. Any permutation test's smallest attainable p-value is
+$1/\binom{n_1+n_2}{n_1}$ — the observed label assignment is one of that many equally likely
+relabelings, so the most extreme bucket can never hold fewer than it.
+`analysis/exact_tests.py` (new, `--self-test`) implements this floor
+(`exact_p_floor`/`check_p_floor`/`guard_p`) plus an exact permutation log-rank test (full
+enumeration for $n \le 22$, Monte Carlo above that). Re-run against the actual gateway-cleaned
+rows this entry's table above used (`--since 2026-09-16`, pulled via
+`half_open_survival.extract_observations()`, both arms fully observed at both $D_w$, 0
+censored):
+
+| $D_w$ | $n_1$ (COUNT) | $n_2$ (TIME) | reported (chi-square) | floor $1/\binom{n_1+n_2}{n_1}$ | exact permutation p |
+|---|---|---|---|---|---|
+| 5  | 6 | 5 | p = 0.0014 | 1/462 ≈ 0.002165 | **p = 0.004329** |
+| 15 | 2 | 5 | p = 0.0082 | 1/21 ≈ 0.047619 | **p = 0.047619** (== floor) |
+
+**Both reported p-values were below their floor — both artifacts, not just $D_w$=15.** At
+$D_w$=15, COUNT and TIME are completely separated (every COUNT duration smaller than every
+TIME duration), so the observed labeling is the single most extreme one of all 21 possible
+relabelings and the exact p equals the floor exactly. At $D_w$=5, the exact test found 2 of
+462 relabelings at least as extreme as observed (`2/462 = 0.004329`), so it isn't a
+complete-separation case but is still well below the chi-square figure. **H3's direction holds
+at both $D_w$** (COUNT still faster than TIME in every one of the observed rows) **and
+significance survives at $\alpha$=0.05 at both** — but $D_w$=15's true p (0.048) is much closer
+to the threshold than the reported 0.008 suggested, and neither reported figure should be
+quoted going forward. **Consequence for the paper:** report the exact permutation p (0.0043 at
+$D_w$=5, 0.048 at $D_w$=15) in place of the chi-square figures for this cleaned-data
+comparison, and flag $D_w$=15 as a small-sample result, not a strong one. **Same root cause as
+this session's other small-n traps (D18, D23, and the resilience4j javadoc entry under D13):**
+the correct number was one call away (`exact_logrank_test` here, `math.comb` under it) but the
+pipeline reached for the convenient asymptotic tool instead, and nothing forced a floor check
+before either p-value got quoted as fact.

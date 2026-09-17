@@ -537,6 +537,17 @@ remains a confirmed effect with an unidentified mechanism** — Step 1's window_
 still the best lead, but window_size itself doesn't appear in `permittedNumberOfCallsInHalfOpenState`'s
 admission logic either, so it isn't yet an explanation, only a correlate.
 
+**Update (2026-09-17, filed upstream).** This javadoc defect was reported to
+`resilience4j/resilience4j` as
+[issue #2518](https://github.com/resilience4j/resilience4j/issues/2518). Turned out to be a
+stronger case than a fresh report: the identical wording error was already flagged once in
+2020 (#1091, maintainer acknowledged "we have to refine the documentation," closed without the
+source javadoc ever being corrected) and independently reconfirmed by the maintainer himself
+in 2023 (#1869: *"Only on `permittedNumberOfCallsInHalfOpenState`"*) — yet the javadoc on
+`CircuitBreakerConfig.Builder#maxWaitDurationInHalfOpenState` still contradicts both as of the
+current `master` (`a8a3316`). #2518 cites both prior reports plus this entry's own live
+verification, with a one-line suggested fix.
+
 **Update (2026-09-17, correction — the "immune to this artifact by construction" claim above
 was wrong, and the 36/36 table needs its p-values fixed).** This entry's earlier
 data-quality-note paragraph claimed the precise-metric result was "immune to this artifact by

@@ -537,16 +537,39 @@ remains a confirmed effect with an unidentified mechanism** — Step 1's window_
 still the best lead, but window_size itself doesn't appear in `permittedNumberOfCallsInHalfOpenState`'s
 admission logic either, so it isn't yet an explanation, only a correlate.
 
-**Update (2026-09-17, filed upstream).** This javadoc defect was reported to
-`resilience4j/resilience4j` as
-[issue #2518](https://github.com/resilience4j/resilience4j/issues/2518). Turned out to be a
-stronger case than a fresh report: the identical wording error was already flagged once in
-2020 (#1091, maintainer acknowledged "we have to refine the documentation," closed without the
-source javadoc ever being corrected) and independently reconfirmed by the maintainer himself
-in 2023 (#1869: *"Only on `permittedNumberOfCallsInHalfOpenState`"*) — yet the javadoc on
-`CircuitBreakerConfig.Builder#maxWaitDurationInHalfOpenState` still contradicts both as of the
-current `master` (`a8a3316`). #2518 cites both prior reports plus this entry's own live
-verification, with a one-line suggested fix.
+**Update (2026-09-17, filed upstream — precise about what is and isn't new here).** The exact
+scoping, stated carefully since a reviewer who finds #1869 independently should reach the same
+conclusion we did, not a weaker one: `CircuitBreakerConfig.Builder#maxWaitDurationInHalfOpenState`'s
+javadoc ("By default CircuitBreaker will stay in Half Open state until `minimumNumberOfCalls`
+is completed...") was already **confirmed incorrect by the library's own maintainer, twice** —
+once in 2020 ([#1091](https://github.com/resilience4j/resilience4j/issues/1091), acknowledged
+as a documentation error needing a fix) and again in 2023
+([#1869](https://github.com/resilience4j/resilience4j/issues/1869), RobWin directly: *"Only on
+`permittedNumberOfCallsInHalfOpenState`"*). Neither report was ever converted into a source
+change — the javadoc is unchanged since the parameter's introduction in #1042 (mid-2020) and
+still contradicts both as of `master` `a8a3316`. **What this entry contributes is not the
+finding — the finding was already on record — it's an independent instrumental
+verification** (the live per-call `CircuitBreaker` event trace above, on Resilience4j 2.2.0)
+that reaches the same conclusion by direct observation rather than by reading the issue
+thread, plus converting six years of acknowledged-but-unfixed documentation debt into an actual
+diff. Reported to `resilience4j/resilience4j` as
+[issue #2518](https://github.com/resilience4j/resilience4j/issues/2518), which cites both prior
+reports by number, quotes the maintainer's own words, and includes a one-line suggested fix
+(confirmed by a repo-wide search to be the only place this sentence exists — not duplicated in
+the Spring/commons-configuration properties classes, the Kotlin/Vavr modules, or any `.adoc`
+source in the repo).
+
+**Flagged, not developed:** this is the same shape as D18 and D23. In all three, the
+information needed to avoid the error existed *somewhere* — a validation rule (D18's runtime
+ring-buffer-fill gate, undocumented at the config layer), an implementation ceiling (D23's
+`measurement-plane` config silently tracking `default` via a version-specific internal
+fallback, invisible from the YAML alone), a closed issue thread (this entry, confirmed twice,
+never reaching the file most people actually read) — but was absent from the place the
+decision actually gets made: the config file being written, the javadoc being read, the
+`CircuitBreakerConfig` object being inspected. Possibly the paper's real thesis, not just three
+unrelated bugs. Not rewriting anything to fit this yet — noting it here so it isn't lost before
+someone deliberately looks for a fourth instance or decides whether it's worth stating
+explicitly.
 
 **Update (2026-09-17, correction — the "immune to this artifact by construction" claim above
 was wrong, and the 36/36 table needs its p-values fixed).** This entry's earlier

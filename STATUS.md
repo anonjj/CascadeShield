@@ -38,6 +38,7 @@ Everything below is ordered by whether it blocks Paper B.
 | D13 / H3 (recovery leak) | ✅ **Confirmed** — `LEAK_CONFIRMED_ON_HALF_OPEN_LEG`, 36/36 recovered on both arms at all three D_w after the poll-until-transition fix (D21); KM computed on 34/36 (2 host-sleep-corrupted durations excluded), significant everywhere (p=0.0014 at D_w=5/15, p=0.0005 at D_w=30) | — |
 | Statistical treatment (D19) | ✅ **Defined** — Mann-Whitney + Cliff's δ, bootstrap CIs, censoring as rate + conditional timing. Two known deviations flagged, neither blocking | — |
 | Throughput / TPS reporting (D20) | ✅ **Retired** — `throughput_loss`'s measurement window is sized by the swept window params, so it is confounded with the IV and not repairable post hoc. No TPS number appears in the paper | — |
+| Real-world TIME_BASED config audit (D25, Lead 3) | ✅ **Done** — 1,141 GitHub hits, 447 resolved TIME_BASED instances, 192 repos. Median λ*=0.5 calls/sec to ever evaluate; concrete unsafe-config example found in 3 independent repos (`T=5s`, `n_min` unset → 100 default → λ*=20/s). No prevalence claim. `audits/out/report.md` | — |
 | Manuscript | 🔴 **Not started** — no draft exists anywhere in the repo | — |
 
 **One thing blocks writing:** the FANOUT CRASH re-collection (and the re-analysis it unblocks).

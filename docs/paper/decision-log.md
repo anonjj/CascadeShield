@@ -1429,6 +1429,36 @@ so.
 convention) — or if H6's testability verdict gets re-decided using the data this entry
 surfaces.
 
+**Update (2026-09-17, the mechanism behind the live observation, confirmed at the bytecode
+level).** While designing Lead 3's config-audit tool (below, see the entry after D24), this
+entry's central claim — that `measurement-plane`'s `slidingWindowSize` silently tracks
+`default`'s swept value despite no explicit `base-config: default` — needed a precise
+mechanism, not just a black-box live observation, since the audit tool has to model the same
+inheritance rule for arbitrary third-party YAML. Checked against Resilience4j's current GitHub
+source first: it says a `configs:` profile with no `base-config` of its own gets **zero**
+implicit inheritance from `default`. That directly contradicts this entry's live evidence.
+
+Resolved by decompiling the actual pinned jar — `cascadeshield-parent/pom.xml` pins
+`resilience4j.version=2.2.0`, and `javap -c` against
+`resilience4j-framework-common-2.2.0.jar`'s real
+`CommonCircuitBreakerConfigurationProperties.createCircuitBreakerConfig` shows a third branch
+this repo's current-HEAD source no longer has (or expresses differently): **any non-`default`
+named config with no `base-config` of its own still seeds its builder from
+`configs.default`'s fully-built `CircuitBreakerConfig`** (`CircuitBreakerConfig.from(...)`)
+before applying its own explicit overrides — not merely a documented instance-level default,
+but a genuine implicit fallback one layer up, for named `configs:` profiles themselves. This
+exactly reproduces the original observation: `measurement-plane` seeds from `default` (picking
+up its `slidingWindowSize`/`slidingWindowType`), then overlays only the fields it explicitly
+sets (`minimumNumberOfCalls`, `failureRateThreshold`, etc.). Confirmed directly from the pinned
+`.m2` jar's bytecode, not from memory, GitHub HEAD, or the (silent on this point) official docs.
+
+**This is genuinely version-specific behavior** — absent from Resilience4j's current default
+branch — which matters beyond satisfying curiosity: a future bump to `resilience4j.version` in
+`cascadeshield-parent/pom.xml`, with no YAML change at all, could silently change this measured
+behavior. Worth a comment at the pin site if that version is ever touched. It also means Lead
+3's audit tool (scanning arbitrary third-party repos on unknown pinned versions) correctly
+does **not** assume this specific fallback — see that entry for the reasoning.
+
 ---
 
 ## D24 · D13's KM table and D22's regression, stratified by `gateway_tripped` — the within-COUNT $D_w$ trend was the leak, not a COUNT_BASED property
@@ -1527,3 +1557,77 @@ fixed) — that would finally give H3 a testable $D_w$=30 `COUNT_BASED` arm. Als
 ~2x/1x batch artifact found in step 1 gets investigated and turns out to be gateway-related
 after all (it currently shows no relationship to D23's parameter region, but its actual cause
 is still unknown).
+
+---
+
+## D25 · Lead 3 — real-world TIME_BASED configs, GitHub code search: the asymmetry from D18 shows up in the wild
+
+**Date:** 2026-09-17 · **Decided by:** Jay, methodology; executed via GitHub code search ·
+**Status:** final for the sample collected; explicitly not a prevalence claim
+
+**Decision.** D18 established (live-verified) that `COUNT_BASED` windows structurally
+self-repair an unsafe `minimumNumberOfCalls` — evaluation is gated by ring-buffer fill, not
+the configured minimum. `TIME_BASED` windows do not have this self-repair;
+`minimumNumberOfCalls` genuinely gates evaluation there (D18, reaffirmed while investigating
+D23). This entry asks whether that asymmetry shows up in real, public Resilience4j
+configuration — not "how common is this in production" (unknowable from a code-search sample
+without knowing each service's real traffic), but **the distribution of the inertness
+threshold λ* = minimumNumberOfCalls / slidingWindowSize (calls/sec) across whatever the sample
+contains**, which is arithmetic on each file's own stated parameters and does not require
+knowing traffic.
+
+**Method.** `audits/resilience4j_timebased_audit.py` (new, self-tested, single-file tool
+matching this repo's existing script convention) — 4 GitHub code-search queries
+(`slidingWindowType`/`sliding-window-type` × `TIME_BASED` × `extension:yml`/`extension:yaml`),
+authenticated via the already-logged-in `gh` CLI (no new PAT needed — code search only
+requires any authenticated token, confirmed live before building anything).
+**1,141 distinct file hits**, all fetched and parsed. Config inheritance resolved
+conservatively: explicit `base-config` chains, the standard instance-without-`base-config` →
+implicit `default` rule, and Resilience4j's own raw library defaults
+(`slidingWindowSize=100`, `minimumNumberOfCalls=100`, confirmed from the library's
+`CircuitBreakerConfig.java` constants) for anything else unset — **not** the deeper,
+version-specific implicit-`default`-inheritance-for-named-configs behavior this repo's own
+pinned Resilience4j 2.2.0 has (D23's update, above) — that's version-specific and can't be
+assumed for repos pinning unknown versions. Stated as a limitation, not hidden: this may
+slightly overstate λ* for some older-version configs using that pattern.
+
+**Numbers** (full account, including method/limitations in detail: `audits/out/report.md`).
+**Reported first:** 280 files, 192 distinct repos, 447 resolved `TIME_BASED` breaker
+instances; **49/447 (11%) look like demo/tutorial/example/sample/learning/test repos or
+paths** (substring heuristic, stated as a heuristic, probably an undercount).
+
+| stratum | n | median λ* | IQR | min | max |
+|---|---|---|---|---|---|
+| all | 447 | 0.500/s | [0.150, 0.500] | 2e-05 | 20 |
+| tutorial-like | 49 | 0.500/s | [0.167, 1.000] | 0.05 | 20 |
+| non-tutorial-like | 398 | 0.500/s | [0.100, 0.500] | 2e-05 | 20 |
+
+**The median TIME_BASED config in this sample needs ≥0.5 sustained calls/sec just to ever
+evaluate** — consistent across the tutorial/non-tutorial split (non-tutorial isn't
+systematically lower), so this isn't only a toy-config artifact. Both distribution extremes
+hand-checked against source, not parser artifacts: the lowest (`T≈27.8h, n_min=2`) is a
+legitimate long-window breaker; **the highest, and the clearest illustration of this entry's
+framing, is `T=5s` with `minimumNumberOfCalls` left unset** (falling to the library default of
+100) → λ*=20 calls/sec — a 5-second window almost certainly means the author wanted a
+fast-reacting breaker, and instead got one requiring ≥20 req/s sustained just to ever open.
+Found independently in **3 distinct repositories** (9 file hits, but 6 are repeated
+config-server profile files within one of the three repos — 3 is the honest count of
+independent authors making this mistake, not 9).
+
+**Rejected:** reporting a "% of configs are broken" figure. A reviewer would correctly ask
+"broken relative to what traffic?" — this sample has no traffic data, by construction (it's
+GitHub code search, not APM telemetry), so no such claim is made anywhere in this entry or in
+`audits/out/report.md`.
+
+**Consequence for the paper:** the D18 asymmetry — COUNT_BASED self-repairs, TIME_BASED
+doesn't — is not merely a theoretical corner of Resilience4j's implementation; this entry
+gives it a real, citable illustration in public code, with the exact λ* arithmetic spelled out
+per example rather than asserted. If Lead 1's clamp framing holds as D18 already confirms it
+does, this entry's headline is exactly as anticipated going in: *the library silently repairs
+unsafe count-based configs and silently accepts unsafe time-based ones.*
+
+**Revisit if:** a broader future query approaches GitHub's 1,000-result-per-query cap (none of
+the 4 queries here did — highest `total_count` was 650) and needs splitting by date range or
+additional qualifiers to stay under it. Also revisit if cross-file Spring profile-merge
+semantics (not modeled here — each YAML document resolved independently) turn out to matter
+for a meaningful fraction of the sample.

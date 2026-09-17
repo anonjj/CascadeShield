@@ -71,3 +71,7 @@ analysis/out/selftest_*
 
 # Day-2 canary run list is a design artifact, not collected data -- track it despite data/*.
 !data/canary_matrix.csv
+
+# audits/resilience4j_timebased_audit.py's raw cache: third-party GitHub code search hits and
+# fetched file content. Never committed -- only audits/out/'s derived, aggregate statistics are.
+audits/.cache/

@@ -479,6 +479,107 @@ COUNT_BASED's — real, confirmed, but still unexplained — becomes tractable t
 directly (e.g. instrumenting the actual probe-call latencies during HALF_OPEN, not just the
 transition timestamps either side of it).
 
+**Update (2026-09-17, the revisit condition above is met — HALF_OPEN's gate is identified,
+and it is not the mechanism that would have tied H3 to H2b).** Two things, done in order:
+
+**Step 1 (free, no runs).** Regressed `precise_half_open_to_closed` on `window_size`, split by
+`window_type`, using `analysis/half_open_survival.py`'s existing `extract_observations()`
+against the post-D21-fix slice of `data/cb_transitions.jsonl` (`fault_injected_at >=
+2026-09-16`; 36 observations, zero censoring). Found and excluded 2 further records
+(`TIME-W20-D5-rep2`: 700.4s, `TIME-W20-D15-rep1`: 1703.4s) that exceed
+`half_open_probe_deadline_s(wait_duration)` and are therefore physically impossible — the
+same Mac-lid-sleep artifact this entry already documented for the *coarse* `time_to_recover`
+column, but `half_open_survival.py` has no equivalent sanity ceiling on the *precise* metric
+today (flagged as a real gap here; fixed the same day, see the correction appended below this
+entry). With those
+excluded (2 replicates per fully-crossed `(window_type, window_size, wait_duration)` cell —
+descriptive, not a powered regression): **TIME_BASED's recovery duration increases with
+`window_size`** at $D_w$=5 (19.3→19.3→28.7s) and $D_w$=15 (20.9→30.5→39.6s), flattening at
+$D_w$=30. **COUNT_BASED shows no such relationship** at $D_w$=5/15 (flat), with an unexplained
+increase at $D_w$=30 (10.0→15.1→25.3s, n=2, not over-interpreted). Suggestive of TIME_BASED's
+recovery scaling with real wall-clock window-fill time; not mechanistic on its own.
+
+**Step 2 (live discriminator, decisive).** Jay's proposal: if HALF_OPEN exit gates on
+`minimumNumberOfCalls` (the javadoc's literal claim) rather than
+`permittedNumberOfCallsInHalfOpenState` (this repo's §IV-A assumption), then a TIME_BASED
+config with `permittedNumberOfCallsInHalfOpenState=3` fixed and `minimumNumberOfCalls` raised
+from 3 (baseline) to 30 (discriminator) should recover ~10× slower — or, since HALF_OPEN only
+*admits* `permittedNumberOfCallsInHalfOpenState` calls per episode (rest rejected, not
+recorded), should never recover at all, running every replicate to PR #57's hard ceiling
+(pre-registered as confirmation of n_min-governs, not a failed run, before executing).
+6 replicates each, live mesh, `--mode full`/`topology=linear`/`fault=latency`, everything else
+at canonical values (`failureRateThreshold=50, slidingWindowSize=10, waitDurationInOpenState=15,
+targetRps=10`), same disposable `order-service` `CircuitBreaker`-event-trace diagnostic used to
+settle D18 (worktree-only, never merged).
+
+**Result: no difference.** Baseline (n_min=3): 6/6 recovered, `precise_half_open_to_closed`
+19.75–20.20s (tight). Discriminator (n_min=30): 6/6 recovered, 19.65–20.13s — statistically
+indistinguishable from baseline, not ~10× slower, not censored. The live `CircuitBreaker`
+event trace settles *why*, unambiguously: every HALF_OPEN episode in both arms admits exactly
+`permittedNumberOfCallsInHalfOpenState` (3) calls — every call beyond the 3rd is logged
+`NOT_PERMITTED` immediately, including mid-episode before the 3rd completes — and evaluates
+the instant all 3 finish (`bufferedCalls=3` at the transition event, both arms, both the
+CLOSED→OPEN bounce and the eventual →CLOSED). `minimumNumberOfCalls` (3 vs 30) never appears
+anywhere in this trace; the two arms' event logs are behaviorally identical apart from the
+config value neither ever used.
+
+**Conclusion: HALF_OPEN→CLOSED is governed by `permittedNumberOfCallsInHalfOpenState`, not
+`minimumNumberOfCalls`.** The javadoc's literal claim ("HALF_OPEN persists until
+`minimumNumberOfCalls` completes") does not match Resilience4j 2.2.0's observed runtime
+behavior for this repo's breaker configuration — §IV-A's original assumption was correct, now
+confirmed by direct per-call evidence rather than an unstated assumption. **This also means
+H2b and H3 do *not* share a root cause** — D18's n_min-effective-clamping mechanism (confirmed
+live, PR #59) governs the CLOSED-side evaluation gate; HALF_OPEN's exit gate is a completely
+separate, already-correctly-assumed mechanism. The hoped-for unifying claim doesn't hold; what
+does hold, now with call-level evidence instead of an inference, is more useful than the
+un-investigated status quo. **TIME_BASED's HALF_OPEN leg being slower than COUNT_BASED's
+remains a confirmed effect with an unidentified mechanism** — Step 1's window_size trend is
+still the best lead, but window_size itself doesn't appear in `permittedNumberOfCallsInHalfOpenState`'s
+admission logic either, so it isn't yet an explanation, only a correlate.
+
+**Update (2026-09-17, correction — the "immune to this artifact by construction" claim above
+was wrong, and the 36/36 table needs its p-values fixed).** This entry's earlier
+data-quality-note paragraph claimed the precise-metric result was "immune to this artifact by
+construction" because it's "derived from real transition timestamps, not a live poll
+duration." That reasoning doesn't hold: 2 *precise*-metric records (`LIN-LAT-TIM-T50-W20-D5`
+rep2, `LIN-LAT-TIM-T50-W20-D15` rep1) are themselves derived from real transition timestamps
+that were wall-clock-corrupted by the same host-sleep event class — real transition
+timestamps are not immune to a stalled wall clock, they just record whatever it reads. Both
+records: `duration_s` of 700.4s/1703.4s, exceeding `half_open_probe_deadline_s(wait_duration)`
+(75.0s/105.0s) — physically impossible for a genuinely-recovered run — while
+`half_open_probe_timed_out=False` on both (clean completions per the harness's own
+instrumentation; the corruption is purely a wall-clock artifact, not a harness failure).
+
+Fixed 2026-09-17: `analysis/half_open_survival.py::extract_observations()` now excludes any
+recovered duration exceeding `half_open_probe_deadline_s(wait_duration)`, flagged with a WARN
+(not silent), and `analysis/out/half_open_survival_since_2026-09-16.json` was regenerated.
+**Corrected table** (n=34, not 36 — 2 excluded):
+
+| $D_w$ | COUNT | TIME | ratio | log-rank |
+|---|---|---|---|---|
+| 5  | 6/6, median 2.04s | 5/5, median 19.34s | **9.49×** | **p = 0.0014** |
+| 15 | 6/6, median 9.83s | 5/5, median 21.27s | **2.16×** | **p = 0.0014** |
+| 30 | 6/6, median 14.99s | 6/6, median 35.90s | **2.40×** | **p = 0.0005** |
+
+**Medians and ratios are byte-identical to the original (uncorrected) table** — both excluded
+values happened to be the maximum in their 6-record cell, and KM's median (the 3rd order
+statistic of 6 fully-observed points) is unaffected by removing the 6th. Only the printed
+p-values at $D_w$=5/15 were wrong (`0.0005` → `0.0014`, n drops 6→5 on the TIME arm at each);
+$D_w$=30 is untouched (neither corrupted record has `wait_duration=30`). Still ≪0.05
+everywhere — the verdict `LEAK_CONFIRMED_ON_HALF_OPEN_LEG` and every substantive claim in this
+entry are unaffected. This is a printed-number correction, not a finding reversal.
+
+**Methods note for §IV-E: a recurring host-sleep hazard, now 4 instances.** Two on the coarse
+`time_to_recover` (704.6s, 2657.1s — caught by `quarantine.py`'s existing `RECOVERY_TIMEOUT_HANG`
+rule, `RECOVERY_CAP_S=120.0`, no new logic needed). Two on the precise `precise_half_open_to_closed`
+metric (700.4s, 1703.4s — the pair above, caught only after this fix). Same root cause each
+time: a laptop-class collection host's wall clock stalls mid-poll (lid closing, OS suspend),
+and Python's `time.time()` cannot distinguish "paused by the OS" from "actively elapsed." Worth
+stating in the paper's methods section as a general hazard of laptop-class collection hosts,
+caught in every instance by an automated ceiling/quarantine rule rather than by inspection —
+the pattern that caught instances 1–2 is exactly the pattern that should have existed for
+3–4 from the start, and now does.
+
 ---
 
 ## D14 · `machine_id` is added to the canonical schema, before `excluded_reason`
@@ -1124,7 +1225,93 @@ higher $D_w$) rather than an instrument-ceiling artifact.
 (`d21_poll_until_transition_verification`, `analysis/common.py`) with
 `half_open_probe_timed_out=False` on 36 of 36 runs — zero censoring at any $D_w$, on either
 arm. H3 closes: `LEAK_CONFIRMED_ON_HALF_OPEN_LEG`, significant at every level (log-rank
-p=0.0005), TIME slower throughout with the ratio shrinking from 9.49× at $D_w$=5 to
-2.16×/2.40× at $D_w$=15/30. Full numbers and the corrected-shape discussion are in D13's own
-closing update, appended just above D14 — this entry's job was the fix and the observability
-columns, D13's is the hypothesis outcome, and both are now closed.
+p=0.0014 at $D_w$=5/15, p=0.0005 at $D_w$=30 — 2 of the 36 runs' precise-metric durations were
+later found host-sleep-corrupted and excluded from the KM computation itself, n=34; see D13's
+2026-09-17 correction for the full account), TIME slower throughout with the ratio shrinking
+from 9.49× at $D_w$=5 to 2.16×/2.40× at $D_w$=15/30. Full numbers and the corrected-shape
+discussion are in D13's own closing update, appended just above D14 — this entry's job was the
+fix and the observability columns, D13's is the hypothesis outcome, and both are now closed.
+
+---
+
+## D22 · H3's HALF_OPEN slowdown is partly explained: bounce count, not a complete mechanism
+
+**Date:** 2026-09-17 · **Decided by:** Jay, hypothesis + test design; verified against existing
+data, no new runs · **Status:** partial — a real, dominant contributor identified; not a
+complete mechanism
+
+**Decision.** D13's 2026-09-17 update (HALF_OPEN→CLOSED governed by
+`permittedNumberOfCallsInHalfOpenState`, not `minimumNumberOfCalls`) left an open question: 3
+probes at Resilience4j's ~0.3s polling interval should resolve in about a second, yet TIME_BASED
+recovery runs 19–40s. Jay's hypothesis: the time is mostly repeated
+`HALF_OPEN → OPEN → wait_duration → HALF_OPEN` bounces before one episode finally closes, driven
+by a TIME_BASED window still holding failure records from the last `window_size` seconds on
+re-evaluation, while a COUNT_BASED ring buffer gets overwritten by fresh successes almost
+immediately. Larger `window_size` → longer residual fault memory → more bounces, which would
+also produce D13's observed `window_size` correlation.
+
+**Testable from existing data, no new runs.** `analysis/half_open_survival.py::extract_observations()`
+already computes `n_failed_probes` — the actual `HALF_OPEN_TO_OPEN` bounce count per run (its
+sibling field `n_half_open_entries` is a documentation trap: bounded by `len(BREAKER_WATCH)`,
+always `1` in this data, carries no bounce information — fixed with a clarifying comment
+alongside this entry's other `half_open_survival.py` change). New script,
+`analysis/bounce_count_analysis.py`, reuses `extract_observations()` directly rather than
+re-deriving anything, against the same post-D21-fix, corruption-excluded slice (n=34,
+`--since 2026-09-16`) this decision-log's corrected D13 table uses.
+
+**Numbers.**
+
+| window_type | window_size | n | mean bounces | raw |
+|---|---|---|---|---|
+| COUNT_BASED | 5, 10, 20 | 6 each | **0.000** | all zero, every cell |
+| TIME_BASED | 5 | 6 | 1.333 | [1,2,1,1,1,2] |
+| TIME_BASED | 10 | 6 | 1.500 | [1,2,2,1,1,2] |
+| TIME_BASED | 20 | 4 | 1.750 | [3,1,2,1] |
+
+**COUNT_BASED never bounces, in any of 18 observations.** **TIME_BASED's bounce count rises
+with `window_size`**, directionally exactly as the hypothesis predicts (n too small — 2 reps/
+cell, 4 for W20 after exclusions — for a powered trend test, stated as descriptive).
+
+A naive two-term decomposition (`duration_s ≈ bounce_count × wait_duration + final_episode_s`)
+was tried first and found to *over*-explain the TIME−COUNT gap at $D_w$=15/30 (109–148% of the
+gap) — because COUNT_BASED's own zero-bounce "final episode" duration also scales with
+`window_size`/`wait_duration` (2s → 10–17s) even though it never bounces, which a two-term
+model can't represent. Replaced with a joint OLS regression instead
+(`duration_s ~ 1 + bounce_count + wait_duration + window_type`, `n=34`, numpy `lstsq`, no
+p-values reported — descriptive on this sample size, not an inferential claim):
+
+```
+intercept      = -3.069
+bounce_count   =  6.446  (seconds per additional bounce)
+wait_duration  =  0.746  (seconds per additional second of D_w)
+is_time_based  =  9.767  (seconds, TIME vs COUNT at bounce=0, same D_w)
+R^2            =  0.862
+```
+
+**Verdict: bounce count is the dominant, but not sole, driver.** It explains a large share of
+variance (R²=0.862) and each bounce costs a real, substantial ~6.4s (matching `wait_duration`'s
+own typical scale — consistent with a bounce being "wait out the OPEN state, try again"). But
+`is_time_based`'s own coefficient (~9.8s) is not driven to zero — **a real residual gap between
+TIME_BASED and COUNT_BASED remains even at bounce_count=0, same `wait_duration`** — meaning
+bounces alone do not fully explain the slowdown; something about TIME_BASED's single-episode
+HALF_OPEN evaluation is itself slower too, not identified here.
+
+**Also unexplained, flagged not resolved:** two 0-bounce COUNT_BASED runs
+(`LIN-LAT-CNT-T50-W20-D30`, both replicates, ~25.3s) took far longer than every other COUNT
+cell (2–15s) despite bouncing zero times — the bounce model predicts these should be fast, and
+they aren't. Not a fluke (both replicates agree); not explained by this entry.
+
+**Rejected:** reporting this as "H3's mechanism, solved." The residual `is_time_based`
+coefficient and the unexplained COUNT `W20/D30` outlier are real gaps this entry does not paper
+over — the honest claim is "bounce count is a real, dominant, partial mechanism," not "the
+mechanism."
+
+**Consequence for the paper.** §V-D can now say TIME_BASED's HALF_OPEN slowdown is *primarily*
+attributable to repeated bounces (residual window contents blocking a clean evaluation, exactly
+as the residual-fault-memory hypothesis predicts), quantified at ~6.4s/bounce, with an
+acknowledged ~9.8s residual and one unexplained outlier cell left open — a stronger, more
+precise claim than "unidentified," short of a fully solved mechanism.
+
+**Revisit if:** the ~9.8s residual or the COUNT `W20/D30` outlier becomes tractable to
+investigate directly (e.g. instrumenting per-probe latency within a single HALF_OPEN episode,
+not just bounce counts and total duration).

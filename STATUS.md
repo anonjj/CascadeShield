@@ -35,7 +35,7 @@ Everything below is ordered by whether it blocks Paper B.
 | CRASH re-collection, **LINEAR** | ✅ **Done** — 162/162; PR #47, unmerged | — |
 | CRASH re-collection, **FANOUT** | 🔴 **Not collected** — needs a free machine, ~6h | **Yes** |
 | D15 / D-001 re-derivation after CRASH | 🔴 **Blocked** on the line above | **Yes** |
-| D13 / H3 (recovery leak) | ✅ **Confirmed** — `LEAK_CONFIRMED_ON_HALF_OPEN_LEG`, 36/36 recovered on both arms at all three D_w after the poll-until-transition fix (D21), significant everywhere (p=0.0005) | — |
+| D13 / H3 (recovery leak) | ✅ **Confirmed** — `LEAK_CONFIRMED_ON_HALF_OPEN_LEG`, 36/36 recovered on both arms at all three D_w after the poll-until-transition fix (D21); KM computed on 34/36 (2 host-sleep-corrupted durations excluded), significant everywhere (p=0.0014 at D_w=5/15, p=0.0005 at D_w=30) | — |
 | Statistical treatment (D19) | ✅ **Defined** — Mann-Whitney + Cliff's δ, bootstrap CIs, censoring as rate + conditional timing. Two known deviations flagged, neither blocking | — |
 | Throughput / TPS reporting (D20) | ✅ **Retired** — `throughput_loss`'s measurement window is sized by the swept window params, so it is confounded with the IV and not repairable post hoc. No TPS number appears in the paper | — |
 | Manuscript | 🔴 **Not started** — no draft exists anywhere in the repo | — |
@@ -52,7 +52,7 @@ D13/H3 closed 2026-09-16 — see below. Nothing else.
 | **H1** | At matched horizon H, COUNT vs TIME differ in variance, not mean, of `time_to_open` | ⚪ **Not testable** on collected data — COUNT horizons {25…800} and TIME {5,10,20} are disjoint, zero overlap. Generator fixed (`6b045b4`) but the data predates it | D-004, D-003 |
 | **H2** | A crossover λ\* exists below which TIME_BASED cannot trip | ❌ **No effect found.** Trip rate 1.00 at every λ ∈ {5,20,80,320}, both window types. This is what selected Paper B | D-004 |
 | **H2b** | Occupancy ratio ρ = effective_horizon / n_min crossing 1 predicts inertness | ✅ **Confirmed for TIME_BASED** (clean crossover, no overlap) · ❌ **cleanly falsified for COUNT_BASED** (0/54 rows ever inert). Mechanism: COUNT's ring buffer caps `minimumNumberOfCalls` — **live-verified 2026-09-17**, not just inferred: a per-call `CircuitBreaker` event trace on a real replay of the ρ=0.025 cell shows evaluation starting at `bufferedCalls=5` (window capacity), never at 200; the cap is applied internally by Resilience4j at runtime, invisible on the static `CircuitBreakerConfig` object (checked and ruled out separately) | D18 |
-| **H3** | Double dissociation: window params → detection, wait_duration → recovery | ✅ **Confirmed 2026-09-16.** `LEAK_CONFIRMED_ON_HALF_OPEN_LEG` — after D21's poll-until-transition fix, **36/36 recovered on both arms at all three $D_w$** (was 2/6, 0/6 for COUNT under the old fixed-~4.1s probe window — a pure instrument artifact, not a property of COUNT_BASED). TIME slower at every level, significant throughout (log-rank p=0.0005): **9.49× at $D_w$=5, 2.16× at $D_w$=15, 2.40× at $D_w$=30** (medians COUNT 2.04/9.83/14.99s vs TIME 19.34/21.27/35.90s). The ratio *shrinking* with $D_w$ — not flat, not growing — is a genuinely new shape versus the pre-fix censored read, which could only see the two extremes and had no real COUNT numbers at $D_w$≥15 to compare against. Verification data kept standalone (`d21_poll_until_transition_verification`, not merged into `current` — see `analysis/common.py`), since the coarse `time_to_recover` metric was never actually censored (confirmed independently, 0/360 nulls) and needed no fix. Mechanism for *why* TIME_BASED's HALF_OPEN leg is slower remains unidentified; the originally suspected one is still architecturally ruled out for Resilience4j 2.2.0 | D13, D21 |
+| **H3** | Double dissociation: window params → detection, wait_duration → recovery | ✅ **Confirmed 2026-09-16.** `LEAK_CONFIRMED_ON_HALF_OPEN_LEG` — after D21's poll-until-transition fix, **36/36 recovered on both arms at all three $D_w$** (was 2/6, 0/6 for COUNT under the old fixed-~4.1s probe window — a pure instrument artifact, not a property of COUNT_BASED). TIME slower at every level, significant throughout (log-rank p=0.0014 at $D_w$=5/15, p=0.0005 at $D_w$=30 — the precise-metric KM is computed on 34/36 runs, 2 excluded as host-sleep-corrupted durations, unchanged medians/ratios): **9.49× at $D_w$=5, 2.16× at $D_w$=15, 2.40× at $D_w$=30** (medians COUNT 2.04/9.83/14.99s vs TIME 19.34/21.27/35.90s). The ratio *shrinking* with $D_w$ — not flat, not growing — is a genuinely new shape versus the pre-fix censored read, which could only see the two extremes and had no real COUNT numbers at $D_w$≥15 to compare against. Verification data kept standalone (`d21_poll_until_transition_verification`, not merged into `current` — see `analysis/common.py`), since the coarse `time_to_recover` metric was never actually censored (confirmed independently, 0/360 nulls) and needed no fix. **Live-verified 2026-09-17:** HALF_OPEN→CLOSED is governed by `permittedNumberOfCallsInHalfOpenState` (3), not `minimumNumberOfCalls` — confirmed via a live discriminator (n_min=3 vs n_min=30, everything else identical) that recovered in statistically indistinguishable time (~20s both arms) plus a per-call event trace showing exactly 3 calls admitted per HALF_OPEN episode regardless of n_min. This rules out the hoped-for shared-root-cause tie to H2b (D18) — HALF_OPEN's gate and H2b's CLOSED-side n_min-clamping gate are separate mechanisms. **Partially explained 2026-09-17 (D22):** HALF_OPEN→OPEN bounce count is a real, dominant driver — COUNT_BASED never bounces (0/18 observations); TIME_BASED bounces 1.33/1.5/1.75× on average as `window_size` grows (5/10/20), matching the residual-window-contents hypothesis. Joint regression (`duration_s ~ bounce_count + wait_duration + window_type`, n=34): R²=0.862, ~6.4s per bounce. **Not a complete mechanism** — a genuine ~9.8s TIME-vs-COUNT residual remains even at bounce_count=0, and two 0-bounce COUNT `W20/D30` runs (~25.3s) are unexplained by this model. See `analysis/bounce_count_analysis.py` | D13, D18, D21, D22 |
 | **H4** | Competing containment definitions rank configs differently (Kendall τ < 1) | ✅ **Supported.** 36/36 pairs below τ=1.0. Magnitude moved a lot after FAN_OUT data: min pairwise τ is now **0.891**, was 0.238 — rankings agree *more* than first measured, but never perfectly | D-001 |
 | **H5** | Blast-radius resolution is topology-dependent: Var(B)=0 on a chain, >0 with parallel subjects | ❌ **Tested and NOT supported.** FANOUT+LATENCY gives Var(B)=0 too, identical to LINEAR — 162/162 rows each side, exactly one leg firing | D15 |
 | **H6** | A uniform edge breaker suppresses interior breaker engagement (gateway shadowing) | ⚪ **Untestable as instrumented.** The `measurement-plane` isolation block removed the condition by design. Gateway CLOSED in all 704 rows. Testing it means deliberately reconstructing a removed confound, and the paper must say so | hypotheses.md §7 |
@@ -142,20 +142,31 @@ Re-collected 18 configs × 2 replicates × 2 window types = 36 runs under the fi
 (`d21_poll_until_transition_verification`, standalone — not merged into `current`, see
 `analysis/common.py`). **Result: `half_open_probe_timed_out=False` on all 36/36 runs.** Zero
 censoring anywhere, at any $D_w$, on either arm. `analysis/half_open_survival.py` against just
-this post-fix data: verdict `LEAK_CONFIRMED_ON_HALF_OPEN_LEG`, log-rank p=0.0005 at every
-level, TIME slower throughout — **9.49× at $D_w$=5, 2.16× at $D_w$=15, 2.40× at $D_w$=30**
-(medians COUNT 2.04/9.83/14.99s, TIME 19.34/21.27/35.90s). The censoring was purely the fixed
-harness window — not a property of COUNT_BASED's HALF_OPEN behavior — and the corrected shape
-(ratio shrinking with $D_w$, not flat) is new information the censored data literally could
-not have shown, since it never had real COUNT numbers at $D_w$≥15 to compare against.
+this post-fix data (**34 of 36** — 2 excluded as implausible durations, see below): verdict
+`LEAK_CONFIRMED_ON_HALF_OPEN_LEG`, log-rank p=0.0014 at $D_w$=5/15, p=0.0005 at $D_w$=30, TIME
+slower throughout — **9.49× at $D_w$=5, 2.16× at $D_w$=15, 2.40× at $D_w$=30** (medians COUNT
+2.04/9.83/14.99s, TIME 19.34/21.27/35.90s — medians and ratios are unchanged by the 2
+exclusions; only the exact p-values at $D_w$=5/15 moved, still ≪0.05). The censoring was purely
+the fixed harness window — not a property of COUNT_BASED's HALF_OPEN behavior — and the
+corrected shape (ratio shrinking with $D_w$, not flat) is new information the censored data
+literally could not have shown, since it never had real COUNT numbers at $D_w$≥15 to compare
+against.
 
-One data-quality note found along the way, not related to the fix: 2 of the 36 runs' *coarse*
-`time_to_recover` (a wall-clock poll duration, separate from the precise sidecar-timestamp
-metric above) came back at 704.6s and 2657.1s — a real-world system-sleep event mid-poll on
-the collecting machine, not a code defect. Caught automatically by `quarantine.py`'s existing
-`RECOVERY_TIMEOUT_HANG` rule (`RECOVERY_CAP_S=120.0`), no new detection logic needed. Their
-`half_open_probe_timed_out` is still correctly `False` — the sleep hit `_poll_for_recovery`'s
-loop, not the separate, much shorter window `_drive_half_open_probes` runs afterward.
+**Data-quality notes, not related to the fix — a recurring host-sleep artifact, now 4
+instances.** 2 of the 36 runs' *coarse* `time_to_recover` (a wall-clock poll duration, separate
+from the precise sidecar-timestamp metric above) came back at 704.6s and 2657.1s — a real-world
+system-sleep event mid-poll on the collecting machine, not a code defect. Caught automatically
+by `quarantine.py`'s existing `RECOVERY_TIMEOUT_HANG` rule (`RECOVERY_CAP_S=120.0`), no new
+detection logic needed. Their `half_open_probe_timed_out` is still correctly `False` — the
+sleep hit `_poll_for_recovery`'s loop, not the separate, much shorter window
+`_drive_half_open_probes` runs afterward. **Two more turned up on the *precise* metric itself**
+(`LIN-LAT-TIM-T50-W20-D5` rep2: 700.4s, `LIN-LAT-TIM-T50-W20-D15` rep1: 1703.4s — the 2
+exclusions above), never previously filtered since `half_open_survival.py` had no equivalent
+ceiling check on this metric. Fixed 2026-09-17: `extract_observations()` now excludes any
+recovered duration exceeding `half_open_probe_deadline_s(wait_duration)`, flagged with a WARN,
+not silently. Four host-sleep artifacts total now, every one caught by an automated ceiling
+rule rather than by inspection — a recurring wall-clock hazard on laptop-class collection
+hosts, worth a line in the paper's methods section.
 
 **D13/H3 is closed.** Full numbers and reasoning in `docs/paper/decision-log.md`'s D13 and
 D21 entries.

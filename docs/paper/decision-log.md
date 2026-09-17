@@ -858,6 +858,56 @@ falsify the "window capacity is the real ceiling" mechanism above and mean somet
 gating evaluation. Not expected: the 8-point ratio sweep already covers $n_{\min}$ both above
 and below `slidingWindowSize` and found zero exceptions.
 
+**Update (2026-09-17, mechanism live-verified, not just inferred).** Jay raised a sound
+objection to the paragraph above: if `minimumNumberOfCalls=200` were genuinely enforced
+against a 5-slot ring buffer, `bufferedCalls` could never reach 200 and the breaker should
+never evaluate at all — yet every COUNT_BASED run tripped, down to $\rho=0.025$. Two things
+were checked, live, before touching this entry:
+
+1. **No config-level clamp exists.** `git grep` across every `.java`/`.py`/`.yml` file in this
+   repo for `minimumNumberOfCalls`/`clamp` found nothing — the value passes from
+   `runner.py`'s `write_env_file()` through `infra/.env` to `application.yml`'s
+   `${CB_MINIMUM_CALLS:5}` binding unmodified. Confirmed further with a throwaway
+   `@EventListener(ApplicationReadyEvent.class)` dump of the live `CircuitBreakerConfig` on
+   `order-service` (never merged — added and removed in a disposable worktree): with
+   `slidingWindowSize=5, minimumNumberOfCalls=200`, the config object itself reports
+   `minimumNumberOfCalls=200`, unchanged. So the paragraph above is imprecise as literally
+   written — nothing rewrites the *configured* value.
+2. **The effective gate is still `min(minimumNumberOfCalls, slidingWindowSize)` — just applied
+   at runtime, not in the config object.** A second throwaway diagnostic (same worktree
+   pattern) subscribed to `cb.getEventPublisher()` and logged `bufferedCalls`/`failureRate`/
+   `slowCallRate` on every recorded call, then replayed the exact D7 cell this entry's
+   $\rho=0.025$ figure comes from (`LIN-LAT-CNT-T50-W5-D15-M200-L20`, COUNT_BASED, window=5,
+   $n_{\min}$=200, $\lambda$=20) live against the real mesh via `runner.py --mode occupancy`.
+   The call-by-call trace is unambiguous: `failureRate`/`slowCallRate` sit at `-1.0`
+   (not-yet-evaluated) for calls 1–4, flip to a real value the instant `bufferedCalls` hits 5
+   (the window's capacity — nowhere near 200), and `bufferedCalls` never exceeds 5 for the
+   rest of the run. The CLOSED→OPEN transition fires shortly after
+   (`slowCallRate=60.0 >= threshold 50.0`, at `bufferedCalls=5`). The replayed run reproduced
+   `occupancy_ratio=0.0250, inert=False` — the exact cell this entry already reports.
+
+**Conclusion: the mechanism paragraph above is correct in substance, now confirmed by direct
+per-call runtime evidence instead of outcome data plus a plausible story.** The one precision
+fix: the effective minimum-calls threshold Resilience4j actually evaluates against for a
+`CountBasedSlidingWindow` is computed internally (consistent with `Math.min(configured
+minimumNumberOfCalls, slidingWindowSize)`, observed, not read from Resilience4j's own source
+in this pass) — it is invisible on the `CircuitBreakerConfig` object itself, which is why a
+config dump alone (step 1) could not settle this, and a call-level event trace (step 2) was
+needed. Nothing in this project's own source performs the capping; it is Resilience4j's
+internal behavior for `COUNT_BASED` windows specifically, which is also why TIME_BASED (H2b's
+other arm, no fixed-capacity buffer) is unaffected and continues to test
+`minimumNumberOfCalls` as configured. §V-A's explanation and `hypotheses.md` §3.2 need no
+correction; citing this update alongside them is sufficient. Both diagnostics were disposable
+(added and removed in scratch worktrees; `infra/.env`, `order-service`'s image, and
+`data/occupancy_dataset.csv`/`data/cb_transitions.jsonl` were all untouched by the replay,
+which wrote to throwaway paths) — nothing here changes runnable code.
+
+*(Separately noticed while wiring the replay, unrelated to H2b: `--only-ids` cannot currently
+match any `occupancy`/`canary_matrix` config — the filter in `main()` calls
+`make_experiment_id(args.topology, args.fault, c)` without `mode=args.mode`, so the `-M`/`-L`
+suffix never gets appended to the computed ID and it can never equal a user-supplied full ID.
+Not fixed here — logged so it doesn't need rediscovering.)*
+
 ---
 
 ## D19 · Statistical treatment defined: Mann-Whitney + Cliff's delta, bootstrap CIs, censoring as rate + conditional timing

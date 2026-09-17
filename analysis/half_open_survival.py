@@ -262,6 +262,20 @@ def extract_observations(records: list[dict], breaker_filter: str | None = None)
         if isinstance(transitions, dict):
             transitions = [transitions]
 
+        # D23/D24: gateway-service's own breakers sit outside BREAKER_WATCH's scope (the
+        # loop below filters them out via svc != watch_service) but a real gateway trip
+        # directly confounds order's own HALF_OPEN duration -- order waits on gateway to
+        # let traffic through, which reads as a long "recovery" that has nothing to do
+        # with order's own HALF_OPEN semantics. Computed from the same already-fetched
+        # transitions list, independent of by_breaker/opened/BREAKER_WATCH -- purely
+        # additive, does not change any existing field.
+        gateway_tripped = any(
+            isinstance(t, dict)
+            and _get(t, SERVICE_KEYS, "") == "gateway"
+            and str(_get(t, NAME_KEYS, "")).upper() == "CLOSED_TO_OPEN"
+            for t in transitions
+        )
+
         by_breaker: dict[str, list[tuple[float, str]]] = defaultdict(list)
         for t in transitions:
             if not isinstance(t, dict):
@@ -323,6 +337,7 @@ def extract_observations(records: list[dict], breaker_filter: str | None = None)
             "breaker": f"{watch_service}:{'+'.join(sorted(opened))}",
             "duration_s": float(duration),
             "observed": observed,
+            "gateway_tripped": gateway_tripped,
             # Count of watched breakers (BREAKER_WATCH) that entered HALF_OPEN at least
             # once -- bounded by len(BREAKER_WATCH) (1 or 2 here), NOT a bounce count:
             # t_half_open_first is captured once per breaker in _walk_breaker, so a
@@ -656,11 +671,71 @@ def self_test() -> bool:
               f"98 only), got {len(obs_ceiling)}: {[o['replicate'] for o in obs_ceiling]}")
         ok = False
 
+    # D23/D24: gateway_tripped is computed independently of BREAKER_WATCH/by_breaker --
+    # a record with a gateway CLOSED_TO_OPEN must flag True even though order's own
+    # breaker (below) recovers cleanly; a record with no gateway transitions at all
+    # must flag False.
+    with_gateway_trip = mk("LIN-LAT-CNT-T50-W20-D30", 50, 1000.0, 30, closed_after=2.0)
+    with_gateway_trip["transitions"].append({
+        "state_transition": "CLOSED_TO_OPEN", "creation_time": 1005.0,
+        "service": "gateway", "circuit_breaker_name": "orderServiceCB",
+    })
+    without_gateway_trip = mk("LIN-LAT-CNT-T50-W20-D30", 51, 1000.0, 30, closed_after=2.0)
+    obs_gw = extract_observations([with_gateway_trip, without_gateway_trip])
+    flags = {o["replicate"]: o["gateway_tripped"] for o in obs_gw}
+    if flags != {50: True, 51: False}:
+        print(f"FAIL: gateway_tripped -- expected {{50: True, 51: False}}, got {flags}")
+        ok = False
+
     print("self-test PASSED" if ok else "self-test FAILED")
     if ok:
         print()
         print(render(res))
     return ok
+
+
+def render_gateway_stratified(obs: list[dict]) -> str:
+    """D23/D24: gateway-service's own breaker trips under COUNT_BASED at wait_duration>=15
+    (a YAML gap in gateway's supposedly-never-opens config, unrelated to D13/D21's HALF_OPEN
+    mechanism), and this confounds the pooled COUNT_BASED arm -- some of what reads as "COUNT
+    recovering slowly" is actually order's breaker waiting on gateway to let traffic through,
+    nothing to do with order's own HALF_OPEN semantics. Two things reported here, reusing
+    analyse()/kaplan_meier() unchanged rather than modifying their (hardcoded 2-arm) bucketing:
+
+    1. analyse() on the CLEANED set (COUNT-not-tripped + all TIME, since TIME never trips
+       gateway) -- the real KM/log-rank/verdict table with the confound removed, directly
+       comparable in shape to the pooled table already reported above.
+    2. The gateway-tripped COUNT subset's own descriptive KM per wait_duration (no TIME
+       counterpart to log-rank against, so median/n only, not a verdict).
+    """
+    L = []
+    cleaned = [o for o in obs if o["window_type"] == "TIME_BASED" or not o["gateway_tripped"]]
+    n_dropped = len(obs) - len(cleaned)
+    L.append(f"gateway_tripped: dropping {n_dropped} gateway-confounded COUNT_BASED "
+              f"observation(s) of {sum(1 for o in obs if o['window_type']=='COUNT_BASED')} "
+              "total COUNT_BASED")
+    L.append("")
+    L.append(render(analyse(cleaned)))
+
+    L.append("")
+    L.append("gateway-tripped COUNT_BASED subset (descriptive only -- no TIME counterpart "
+              "to test against):")
+    by_dw: dict[float, list[dict]] = defaultdict(list)
+    for o in obs:
+        if o["window_type"] == "COUNT_BASED" and o["gateway_tripped"]:
+            by_dw[o["wait_duration"]].append(o)
+    for dw in sorted(by_dw):
+        group = by_dw[dw]
+        km = kaplan_meier(
+            np.array([o["duration_s"] for o in group]),
+            np.array([o["observed"] for o in group]),
+        )
+        bound = " (lower bound)" if km["median_is_lower_bound"] else ""
+        L.append(f"  D_w={dw}: n={km['n']}  median={km['median_s']:.3f}s{bound}")
+    for dw in (5, 15, 30):
+        if dw not in by_dw:
+            L.append(f"  D_w={dw}: n=0 (no gateway-tripped observations at this D_w)")
+    return "\n".join(L)
 
 
 def main() -> int:
@@ -669,6 +744,10 @@ def main() -> int:
     ap.add_argument("--out", default="analysis/out/half_open_survival.json")
     ap.add_argument("--breaker", default=None,
                     help="substring filter, e.g. 'inventoryServiceCB'")
+    ap.add_argument("--stratify-gateway", action="store_true",
+                     help="D23/D24: also report the KM table with gateway-confounded "
+                          "COUNT_BASED observations stratified out, alongside the pooled "
+                          "table above (not a replacement for it).")
     ap.add_argument("--since", default=None,
                     help="YYYY-MM-DD -- keep only records whose fault_injected_at falls on or "
                          "after this date. cb_transitions.jsonl is a running, never-purged log "
@@ -725,6 +804,12 @@ def main() -> int:
     print()
     print(render(result))
     print(f"\nwrote {out}")
+
+    if args.stratify_gateway:
+        print()
+        print("=" * 72)
+        print(render_gateway_stratified(obs))
+
     return 0
 
 

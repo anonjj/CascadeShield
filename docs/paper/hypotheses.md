@@ -208,6 +208,17 @@ pins: HALF_OPEN always uses its own fixed-size ring buffer sized
 shows up on this leg, so the actual mechanism is something else — not yet identified — and is
 the next open question, not "TIME_BASED windows leaking into HALF_OPEN's evaluation.")
 
+**Footnote (2026-09-17, decision-log D13's later update).** This section's assumption —
+`permittedNumberOfCallsInHalfOpenState`, not `minimumNumberOfCalls`, governs HALF_OPEN's
+exit — contradicts `CircuitBreakerConfig`'s own javadoc, which claims the opposite. That
+javadoc claim was already **confirmed incorrect by the library's maintainer twice**: 2020
+(resilience4j#1091, acknowledged, never corrected in source) and 2023 (resilience4j#1869,
+"Only on `permittedNumberOfCallsInHalfOpenState`"). This section's assumption is therefore
+independently, instrumentally verified — a live per-call event trace on Resilience4j 2.2.0,
+not a re-reading of either issue thread — rather than newly discovered. Reported upstream as
+resilience4j#2518, which converts six years of acknowledged-but-unfixed documentation debt
+into a proposed one-line diff. Full account: decision-log.md's D13 entry.
+
 ---
 
 ## 5. $\tau_{\text{leg}}$ is a sensitivity analysis, not a constant

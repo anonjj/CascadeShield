@@ -17,8 +17,14 @@ Reuses half_open_survival.py's extract_observations() (same n_failed_probes fiel
 actual HALF_OPEN_TO_OPEN bounce count per run; NOT n_half_open_entries, which is bounded by
 len(BREAKER_WATCH) and carries no bounce information at all, see that file's comment).
 
+D23/D24 update: gateway-service's own breaker trips under COUNT_BASED at wait_duration>=15
+(a YAML config gap, unrelated to the bounce mechanism this script investigates) and directly
+confounds the pooled regression below -- see --exclude-gateway-tripped for the cleaned
+version.
+
 Usage:
     python3 analysis/bounce_count_analysis.py --since 2026-09-16
+    python3 analysis/bounce_count_analysis.py --since 2026-09-16 --exclude-gateway-tripped
     python3 analysis/bounce_count_analysis.py --self-test
 """
 from __future__ import annotations
@@ -71,6 +77,34 @@ def ols(X: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, float]:
     return beta, r2
 
 
+def regression_lines(obs: list[dict]) -> list[str]:
+    """duration_s ~ 1 + bounce_count + wait_duration + is_time_based, via OLS.
+
+    A naive two-term decomposition (bounce_count * wait_duration) was checked ad hoc and
+    found to over-explain the gap at Dw=15/30 -- COUNT_BASED's own zero-bounce "final
+    episode" duration ALSO scales with window params, which that decomposition can't
+    represent. A joint regression at least puts all three covariates on equal footing
+    instead of assuming COUNT's baseline is a flat ~1s.
+    """
+    lines = []
+    rows = [o for o in obs]
+    y = np.array([o["duration_s"] for o in rows], dtype=float)
+    bounce = np.array([o["n_failed_probes"] for o in rows], dtype=float)
+    wait = np.array([o["wait_duration"] for o in rows], dtype=float)
+    is_time = np.array([1.0 if o["window_type"] == "TIME_BASED" else 0.0 for o in rows])
+    X = np.column_stack([np.ones_like(y), bounce, wait, is_time])
+    beta, r2 = ols(X, y)
+
+    lines.append(f"OLS: duration_s ~ 1 + bounce_count + wait_duration + is_time_based  (n={len(rows)})")
+    lines.append(f"  intercept        = {beta[0]:8.3f}")
+    lines.append(f"  bounce_count     = {beta[1]:8.3f}  (s per additional bounce)")
+    lines.append(f"  wait_duration    = {beta[2]:8.3f}  (s per additional second of D_w)")
+    lines.append(f"  is_time_based    = {beta[3]:8.3f}  (s, TIME vs COUNT at bounce=0, "
+                  "same D_w -- the part bounce_count alone doesn't explain)")
+    lines.append(f"  R^2              = {r2:8.3f}")
+    return lines
+
+
 def render(obs: list[dict]) -> str:
     lines = []
     bt = bounce_by_window_size(obs)
@@ -91,44 +125,64 @@ def render(obs: list[dict]) -> str:
                   f"mean bounces {np.mean(times_flat):.3f}, range "
                   f"{min(times_flat)}-{max(times_flat)}")
 
-    # Joint regression: duration_s ~ bounce_count + wait_duration + is_time_based
-    # A naive two-term decomposition (bounce_count * wait_duration) was checked ad hoc and
-    # found to over-explain the gap at Dw=15/30 -- COUNT_BASED's own zero-bounce "final
-    # episode" duration ALSO scales with window params, which that decomposition can't
-    # represent. A joint regression at least puts all three covariates on equal footing
-    # instead of assuming COUNT's baseline is a flat ~1s.
-    rows = [o for o in obs]
-    y = np.array([o["duration_s"] for o in rows], dtype=float)
-    bounce = np.array([o["n_failed_probes"] for o in rows], dtype=float)
-    wait = np.array([o["wait_duration"] for o in rows], dtype=float)
-    is_time = np.array([1.0 if o["window_type"] == "TIME_BASED" else 0.0 for o in rows])
-    X = np.column_stack([np.ones_like(y), bounce, wait, is_time])
-    beta, r2 = ols(X, y)
-
     lines.append("")
-    lines.append(f"OLS: duration_s ~ 1 + bounce_count + wait_duration + is_time_based  (n={len(rows)})")
-    lines.append(f"  intercept        = {beta[0]:8.3f}")
-    lines.append(f"  bounce_count     = {beta[1]:8.3f}  (s per additional bounce)")
-    lines.append(f"  wait_duration    = {beta[2]:8.3f}  (s per additional second of D_w)")
-    lines.append(f"  is_time_based    = {beta[3]:8.3f}  (s, TIME vs COUNT at bounce=0, "
-                  "same D_w -- the part bounce_count alone doesn't explain)")
-    lines.append(f"  R^2              = {r2:8.3f}")
+    lines.extend(regression_lines(obs))
     lines.append("  Descriptive only (n<=34, unbalanced cells after exclusions) -- no")
     lines.append("  p-values reported. A nonzero is_time_based coefficient at bounce=0 means")
     lines.append("  bounce count is not a complete explanation on its own.")
 
-    # The specific outlier flagged in decision-log.md's D13/D22 entries: a 0-bounce
-    # COUNT_BASED run that still took far longer than its sibling cells.
+    # D23/D24: this "outlier" is now explained, not a mystery -- see
+    # --exclude-gateway-tripped. Left here descriptively since this is the pooled,
+    # uncleaned regression and the rows really do look anomalous against it.
     outliers = [o for o in obs if o["window_type"] == "COUNT_BASED" and o["n_failed_probes"] == 0
                 and o["duration_s"] > 20]
     if outliers:
         lines.append("")
-        lines.append("Unexplained: 0-bounce COUNT_BASED runs with duration_s > 20s "
-                      "(bounce model predicts these should be fast, like other COUNT cells):")
+        lines.append("0-bounce COUNT_BASED runs with duration_s > 20s (bounce model predicts "
+                      "these should be fast, like other COUNT cells -- explained by D23/D24: "
+                      "these are gateway_tripped, see --exclude-gateway-tripped):")
         for o in outliers:
             lines.append(f"  {o['experiment_id']} rep{o['replicate']}: "
                           f"duration_s={o['duration_s']:.2f}, W={o['window_size']}, "
-                          f"D_w={o['wait_duration']}")
+                          f"D_w={o['wait_duration']}, gateway_tripped={o.get('gateway_tripped')}")
+
+    return "\n".join(lines)
+
+
+def render_gateway_cleaned(obs: list[dict]) -> str:
+    """D23/D24: gateway-service's own breaker trips under COUNT_BASED at wait_duration>=15
+    (a YAML gap, unrelated to this regression's own subject), confounding COUNT_BASED's
+    baseline duration -- some of what reads as "COUNT taking a while" is order's breaker
+    waiting on gateway to let traffic through, nothing to do with bounces or HALF_OPEN
+    semantics. Recomputes the same regression on gateway_tripped==False rows only (all
+    TIME_BASED rows kept -- gateway never trips there) and reports per-D_w coverage
+    explicitly, since some D_w cells lose all their COUNT_BASED rows once cleaned."""
+    lines = []
+    cleaned = [o for o in obs if not o["gateway_tripped"]]
+    n_count_before = sum(1 for o in obs if o["window_type"] == "COUNT_BASED")
+    n_count_after = sum(1 for o in cleaned if o["window_type"] == "COUNT_BASED")
+    lines.append(f"gateway_tripped: dropping {n_count_before - n_count_after} of "
+                 f"{n_count_before} COUNT_BASED observations")
+    lines.append("")
+    lines.extend(regression_lines(cleaned))
+
+    lines.append("")
+    lines.append("COUNT_BASED coverage by D_w after cleaning (a caveat, not a footnote --")
+    lines.append("read before trusting wait_duration's coefficient above):")
+    by_dw = defaultdict(int)
+    for o in cleaned:
+        if o["window_type"] == "COUNT_BASED":
+            by_dw[o["wait_duration"]] += 1
+    for dw in (5, 15, 30):
+        n = by_dw.get(dw, 0)
+        flag = "" if n > 0 else "  <-- ZERO clean COUNT_BASED rows at this D_w"
+        lines.append(f"  D_w={dw}: n={n}{flag}")
+    if not by_dw.get(30):
+        lines.append("")
+        lines.append("  D_w=30 has no clean COUNT_BASED data at all -- the wait_duration")
+        lines.append("  coefficient above is driven almost entirely by TIME_BASED's own D_w")
+        lines.append("  effect for that region, not a genuine cross-arm slope. Do not present")
+        lines.append("  it as equally well-supported as the uncleaned regression's coefficient.")
 
     return "\n".join(lines)
 
@@ -180,6 +234,10 @@ def main() -> int:
                           "published H3 KM table uses, so this analysis is directly "
                           "comparable to it.")
     ap.add_argument("--self-test", action="store_true")
+    ap.add_argument("--exclude-gateway-tripped", action="store_true",
+                     help="D23/D24: also report the regression with gateway-confounded "
+                          "COUNT_BASED observations removed, alongside the pooled regression "
+                          "above (not a replacement for it).")
     args = ap.parse_args()
 
     if args.self_test:
@@ -197,6 +255,12 @@ def main() -> int:
         return 1
     print(f"{len(obs)} observations ({args.since or 'all time'})\n")
     print(render(obs))
+
+    if args.exclude_gateway_tripped:
+        print()
+        print("=" * 72)
+        print(render_gateway_cleaned(obs))
+
     return 0
 
 

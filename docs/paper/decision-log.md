@@ -1378,3 +1378,102 @@ so.
 **Revisit if:** the YAML gets fixed (own decision-log entry, per this repo's schema/config-change
 convention) — or if H6's testability verdict gets re-decided using the data this entry
 surfaces.
+
+---
+
+## D24 · D13's KM table and D22's regression, stratified by `gateway_tripped` — the within-COUNT $D_w$ trend was the leak, not a COUNT_BASED property
+
+**Date:** 2026-09-17 · **Decided by:** Jay, three follow-ups in order: audit `master_dataset.csv`
+for gateway activity, re-run D13's KM table stratified by `gateway_tripped`, recompute D22's
+residual against the cleaned baseline · **Status:** final for the numbers below; both scripts'
+pooled output is kept alongside the cleaned output, not replaced by it
+
+**1. `master_dataset.csv` (360 rows) audit — structurally inconclusive, not a negative result.**
+`analysis/gateway_leg_audit.py` (new): gateway can never appear in `leg_failure_rates`,
+`blast_radius`, or `real_blast_radius`, in any row — `CB_METRIC_TARGETS`
+(`experiments/runner.py`) and `SERVICE_ACTUATOR_URLS` (`BlastRadiusService.java`) both
+hard-code the 4 downstream services only, by design, gateway explicitly excluded in both. The
+one indirect proxy — `error_rate` (client-observed, through gateway) vs `leg_failure_rates`'
+order-service entry (order's own outbound health) — is confounded by an unrelated, previously
+unnoticed artifact: their ratio is a near-constant `2.0000` across `FANOUT/codespace` (n=162),
+`LINEAR/soham-local` (n=159), and `LINEAR/jay-overnight-rerun` (n=3), and exactly `1.0000` for
+`LINEAR/jay-mac` (n=36) — splitting cleanly by **collection batch**, not by `window_size`/
+`wait_duration`. D23's flagged parameter region (COUNT_BASED, `wait_duration∈{15,30}`,
+`window_size∈{10,20}`, n=80) shows the identical mean ratio (1.9000) as the rest of
+`COUNT_BASED` (n=100, also 1.9000) — no separation at all. **Verdict: inconclusive by
+construction**, not "gateway was clean in the main dataset." Building a threshold on this
+ratio now would misattribute an unrelated, unexplained batch confound to gateway — flagged as
+a new, separate, unsolved observation (own future investigation if pursued), not resolved
+here.
+
+**2. D13's KM table, stratified by `gateway_tripped`.** `analysis/half_open_survival.py` gains
+a `gateway_tripped` field on every observation (purely additive — computed from the same
+`transitions` list already fetched for `BREAKER_WATCH`, independent of it, verified inert
+against every existing field) and a `--stratify-gateway` report that reuses `analyse()`
+unchanged on the cleaned set (`COUNT-not-tripped + all TIME`, since `TIME_BASED` never trips
+gateway) plus a direct `kaplan_meier()` call for the gateway-tripped `COUNT_BASED` subset
+(descriptive only — no `TIME` counterpart to log-rank against). On the same n=34 slice D13/D22
+already used:
+
+| $D_w$ | COUNT-not-tripped | COUNT-tripped | TIME (unsplit) |
+|---|---|---|---|
+| 5  | 2.038s (n=6) | *(empty, n=0)* | 19.343s (n=5) |
+| 15 | 2.413s (n=2) | 10.164s (n=4) | 21.267s (n=5) |
+| 30 | *(empty, n=0)* | 14.987s (n=6) | 35.896s (n=6) |
+
+**The published "COUNT gets slower at higher $D_w$" shape (2.04→9.83→14.99s) was gateway
+contamination, not a real `COUNT_BASED` recovery-time effect.** $D_w$=30's entire `COUNT_BASED`
+sample (6/6) is gateway-tripped — there is zero clean `COUNT_BASED` data at $D_w$=30 at all;
+$D_w$=15 is 4/6 gateway-tripped. **H3's core TIME>COUNT claim survives on clean data**: $D_w$=5
+(ratio 9.49×, log-rank p=0.0014, unchanged — no gateway trips at $D_w$=5 at all) and $D_w$=15
+(ratio **8.81×**, log-rank **p=0.0082**, on the 2 clean `COUNT_BASED` observations vs 5 `TIME`)
+— still significant, same direction. **$D_w$=30 is now untestable** (`ONE_ARM_EMPTY` —
+`analyse()`'s own existing verdict logic, no code change needed to produce this correctly) —
+an honest gap, not a null result. This also directly retro-explains D22's previously-flagged
+"unexplained" `W20/D30` outlier: it isn't 2 anomalous runs, both `duration_s≈25.3s` rows are
+exactly the two largest values in the gateway-tripped $D_w$=30 group.
+
+**3. D22's regression, recomputed on `gateway_tripped==False`.** `analysis/bounce_count_analysis.py`
+gains `--exclude-gateway-tripped`, reusing the same `duration_s ~ 1 + bounce_count +
+wait_duration + is_time_based` OLS on the cleaned rows (all `TIME_BASED` kept, 10 of 18
+`COUNT_BASED` dropped, n=24):
+
+| | original (n=34) | cleaned (n=24) |
+|---|---|---|
+| intercept | -3.069 | -5.275 |
+| bounce_count | 6.446 | 9.726 |
+| wait_duration | 0.746 | 0.992 |
+| **is_time_based** | **9.767** | **2.748** |
+| R² | 0.862 | 0.934 |
+
+The ~9.8s "unexplained residual" D22 flagged **mostly dissolves** (→2.7s, ~3.5× smaller) once
+gateway-confounded rows are removed — most of what looked like a genuine TIME-intrinsic
+slowdown independent of bounces was gateway confound, not a real residual mechanism. Bounce
+count's own per-bounce cost is if anything **understated** by the original pooled regression
+(6.446 → 9.726 once cleaned). **Caveat, printed directly in the script's own output, not left
+to prose:** cleaned `COUNT_BASED` rows only span $D_w \in \{5,15\}$ (n=6, n=2) — zero survive
+at $D_w$=30 — so the cleaned `wait_duration` coefficient (0.992) is driven almost entirely by
+`TIME_BASED`'s own $D_w$ effect for that region, not a genuine cross-arm slope. Report it, but
+it is not equally well-supported as the original 0.746.
+
+**Consequence for the paper.** §V-D can now say: H3's TIME>COUNT direction and significance
+hold on clean data at $D_w$∈{5,15}; the *within-COUNT* $D_w$ trend previously reported
+(2.04→9.83→14.99s) does not — it was gateway contamination, and $D_w$=30 is currently
+untestable for `COUNT_BASED` with existing data. D22's bounce-count mechanism is stronger, not
+weaker, once cleaned (R²=0.934, larger per-bounce cost) — the "not a complete mechanism"
+framing softens to "bounces explain nearly all of it, with a small, now much less mysterious
+residual likely explained by non-bounce per-episode probe-evaluation cost, not a TIME-intrinsic
+mystery."
+
+**Rejected:** deleting or overwriting the original pooled tables/coefficients in D13/D22 or in
+`analysis/out/half_open_survival_since_2026-09-16.json`. Both scripts print the pooled and
+cleaned versions side by side — the pooled numbers are what was actually published and cited
+first, and the append-only convention applies to analysis output the same way it applies to
+prose.
+
+**Revisit if:** more `COUNT_BASED` replicates at $D_w$=30 get collected under conditions where
+gateway's isolation is confirmed to hold (i.e., after the YAML gap D23 found is actually
+fixed) — that would finally give H3 a testable $D_w$=30 `COUNT_BASED` arm. Also revisit if the
+~2x/1x batch artifact found in step 1 gets investigated and turns out to be gateway-related
+after all (it currently shows no relationship to D23's parameter region, but its actual cause
+is still unknown).

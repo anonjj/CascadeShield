@@ -1527,3 +1527,103 @@ fixed) — that would finally give H3 a testable $D_w$=30 `COUNT_BASED` arm. Als
 ~2x/1x batch artifact found in step 1 gets investigated and turns out to be gateway-related
 after all (it currently shows no relationship to D23's parameter region, but its actual cause
 is still unknown).
+
+---
+
+## D25 · `measurement-plane`'s inheritance gap is fixed — every field pinned explicitly, live-verified against a real fault, zero gateway transitions
+
+**Date:** 2026-09-18 · **Decided by:** Jay, closing the "own decision-log entry" D23 deferred ·
+**Status:** final — the fix is live in `services/gateway-service/src/main/resources/application.yml`
+and verified against the running mesh, not just reasoned about
+
+**The diagnostic D23 asked for, run.** Rebuilt `gateway-service` with a disposable
+`CB_CONFIG_DUMP` `CommandLineRunner` (same convention as D18/D23's, worktree-only, deleted
+before this commit) and set `infra/.env` to a real W5 sweep (`CB_SLIDING_WINDOW_SIZE=5`,
+`COUNT_BASED`) — the specific case D23's own dump hadn't isolated (D23 tested at W20/W10).
+Result, pre-fix, all three gateway breakers identical:
+
+```
+slidingWindowType=COUNT_BASED slidingWindowSize=5 minimumNumberOfCalls=1000000
+failureRateThreshold=100.0 slowCallRateThreshold=100.0 slowCallDurationThreshold=PT1M
+waitDurationInOpenStateMs=5000 permittedCallsInHalfOpen=5 autoTransitionEnabled=true
+rejected(4xx)Recorded=false rejected(4xx)Ignored=true unavailable(5xx)Recorded=true
+```
+
+**D23 is right as written, at W5 too** — `slidingWindowSize` tracks the swept value (5), not
+the library default (100). The hardcoded `minimum-number-of-calls: 1000000` gate is silently
+capped by `min(1000000, slidingWindowSize)` = `slidingWindowSize` exactly as D23's bytecode
+analysis predicted.
+
+**The three other gaps flagged alongside the diagnostic turned out not to be gaps.**
+`record-exceptions`/`ignore-exceptions`, `wait-duration-in-open-state`,
+`permitted-number-of-calls-in-half-open-state`, and
+`automatic-transition-from-open-to-half-open-enabled` were all unset on `measurement-plane`
+too — and the live dump shows every one of them **also** silently inherited from
+`configs.default`'s real values (the 4xx firewall is present: `DownstreamRejectedException`
+tested `Ignored=true`/`Recorded=false`, `DownstreamUnavailableException` tested
+`Recorded=true`; `waitDurationInOpenStateMs=5000` and `permittedCallsInHalfOpen=5` both match
+`default`'s then-current swept/env values, not the library defaults of 60000ms/10;
+`autoTransitionEnabled=true` matches `default`'s hardcoded value). D23's 2.2.0
+implicit-fallback mechanism isn't scoped to the two window fields it was originally verified
+against — it's whole-config: **any field `measurement-plane` doesn't set, it gets from
+`configs.default`, not from Resilience4j's library defaults.** This resolves the "23.7s
+OPEN→HALF_OPEN matches neither 60s nor 30s cleanly" puzzle without further mystery: gateway's
+wait-duration-in-open-state was never a fixed 60s to begin with, it was whatever `default`'s
+swept value was at the time of that trace — the 23.7s figure is a gap between two different
+breakers' transition timestamps (order's OPEN to gateway's own later HALF_OPEN), not a
+single breaker's wait-duration measured from its own OPEN.
+
+**The fix — pin everything explicitly, in both directions, switch to `TIME_BASED`.**
+`measurement-plane` now sets `sliding-window-type: TIME_BASED`, `sliding-window-size: 600`,
+`minimum-number-of-calls: 1000000` (now genuinely unreachable — `TIME_BASED` has no
+ring-buffer-fill bypass, D18), plus explicit `wait-duration-in-open-state: 60s`,
+`permitted-number-of-calls-in-half-open-state: 10`,
+`automatic-transition-from-open-to-half-open-enabled: false`, `event-consumer-buffer-size`,
+and the same `record-exceptions`/`ignore-exceptions` pair `default` uses. No field is left to
+inherit from anywhere, in either direction — the ambiguity that caused this is removed, not
+just patched around for the current parameter grid.
+
+**Live-verified, not just rebuilt.** Post-fix dump, all three gateway breakers:
+
+```
+slidingWindowType=TIME_BASED slidingWindowSize=600 minimumNumberOfCalls=1000000
+failureRateThreshold=100.0 slowCallRateThreshold=100.0 slowCallDurationThreshold=PT1M
+waitDurationInOpenStateMs=60000 permittedCallsInHalfOpen=10 autoTransitionEnabled=false
+rejected(4xx)Recorded=false rejected(4xx)Ignored=true unavailable(5xx)Recorded=true
+```
+
+Then a real fault run through the actual harness (`experiments/runner.py --mode canary
+--only-ids LIN-LAT-CNT-T70-W20-D30 --replicates 1` — canary's own "Extreme Conservative"
+config, `COUNT_BASED`, `wait_duration=30`, `window_size=20`, writing to the disposable
+`data/canary_runs.csv`/`canary_cb_transitions.jsonl`, not the real dataset): 60 requests
+against a 3000ms latency fault, 17/60 failed (28.3% error rate) — order's own breaker engaged
+normally. `gateway-service`'s `/actuator/circuitbreakerevents`: `orderServiceCB` recorded 310
+real `SUCCESS`/`ERROR` call events (`bufferedCalls=310, failedCalls=42` by run's end,
+`failureRate` still `-1.0%` — never evaluated, exactly as intended) and **zero**
+`CLOSED_TO_OPEN` events; `inventoryServiceCB`/`paymentServiceCB` (not on the fault path) show
+zero events at all. `failureRateThreshold` reads back `100.0%` live, not the swept run's `70%`
+— confirms `measurement-plane` is no longer touched by the sweep's env vars in any field.
+
+**Scope check — is `measurement-plane` the only place this shape exists?** `grep -rn
+"base-config" services/`: every instance in `order-service`, `inventory-service`,
+`payment-service`, and `notification-service` declares `base-config: default` explicitly.
+`measurement-plane` was the only *named, non-`default`* config profile with no `base-config`
+of its own anywhere in the codebase — the one shape that exercises 2.2.0's implicit-fallback
+branch at all. **Not a repo-wide pattern, confined to the one block now fixed.**
+
+**Consequence for the paper.** D23's finding (gateway silently tripped under `COUNT_BASED`,
+`wait_duration∈{15,30}`, 20/73 sidecar records) describes the *pre-2026-09-18* mesh state and
+is unaffected by this fix — historical data keeps its D23/D24 correction. Any run collected
+**after** this commit has a gateway that structurally cannot trip (`TIME_BASED`, `minimumNumberOfCalls`
+genuinely unreachable) — if D15/D-001 gets re-derived post-FANOUT-CRASH on freshly collected
+data, that re-collection inherits the fix and the D23 gateway-contamination caveat no longer
+applies to it. Worth a one-line note wherever the re-derivation happens, not a rewrite of D23/D24.
+
+**Rejected:** touching `hypotheses.md`'s H6 disposition here. D23 already corrected the
+isolation claim's text; whether H6 becomes newly untestable (isolation now genuinely holds,
+same as it does for `TIME_BASED` sweeps already) or stays as D23 left it is a separate
+decision, not made in this entry.
+
+**Revisit if:** a future config change reintroduces a named, non-`default` profile without an
+explicit `base-config` — `grep -rn "base-config" services/` is now the fast way to check for
+that shape before it becomes a silent leak again.

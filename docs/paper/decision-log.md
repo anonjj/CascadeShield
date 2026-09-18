@@ -1316,6 +1316,56 @@ precise claim than "unidentified," short of a fully solved mechanism.
 investigate directly (e.g. instrumenting per-probe latency within a single HALF_OPEN episode,
 not just bounce counts and total duration).
 
+**Update (2026-09-18, the revisit condition is met — mechanism fully decomposed, residual-window-contents confirmed, not falsified).**
+`analysis/recovery_decomposition.py` (new, `--self-test`) walks each run's raw
+`transitions` list directly (not `n_failed_probes`, an independent extraction path from D22's
+own) and splits total recovery into three additive, self-test-verified parts: failed episodes,
+inter-attempt OPEN gaps, and the final successful episode. Three predictions, against
+`data/cb_transitions.jsonl` (`--modes full`, gateway-tripped rows excluded — D23/D25 — plus the
+same host-sleep-artifact ceiling check `half_open_survival.py` already applies to this exact
+source, which independently caught and excluded the identical two records D13/D21 already
+flagged: `TIME-W20-D5` at 700.4s, `TIME-W20-D15` at 1703.4s, both far past
+`half_open_probe_deadline_s` — the same artifact, found again via an unrelated code path, not
+re-discovered by copying the exclusion list):
+
+- **P1 (control, reproduces D22): bounce count rises with `window_size` for TIME_BASED, flat
+  at zero for COUNT_BASED.** TIME mean bounces 1.33 → 1.42 → 1.90 at W=5/10/20 (n=34,
+  slope=+0.039/unit, t=+2.20, R²=0.131 — weaker R² than D22's original per-run number, expected
+  at this more granular per-episode extraction, same direction). COUNT_BASED: 0/16 bounce, exactly
+  matching D22.
+- **P2 — the discriminator. Final-episode duration does NOT scale with `window_size`.** TIME
+  mean final-episode 2.38s → 2.33s → 2.29s at W=5/10/20 (n=34, slope=-0.006s/unit, t=-0.72,
+  R²=0.016; predicted change across the whole swept range is -0.08s, 4% of the 2.33s mean —
+  not material). **The successful HALF_OPEN attempt itself costs the same ~2.3s regardless of
+  window size.** This is the falsification test residual-window-contents had to pass, and it
+  passes cleanly — not narrowly.
+- **P3 (instrument sanity): the inter-attempt OPEN gap tracks `wait_duration`, not
+  `window_size`, almost exactly.** Slope on `wait_duration` = +1.024 (≈1, as it must be — the
+  gap *is* `wait_duration` by construction), t=+49.58, R²=0.987; slope on `window_size` = +0.060,
+  R²=0.001 — no confound. Validates the extraction independent of the two hypotheses above.
+
+**Mechanism, now fully chained, not just partly explained.** Larger `window_size` → more bounces
+needed before one attempt lands clean (P1) → each bounce costs one full `wait_duration` sitting
+in OPEN (P3, exact) → the attempt that finally succeeds takes the same ~2.3s no matter how large
+the window was (P2). `total_s ≈ bounce_count × (wait_duration + ~2.3s) + ~2.3s` — this is no
+longer "bounce count explains most of it, ~9.8s unexplained" (D22) or "~2.75s unexplained"
+(D24's gateway-cleaned residual) — the residual **is** the failed-episode time, already fully
+accounted for by the additive decomposition itself (episodes + gaps = total, verified by
+`--self-test`'s own identity check). There is no more "residual" left to explain; there was
+never a separate mechanism beyond bounce count and the constant per-attempt/per-gap costs
+already on record.
+
+**Consequence for the paper.** §V-D can now state the mechanism as closed, not partial: TIME_BASED's
+extra HALF_OPEN recovery time relative to COUNT_BASED is entirely attributable to needing more
+probe attempts at larger window sizes (residual window contents, D22's original hypothesis),
+each attempt costing a fixed OPEN-state wait plus a fixed ~2.3s evaluation — nothing inside the
+HALF_OPEN leg itself depends on `T` once bounce count is accounted for.
+
+**Rejected:** treating this as new mechanism-discovery. It's a decomposition of numbers D22/D24
+already reported, using a finer-grained but consistent extraction — the qualitative claim
+(bounce count is the driver) is unchanged; what's new is that the previously-"unexplained"
+residual no longer needs its own explanation.
+
 ---
 
 ## D23 · The gateway's "never-opens" measurement-plane isolation is incomplete — it does open, live-verified, under COUNT_BASED

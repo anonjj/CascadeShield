@@ -1,6 +1,6 @@
 # CascadeShield — Project Status
 
-**Last updated:** 2026-09-17 · **Update this file whenever a PR lands or a sweep finishes.**
+**Last updated:** 2026-09-18 · **Update this file whenever a PR lands or a sweep finishes.**
 
 > This is the single source of truth for *where the project is*. It is meant to be read first,
 > from any tool — Claude Code, Claude in the browser, Cowork, or a human. The reasoning behind
@@ -29,12 +29,13 @@ Everything below is ordered by whether it blocks Paper B.
 |---|---|---|
 | Paper direction (D-004) | ✅ **Done** — Paper B, 2026-09-08 | — |
 | Harness + mesh (6 services, Toxiproxy, D17 fix) | ✅ **Done** — D17 fix merged (PR #45) | — |
-| LATENCY data, LINEAR + FANOUT | ✅ **Done** — 324 rows live | — |
+| LATENCY data, LINEAR + FANOUT | ✅ **Done** — 360 rows live (324 post-CRASH-strip + 36 D13 top-up, 2026-09-15) | — |
 | Occupancy / H2b sweep (D7, D18) | ✅ **Done** — 162/162 runs, hypothesis closed | — |
 | Canary matrix (D-004 gate) | ✅ **Done** — 300/300 runs; data in PR #43, unmerged | — |
 | CRASH re-collection, **LINEAR** | ✅ **Done** — 162/162; PR #47, unmerged | — |
 | CRASH re-collection, **FANOUT** | 🔴 **Not collected** — needs a free machine, ~6h | **Yes** |
-| D15 / D-001 re-derivation after CRASH | 🔴 **Blocked** on the line above | **Yes** |
+| D15 / D-001 re-derivation, **combined CRASH+LATENCY** | 🔴 **Blocked** on the line above | **Yes** |
+| D15 / D-001 re-derivation, **LATENCY-only (current, 360 rows)** | ✅ **Done 2026-09-18** — `tau_sweep.py`/`order_leg_containment.py` re-run against the live file; both were stale since the 2026-09-06 CRASH-strip. Numbers below and in D-001/D15 | — |
 | D13 / H3 (recovery leak) | ✅ **Confirmed** — `LEAK_CONFIRMED_ON_HALF_OPEN_LEG`, 36/36 recovered on both arms at all three D_w after the poll-until-transition fix (D21); KM computed on 34/36 (2 host-sleep-corrupted durations excluded), significant everywhere (p=0.0014 at D_w=5/15, p=0.0005 at D_w=30) | — |
 | Statistical treatment (D19) | ✅ **Defined** — Mann-Whitney + Cliff's δ, bootstrap CIs, censoring as rate + conditional timing. Two known deviations flagged, neither blocking | — |
 | Throughput / TPS reporting (D20) | ✅ **Retired** — `throughput_loss`'s measurement window is sized by the swept window params, so it is confounded with the IV and not repairable post hoc. No TPS number appears in the paper | — |
@@ -53,7 +54,7 @@ D13/H3 closed 2026-09-16 — see below. Nothing else.
 | **H2** | A crossover λ\* exists below which TIME_BASED cannot trip | ❌ **No effect found.** Trip rate 1.00 at every λ ∈ {5,20,80,320}, both window types. This is what selected Paper B | D-004 |
 | **H2b** | Occupancy ratio ρ = effective_horizon / n_min crossing 1 predicts inertness | ✅ **Confirmed for TIME_BASED** (clean crossover, no overlap) · ❌ **cleanly falsified for COUNT_BASED** (0/54 rows ever inert). Mechanism: COUNT's ring buffer caps `minimumNumberOfCalls` — **live-verified 2026-09-17**, not just inferred: a per-call `CircuitBreaker` event trace on a real replay of the ρ=0.025 cell shows evaluation starting at `bufferedCalls=5` (window capacity), never at 200; the cap is applied internally by Resilience4j at runtime, invisible on the static `CircuitBreakerConfig` object (checked and ruled out separately) | D18 |
 | **H3** | Double dissociation: window params → detection, wait_duration → recovery | ✅ **Confirmed 2026-09-16.** `LEAK_CONFIRMED_ON_HALF_OPEN_LEG` — after D21's poll-until-transition fix, **36/36 recovered on both arms at all three $D_w$** (was 2/6, 0/6 for COUNT under the old fixed-~4.1s probe window — a pure instrument artifact, not a property of COUNT_BASED). TIME slower at every level, significant throughout (log-rank p=0.0014 at $D_w$=5/15, p=0.0005 at $D_w$=30 — the precise-metric KM is computed on 34/36 runs, 2 excluded as host-sleep-corrupted durations, unchanged medians/ratios): **9.49× at $D_w$=5, 2.16× at $D_w$=15, 2.40× at $D_w$=30** (medians COUNT 2.04/9.83/14.99s vs TIME 19.34/21.27/35.90s). The ratio *shrinking* with $D_w$ — not flat, not growing — is a genuinely new shape versus the pre-fix censored read, which could only see the two extremes and had no real COUNT numbers at $D_w$≥15 to compare against. Verification data kept standalone (`d21_poll_until_transition_verification`, not merged into `current` — see `analysis/common.py`), since the coarse `time_to_recover` metric was never actually censored (confirmed independently, 0/360 nulls) and needed no fix. **Live-verified 2026-09-17:** HALF_OPEN→CLOSED is governed by `permittedNumberOfCallsInHalfOpenState` (3), not `minimumNumberOfCalls` — confirmed via a live discriminator (n_min=3 vs n_min=30, everything else identical) that recovered in statistically indistinguishable time (~20s both arms) plus a per-call event trace showing exactly 3 calls admitted per HALF_OPEN episode regardless of n_min. This rules out the hoped-for shared-root-cause tie to H2b (D18) — HALF_OPEN's gate and H2b's CLOSED-side n_min-clamping gate are separate mechanisms. **Partially explained 2026-09-17 (D22):** HALF_OPEN→OPEN bounce count is a real, dominant driver — COUNT_BASED never bounces (0/18 observations); TIME_BASED bounces 1.33/1.5/1.75× on average as `window_size` grows (5/10/20), matching the residual-window-contents hypothesis. Joint regression (`duration_s ~ bounce_count + wait_duration + window_type`, n=34): R²=0.862, ~6.4s per bounce. **Not a complete mechanism** — a genuine ~9.8s TIME-vs-COUNT residual remains even at bounce_count=0, and two 0-bounce COUNT `W20/D30` runs (~25.3s) are unexplained by this model. See `analysis/bounce_count_analysis.py`. **Corrected 2026-09-17 (D24):** the two flagged items above were gateway contamination (D23), not COUNT_BASED properties. Stratified by `gateway_tripped` (`--stratify-gateway`): the within-COUNT $D_w$ trend (2.04→9.83→14.99s) dissolves — $D_w$=30 has **zero** clean COUNT_BASED data (6/6 gateway-tripped), $D_w$=15 is 4/6 tripped. **TIME>COUNT still holds on clean data** at $D_w$=5 (9.49×, p=0.0014, untouched) and $D_w$=15 (8.81×, p=0.0082, n=2 clean COUNT); $D_w$=30 is now untestable, not confirmed. D22's residual **shrinks to 2.75s** (from 9.77s) and R² rises to 0.934 once cleaned (`--exclude-gateway-tripped`) — bounces explain nearly all of it. A `master_dataset.csv` audit for gateway activity (`analysis/gateway_leg_audit.py`) came back structurally inconclusive — gateway is excluded from every per-leg column by design — and surfaced an unrelated, unsolved ~2×/1× error_rate ratio artifact that splits by collection batch, flagged not solved | D13, D18, D21, D22, D23, D24 |
-| **H4** | Competing containment definitions rank configs differently (Kendall τ < 1) | ✅ **Supported.** 36/36 pairs below τ=1.0. Magnitude moved a lot after FAN_OUT data: min pairwise τ is now **0.891**, was 0.238 — rankings agree *more* than first measured, but never perfectly | D-001 |
+| **H4** | Competing containment definitions rank configs differently (Kendall τ < 1) | ✅ **Supported, re-run 2026-09-18 against the live 360-row file.** 153/153 threshold pairs (108 configs) rank differently; min pairwise τ is now **0.0189** — down sharply from 0.891 (the 704-row CRASH+LATENCY file) and below even the original 80-row archive's 0.238. **Not a contradictory result** — the CRASH rows that gave inventory-service a second nonzero leg are gone from `current` (FANOUT CRASH never re-collected), so LATENCY-only data is back to exactly one firing leg (`order-service`), which pushes rank disagreement toward its degenerate extreme. Expect this to move again once FANOUT CRASH lands | D-001 |
 | **H5** | Blast-radius resolution is topology-dependent: Var(B)=0 on a chain, >0 with parallel subjects | ❌ **Tested and NOT supported.** FANOUT+LATENCY gives Var(B)=0 too, identical to LINEAR — 162/162 rows each side, exactly one leg firing | D15 |
 | **H6** | A uniform edge breaker suppresses interior breaker engagement (gateway shadowing) | 🟡 **"Untestable" verdict corrected 2026-09-17 (D23), not yet re-decided.** The `measurement-plane` isolation was believed complete (`cb_state_pre` "CLOSED at load start" was the evidence — a pre-load snapshot, never evidence for mid-run state). Live-verified it's incomplete: gateway's breaker never sets `sliding-window-size`/`sliding-window-type`, which silently track the swept `default` values, so — combined with D18's confirmed mechanism — gateway's breaker **does** trip under COUNT_BASED at `wait_duration ∈ {15,30}` (20 real trips across 5 experiment_ids in `data/cb_transitions.jsonl`; 0 under TIME_BASED, where the isolation genuinely holds). H6 may be directly testable now, not just via deliberate reconstruction — testability verdict needs re-deciding, not done yet | D23, hypotheses.md §7 |
 
@@ -69,17 +70,27 @@ collected before that is diluted** — all 380 read exactly `0.5000`, zero varia
 
 | Step | State |
 |---|---|
-| Archive pre-fix data as `v6`, strip CRASH from live file | ✅ Done (PR #46). Live file is now **324 rows, LATENCY-only** |
-| Re-collect **LINEAR** CRASH | ✅ Done — 162/162, `order_leg` now uniformly `1.0000` |
+| Archive pre-fix data as `v6`, strip CRASH from live file | ✅ Done (PR #46). Live file was **324 rows, LATENCY-only**; now **360** after the D13 top-up (2026-09-15) |
+| Re-collect **LINEAR** CRASH | ✅ Done — 162/162, `order_leg` now uniformly `1.0000`. Sitting unmerged in PR #47 |
 | Re-collect **FANOUT** CRASH | 🔴 **Not done.** Two attempts died (codespace VM restart; then billing lockout). No data survived |
-| Merge both into `master_dataset.csv`, bump `n_expected` 324 → ~648 | 🔴 Blocked |
-| Re-run `analysis/tau_sweep.py` + `analysis/order_leg_containment.py` | 🔴 Blocked |
-| Update D15, D-001, hypotheses.md §5.4 with real numbers | 🔴 Blocked |
+| Merge both into `master_dataset.csv`, bump `n_expected` 360 → ~648 | 🔴 Blocked |
+| Re-run `analysis/tau_sweep.py` + `analysis/order_leg_containment.py` **on the combined dataset** | 🔴 Blocked on the two rows above |
+| Re-run same, **LATENCY-only (`current`, 360 rows)** | ✅ **Done 2026-09-18** — both scripts were stale since 2026-09-06 (predated the CRASH-strip itself); re-run and committed, see below |
+| Update D15, D-001 with **combined-dataset** numbers | 🔴 Blocked |
+| Update D15, D-001 with **LATENCY-only** numbers | ✅ **Done 2026-09-18** — see D-001/D15 in `decision-log.md` |
 
 **D15 carries an explicit embargo:** *"Action before re-quoting the combined-dataset table
-anywhere: land D17's fix and re-collect CRASH rows."* Until that is done, **do not quote D15's
-combined-dataset separation numbers.** The LATENCY-only separation still holds and is safe to
-cite (COUNT max 0.2250 < TIME min 0.2686).
+anywhere: land D17's fix and re-collect CRASH rows."* Still in force — **do not quote a
+combined-dataset separation number**, none exists yet.
+
+**The LATENCY-only separation claim below is corrected as of 2026-09-18 — the old number was
+wrong on today's file.** The previously-cited "COUNT max 0.2250 < TIME min 0.2686, safe to
+cite" was true on the 324-row file; on the current 360-row file (the D13 top-up added
+COUNT_BASED rows with higher `order_leg` values) **it no longer holds: COUNT max is now 0.3667,
+which overlaps TIME's min of 0.2686.** The distributional separation is still real and large —
+95% CI on the mean is [0.116, 0.150] for COUNT vs [0.409, 0.460] for TIME, non-overlapping;
+Cliff's δ = **-0.987** ("large") — but the clean *zero-overlap* claim is retired. Cite the CI/
+Cliff's-δ framing, not a raw max-vs-min comparison, going forward.
 
 **Honest caveat already known:** post-fix CRASH saturates at exactly `1.0000` regardless of
 window type, so it still won't discriminate COUNT vs TIME — it is now *correctly* saturated

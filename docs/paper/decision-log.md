@@ -1527,3 +1527,92 @@ fixed) — that would finally give H3 a testable $D_w$=30 `COUNT_BASED` arm. Als
 ~2x/1x batch artifact found in step 1 gets investigated and turns out to be gateway-related
 after all (it currently shows no relationship to D23's parameter region, but its actual cause
 is still unknown).
+
+**Update (2026-09-18, the chi-square p-values were asymptotic artifacts — corrected below; the
+correction below was itself wrong and is retracted in the second update further down. Kept,
+struck through in spirit rather than deleted, per this file's append-only convention — the
+retraction explains exactly what was wrong and why, which a silent rewrite would lose.**
+`half_open_survival.logrank()`'s p-values come from a chi-square approximation, valid only
+asymptotically; it has no floor and can report values a permutation test could never produce at
+small n. `analysis/exact_tests.py` (new, `--self-test`) implemented
+`exact_p_floor`/`exact_logrank_test` and reported, at $D_w$=5 ($n_1$=6, $n_2$=5 rows): exact
+p=0.004329 vs. floor 1/462; at $D_w$=15 ($n_1$=2, $n_2$=5 rows): exact p=0.047619, "== floor",
+both read as "H3's direction and significance survive at both $D_w$."
+
+**These row counts were never checked against the actual number of independent configurations
+behind them, and they should have been.** See the next update.
+
+**Update (2026-09-18, second pass — the row-level "exact" p-values above are RETRACTED
+entirely, not merely re-weakened; replaced with a stratified cluster permutation test that is
+the first correct significance test this repository has run on this comparison.** Prompted by a
+direct question: is "$n_1$=6, $n_2$=5" at $D_w$=5 six independent configurations, or fewer
+configurations with repeated replicates? Checked directly, `data/cb_transitions.jsonl`,
+`--since 2026-09-16`, gateway-cleaned:
+
+| $D_w$ | COUNT rows | COUNT **configs** | TIME rows | TIME **configs** |
+|---|---|---|---|---|
+| 5  | 6 | **3** (W5, W10, W20 × 2 replicates each) | 5 | **3** (W5×2, W10×2, W20×1) |
+| 15 | 2 | **1** (W20 × 2 replicates — W5/W10 both entirely gateway-tripped) | 5 | **3** (W5×2, W10×2, W20×1) |
+| 30 | 0 | 0 (all gateway-tripped) | 6 | 3 |
+
+**No cell has rows == configs.** The row-level exact test above treated each *replicate* as an
+independent unit for the permutation's exchangeability assumption, which is false — two
+replicates of the same configuration are not exchangeable with a replicate of a different
+configuration; they share everything except run-to-run noise. This is worse than a weaker
+result at $D_w$=15: with only **1** independent COUNT configuration there, there is no
+between-configuration variation on that side to test at all. A permutation test needs $\ge 2$
+independent units per arm to say anything; the previous "exact p=0.047619" at $D_w$=15 was
+computed on 2 units that were not independent, so it was never a valid test of anything, not
+just an optimistic one. **$D_w$=15 alone is unsupportable — its own cluster floor,
+$1/\binom{4}{1}=0.25$ one-sided, can never reach significance no matter what the data show,
+because $\binom{4}{1}=4$ is the entire space of ways to relabel 1 COUNT config among 4 pooled
+configs.**
+
+**The fix: test what H3 actually claims, once, holding $D_w$ fixed as a blocking factor
+instead of testing each $D_w$ separately.** H3 is "TIME_BASED recovers slower than
+COUNT_BASED" — one claim, not "...at $D_w$=5" and "...at $D_w$=15" as two claims requiring two
+significant p-values. `analysis/exact_tests.py` gains
+`stratified_cluster_permutation_test`/`stratified_p_floor`: the unit is a configuration (mean
+of its replicates), $D_w$ is a stratum, and the null is the exact product of each stratum's
+own $\binom{n_1+n_2}{n_1}$ config relabelings ($D_w$=30 excluded — COUNT arm empty, contributes
+no label information). $D_w$=5: $\binom{6}{3}=20$ ways to relabel. $D_w$=15: $\binom{4}{1}=4$
+ways. Total joint assignments: $20 \times 4 = 80$. Floor: $1/80=0.0125$ one-sided,
+$2/80=0.025$ two-sided.
+
+Config-level means (COUNT / TIME, seconds):
+
+| $D_w$ | COUNT configs | TIME configs |
+|---|---|---|
+| 5  | W5=2.071, W10=2.041, W20=2.066 | W5=19.259, W10=19.327, W20=28.739 |
+| 15 | W20=2.471 | W5=20.852, W10=30.527, W20=39.608 |
+
+**Every COUNT config beats every TIME config in both strata (complete separation).** Run
+through `stratified_cluster_permutation_test` (unweighted stratified rank-sum, exact
+enumeration of all 80 joint relabelings — not Monte Carlo, not asymptotic): the observed
+labeling is the single most extreme of all 80, so **the exact p equals the floor exactly:
+two-sided p = 0.025, one-sided p = 0.0125.** This is the correct, honest, first-ever valid
+significance test of H3's actual claim on this data — no inflated n, no per-$D_w$ multiple
+testing, no row-replicate exchangeability violation.
+
+**Consequence for the paper.** State H3's significance as **one number**: stratified cluster
+permutation, $p=0.025$ (two-sided), $n=6$ configurations total (3+3 at $D_w$=5, 1+3 at
+$D_w$=15, $D_w$=30 excluded for an empty COUNT arm). Retire every per-$D_w$ p-value this
+comparison has ever reported (the chi-square ones from D13/D21, and both row-level and
+config-blind framings above) — they were each testing a narrower, unintended claim, at an
+inflated or otherwise invalid n. The *direction* (TIME slower than COUNT) is unchanged and was
+never in question; what changes is that there is now exactly one correct p-value for it,
+instead of three incorrect ones.
+
+**Rejected:** matched-pairs by window_size at $D_w$=5 (3 configs per arm happen to share the
+same swept window_size values). Tempting, but it halves the permutation space for no
+statistical gain here — a sign-based paired test on 3 pairs has only $2^3=8$ assignments
+(floor 1/8), strictly worse than the unpaired $\binom{6}{3}=20$ the data actually supports.
+Pairing is the right move only when it removes a real nuisance source of variance the unpaired
+test can't otherwise control for; window_size is already the stratifying axis's covariate here,
+not a nuisance to be differenced away.
+
+**Same root cause as this session's other small-n traps (D18, D23, the resilience4j javadoc
+entry under D13, and this same entry's own first-pass row-level "fix" above):** the unit of
+independence was never checked before being fed to a formula that assumes it. A floor check
+without a cluster check catches an asymptotic-approximation bug but walks straight into the
+next one.

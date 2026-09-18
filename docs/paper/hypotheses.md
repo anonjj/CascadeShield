@@ -208,6 +208,28 @@ pins: HALF_OPEN always uses its own fixed-size ring buffer sized
 shows up on this leg, so the actual mechanism is something else — not yet identified — and is
 the next open question, not "TIME_BASED windows leaking into HALF_OPEN's evaluation.")
 
+**Footnote (2026-09-19, this section is two supersessions behind its own text — corrections
+appended per this file's frozen/contract convention, not edited into the paragraphs above).**
+
+1. **"Status: strong preliminary confirmation, pending a modest replicate top-up... before
+   treating D13 as closed"** is stale. D13 closed 2026-09-16 (decision-log.md D13's own
+   2026-09-16/17 updates: `LEAK_CONFIRMED_ON_HALF_OPEN_LEG`, 36/36 recovered both arms via the
+   D21 poll-until-transition fix, HALF_OPEN's actual gate live-verified as
+   `permittedNumberOfCallsInHalfOpenState`). The replicate top-up this status line was waiting
+   for already happened.
+2. **"n=1 TIME_BASED row per $D_w$ bucket"** is stale. This session's clustering audit (D19's
+   2026-09-19 update; D24's stratified-permutation work) found the real per-configuration
+   replicate counts behind these comparisons: 3 configs/arm at $D_w$=5, 1 COUNT configuration
+   vs 3 TIME configurations at $D_w$=15 (the other two $D_w$=15 COUNT configs are entirely
+   gateway-tripped, D23) — n=1 was never accurate even at the time this was written.
+3. **The 8.9×–14.3× and 2.06×–3.68× ratios above predate two corrections** and should not be
+   re-quoted as current: the D17 max-of-breakers leg-metric fix, and D23/D25's gateway-confound
+   cleaning (a real gateway breaker trip inflating some `COUNT_BASED` recovery times, fixed in
+   the harness 2026-09-18). For current numbers on this comparison, see decision-log.md D13
+   (KM/log-rank), D22 (bounce-count decomposition, gateway-cleaned and later per-episode-
+   decomposed), D24 (gateway-stratified KM), and D19's 2026-09-19 update (this section's own
+   Mann-Whitney path, now cluster-aware).
+
 ---
 
 ## 5. $\tau_{\text{leg}}$ is a sensitivity analysis, not a constant

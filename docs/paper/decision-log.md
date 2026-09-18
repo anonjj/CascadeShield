@@ -1062,6 +1062,79 @@ contrast's significance, which is the same class of decision this entry's own **
 paragraph declines to make as a side effect. Pending review by this standard's author and
 Soham.
 
+**Update (2026-09-19) — §5.2 closed. The objection that blocked the 2026-09-14 fix doesn't
+apply to the fix actually shipped.** The rejected fix was "aggregate each config to one
+mean/median before testing" — that changes the unit of analysis (rows → configs) and can flip
+a contrast, exactly as this entry's own §5.1 precedent says shouldn't happen as a side effect.
+What actually closed this is a different design: `cluster_permutation_rank_test`
+(`analysis/exact_tests.py`, new) permutes which whole *configurations* are labeled group 1 vs
+group 2, but ranks every raw row under each relabeling — no configuration is ever collapsed to
+a single value. This preserves within-configuration variance instead of averaging it away, so
+the "changes the unit of analysis" objection doesn't apply: the unit being tested is still the
+row, only the unit being *randomly assigned* is the configuration (which is what independence
+actually requires). `compare_censored_groups` now builds `{config_id: [values]}` from the
+`group_col` parameter it already carried but never used for significance, and calls this
+instead of raw-row `compare_groups`. `cliffs_delta` is unchanged (row-level, as §5.1 already
+established for the same reason — an effect size isn't the thing with the exchangeability
+assumption).
+
+**Verified by running both ways and diffing, not swapped in and trusted** — same standard this
+entry sets for itself. `analysis/window_type_recovery_leak.py` (the only caller of
+`compare_censored_groups` in the codebase) re-run before/after, all three COARSE sub-tables
+(`time_to_recover`, `time_to_open_anchor`, `excess_over_wait_duration`) and both PRECISE
+sub-tables (`half_open_to_closed`, `open_to_half_open` sanity check), `"current"` archive:
+
+- **COARSE tables (18 vs 18 configs per $D_w$ bucket — the full threshold×window_size grid):**
+  row-level p-values were absurd ($10^{-13}$ to $10^{-21}$) — Cliff's $\delta$ = -1.0 (complete
+  separation) confirms the direction is real, but no permutation test on 18v18 independent
+  units produces a $10^{-21}$ p. $\binom{36}{18} \approx 9 \times 10^9$ forced the new function's
+  first-ever Monte Carlo fallback (not anticipated when it was scoped for H3's single-digit
+  cluster counts — added here, same `+1`/`+1`-corrected convention as `exact_logrank_test`).
+  Corrected p sits at the Monte Carlo floor, $\approx 5\times 10^{-5}$ (20,000 resamples) — an
+  honest upper bound, not a precise estimate; the true exact floor at 18v18 complete separation
+  is $\approx 1.1\times 10^{-10}$, just not resolvable by Monte Carlo at this resample count.
+  **No verdict flag changed** (`consistent_time_slower`/`consistent_count_slower`/
+  `partial_ratios_agree` identical before/after in all three tables) — direction and
+  significance both survive, only the wildly overclaimed magnitude is corrected.
+- **PRECISE `half_open_to_closed` — one real crossing, the kind this update promised to report
+  rather than bury.** $D_w$=5: **p goes from 0.00216 (significant) to 0.1 (not significant)**
+  once the true 3-vs-3 configuration count replaces the 6-vs-6 row count. $D_w$=15: p 0.0714 →
+  0.5 — already non-significant before, more clearly so after, and the cluster counts now
+  printed directly (1 COUNT config vs 3 TIME configs) are the same clustering shape H3's own
+  stratified-permutation fix (this session, `decision-log.md` D24) found and corrected — this
+  script tests each $D_w$ separately rather than stratified, which is a related but distinct
+  open question from today's fix, not resolved here (see Revisit-if). $D_w$=30: unaffected,
+  still fully censored on the COUNT arm both ways. **No verdict flag changed** here either —
+  `window_type_recovery_leak.py`'s verdict logic reads ratio-consistency, not p-values, so a
+  p-value crossing 0.05 doesn't itself flip `LEAK_SUGGESTIVE_INCOMPLETE_DUE_TO_CENSORING` — but
+  the crossing is real and is the actual finding this verification step exists to surface.
+  **No published number is affected**: this table's p-values were never cited in
+  `hypotheses.md` §4.1 or anywhere else (only its ratios were, confirmed by grep) — the
+  "nothing published depends on it" statement two paragraphs up was true when written and
+  stays true after this fix, it just stops being true by accident.
+- **PRECISE `open_to_half_open` (negative control, should be window-type-agnostic):** all three
+  $D_w$ stay solidly non-significant before and after (p 0.48→0.70, 0.39→0.50, 0.70→0.90) — the
+  sanity check the script's own docstring wants continues to pass.
+
+**Top-level verdict unchanged:** `LEAK_SUGGESTIVE_INCOMPLETE_DUE_TO_CENSORING`, before and
+after.
+
+**A methods point worth recording directly, since §IV-E will claim a centralized protocol
+rather than one reimplemented per script.** `compare_groups`, `mann_whitney`, and
+`compare_censored_groups` each have exactly **one caller** in this codebase (grepped
+2026-09-18) — `compare_censored_groups`'s one caller is `window_type_recovery_leak.py`,
+`compare_groups`'s one caller was `compare_censored_groups` itself (now replaced), and
+`mann_whitney`'s one caller was `compare_groups`. A three-function standard with a single
+consumer chain is *why* this defect was containable — one call site to audit and fix, not a
+dozen. Recorded in `statistical-treatment.md` §5.2's own closing note, not just here.
+
+**Revisit if:** `window_type_recovery_leak.py`'s per-$D_w$ testing (three separate contrasts,
+one per wait_duration bucket) gets redesigned the way H3's own test was — stratified across
+$D_w$ as blocking factor, one combined p-value for "does window_type affect this timing DV" —
+rather than three independent ones. Not done as part of this update; flagged because the
+$D_w$=15 cluster shape found here (1 vs 3 configs) is the identical shape that made H3's
+per-$D_w$ testing invalid in the first place.
+
 ---
 
 ## D20 · Throughput (`throughput_loss`) is retired as a reported outcome, not repaired

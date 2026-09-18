@@ -1,6 +1,6 @@
 # CascadeShield — Project Status
 
-**Last updated:** 2026-09-18 · **Update this file whenever a PR lands or a sweep finishes.**
+**Last updated:** 2026-09-19 · **Update this file whenever a PR lands or a sweep finishes.**
 
 > This is the single source of truth for *where the project is*. It is meant to be read first,
 > from any tool — Claude Code, Claude in the browser, Cowork, or a human. The reasoning behind
@@ -36,7 +36,7 @@ Everything below is ordered by whether it blocks Paper B.
 | CRASH re-collection, **FANOUT** | 🔴 **Not collected** — needs a free machine, ~6h | **Yes** |
 | D15 / D-001 re-derivation after CRASH | 🔴 **Blocked** on the line above | **Yes** |
 | D13 / H3 (recovery leak) | ✅ **Confirmed** — `LEAK_CONFIRMED_ON_HALF_OPEN_LEG`, 36/36 recovered on both arms at all three D_w after the poll-until-transition fix (D21); KM computed on 34/36 (2 host-sleep-corrupted durations excluded), significant everywhere (p=0.0014 at D_w=5/15, p=0.0005 at D_w=30) | — |
-| Statistical treatment (D19) | ✅ **Defined** — Mann-Whitney + Cliff's δ, bootstrap CIs, censoring as rate + conditional timing. Two known deviations flagged, neither blocking | — |
+| Statistical treatment (D19) | ✅ **Defined** — Mann-Whitney + Cliff's δ, bootstrap CIs, censoring as rate + conditional timing. **One deviation closed 2026-09-19** (§5.2: `compare_censored_groups`'s significance test is now cluster-aware — `cluster_permutation_rank_test`, `analysis/exact_tests.py`; verified by re-running `window_type_recovery_leak.py` before/after, one real crossing found and documented, no published number affected). **One still open** (§5.1: `canary_readout.py`'s H1 still uses Welch's t, backs an already-closed D-004 gate, migration deliberately deferred as its own reviewed step) | — |
 | Throughput / TPS reporting (D20) | ✅ **Retired** — `throughput_loss`'s measurement window is sized by the swept window params, so it is confounded with the IV and not repairable post hoc. No TPS number appears in the paper | — |
 | Manuscript | 🔴 **Not started** — no draft exists anywhere in the repo | — |
 

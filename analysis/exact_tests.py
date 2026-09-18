@@ -333,6 +333,145 @@ def stratified_cluster_permutation_test(strata: dict, two_sided: bool = True
     )
 
 
+# ---------------------------------------------------------------------------
+# Cluster permutation rank test -- block permutation, rows preserved
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ClusterPermutationRankResult:
+    statistic: float
+    p_value: float
+    p_value_one_sided: float
+    n1_clusters: int
+    n2_clusters: int
+    n1_rows_observed: int
+    n2_rows_observed: int
+    total_assignments: int
+    two_sided: bool
+    method: str = "exact-enumeration"  # or "monte-carlo"
+    note: str = ""
+
+
+def cluster_permutation_rank_test(group1_clusters: dict, group2_clusters: dict,
+                                   two_sided: bool = True,
+                                   resamples: int = DEFAULT_RESAMPLES,
+                                   seed: int = 0) -> ClusterPermutationRankResult:
+    """Block/cluster permutation generalization of the Mann-Whitney rank-sum test.
+
+    group1_clusters/group2_clusters: {config_id: [raw replicate values]}. Unlike
+    stratified_cluster_permutation_test, this does NOT collapse a configuration to
+    a single mean first -- every raw row still contributes to the rank-sum, so
+    within-configuration spread is preserved. What's fixed is the unit of RANDOM
+    ASSIGNMENT: a permutation reassigns whole configurations (with every one of
+    their rows) between the two groups; it never splits one configuration's
+    replicates across groups, which is the assumption a plain row-level
+    Mann-Whitney silently makes and D19 section 5.2 (statistical-treatment.md)
+    flagged as wrong for this project's replicated designs.
+
+    Configurations can carry different replicate counts, so the number of ROWS
+    landing in "group 1" varies from one permutation to the next. Each
+    permutation's own n1_rows/n2_rows therefore gets its own Wilcoxon rank-sum
+    expectation and variance (E1 = n1_rows*(N+1)/2, V1 = n1_rows*n2_rows*(N+1)/12)
+    rather than a single fixed value -- so permutations of different shape are
+    still comparable on a common z-like scale.
+
+    Exact enumeration over all C(n1_clusters+n2_clusters, n1_clusters)
+    configuration relabelings below EXACT_ENUMERATION_MAX_ASSIGNMENTS; Monte
+    Carlo above it (same +1/+1-corrected convention as exact_logrank_test).
+    H3's designs stay well inside exact range (single digits to low tens of
+    clusters per side); window_type_recovery_leak.py's COARSE table does not --
+    its per-wait_duration buckets pool the full threshold x window_size grid
+    (18 configs/arm, C(36,18)~9e9), which is exactly why this fallback exists
+    rather than being deferred until it was needed.
+    """
+    EXACT_ENUMERATION_MAX_ASSIGNMENTS = 50000
+
+    n1_clusters, n2_clusters = len(group1_clusters), len(group2_clusters)
+    if n1_clusters < 1 or n2_clusters < 1:
+        raise ValueError(f"cluster_permutation_rank_test needs >=1 configuration per "
+                          f"group (got n1_clusters={n1_clusters}, n2_clusters={n2_clusters})")
+
+    n = n1_clusters + n2_clusters
+    total_assignments = math.comb(n, n1_clusters)
+
+    blocks = [group1_clusters[c] for c in group1_clusters] + [group2_clusters[c] for c in group2_clusters]
+    block_sizes = [len(b) for b in blocks]
+    all_rows = [v for block in blocks for v in block]
+    N = len(all_rows)
+    ranks = _ranks(all_rows)
+
+    block_rank_sums = []
+    idx = 0
+    for size in block_sizes:
+        block_rank_sums.append(sum(ranks[idx:idx + size]))
+        idx += size
+
+    def stat_for(combo) -> float:
+        n1_rows = sum(block_sizes[i] for i in combo)
+        n2_rows = N - n1_rows
+        if n1_rows == 0 or n2_rows == 0:
+            return 0.0
+        R1 = sum(block_rank_sums[i] for i in combo)
+        E1 = n1_rows * (N + 1) / 2.0
+        V1 = n1_rows * n2_rows * (N + 1) / 12.0
+        if V1 <= 0:
+            return 0.0
+        return (R1 - E1) / math.sqrt(V1)
+
+    # The first n1_clusters blocks are group1's by construction (config_ids built
+    # group1-then-group2), and combinations(range(n), n1_clusters) yields
+    # (0,...,n1_clusters-1) first -- that IS the observed assignment.
+    observed_combo = tuple(range(n1_clusters))
+    observed = stat_for(observed_combo)
+    n1_rows_observed = sum(block_sizes[i] for i in observed_combo)
+    n2_rows_observed = N - n1_rows_observed
+
+    if total_assignments <= EXACT_ENUMERATION_MAX_ASSIGNMENTS:
+        two_sided_extreme = 0
+        one_sided_extreme = 0
+        for combo in combinations(range(n), n1_clusters):
+            s = stat_for(combo)
+            if abs(s) >= abs(observed) - 1e-9:
+                two_sided_extreme += 1
+            if s <= observed + 1e-9:
+                one_sided_extreme += 1
+        p_two_sided = two_sided_extreme / total_assignments
+        p_one_sided = one_sided_extreme / total_assignments
+        method, note = "exact-enumeration", ""
+    else:
+        rng = random.Random(seed)
+        idx_all = list(range(n))
+        two_sided_extreme = 0
+        one_sided_extreme = 0
+        for _ in range(resamples):
+            combo = rng.sample(idx_all, n1_clusters)
+            s = stat_for(combo)
+            if abs(s) >= abs(observed) - 1e-9:
+                two_sided_extreme += 1
+            if s <= observed + 1e-9:
+                one_sided_extreme += 1
+        p_two_sided = (two_sided_extreme + 1) / (resamples + 1)
+        p_one_sided = (one_sided_extreme + 1) / (resamples + 1)
+        method = "monte-carlo"
+        note = (f"C({n},{n1_clusters})={total_assignments} exceeds "
+                f"EXACT_ENUMERATION_MAX_ASSIGNMENTS={EXACT_ENUMERATION_MAX_ASSIGNMENTS}; "
+                f"Monte Carlo over {resamples} resamples, +1/+1 correction so p is never exactly 0")
+
+    return ClusterPermutationRankResult(
+        statistic=observed,
+        p_value=(p_two_sided if two_sided else p_one_sided),
+        p_value_one_sided=p_one_sided,
+        n1_clusters=n1_clusters,
+        n2_clusters=n2_clusters,
+        n1_rows_observed=n1_rows_observed,
+        n2_rows_observed=n2_rows_observed,
+        total_assignments=total_assignments,
+        two_sided=two_sided,
+        method=method,
+        note=note,
+    )
+
+
 def self_test() -> bool:
     ok = True
 
@@ -431,6 +570,60 @@ def self_test() -> bool:
         check("empty-arm stratum in the test itself raises", False)
     except ValueError:
         check("empty-arm stratum in the test itself raises", True)
+
+    print("cluster_permutation_rank_test")
+    # Hand-computed: group1={a:[1,2]} (1 config, 2 rows), group2={b:[10],c:[11]}
+    # (2 configs, 1 row each). Pooled ranks of [1,2,10,11] = [1,2,3,4]. Observed
+    # (a=group1): n1_rows=2, R1=1+2=3, E1=2*5/2=5, V1=2*2*5/12=5/3,
+    # z=(3-5)/sqrt(5/3) = -2/1.290994... = -1.549193338...
+    # C(3,1)=3 total relabelings; only the observed one is at least as extreme
+    # in either direction (checked by hand against the other two), so p=1/3.
+    cr = cluster_permutation_rank_test({"a": [1.0, 2.0]}, {"b": [10.0], "c": [11.0]})
+    check("total_assignments == C(3,1) == 3", cr.total_assignments == 3)
+    check("n1_rows_observed/n2_rows_observed == 2/2",
+          cr.n1_rows_observed == 2 and cr.n2_rows_observed == 2)
+    check("hand-computed z == -1.549193...", math.isclose(cr.statistic, -1.5491933384829668))
+    check("hand-computed p == 1/3", math.isclose(cr.p_value, 1 / 3))
+    check("hand-computed one-sided p == 1/3", math.isclose(cr.p_value_one_sided, 1 / 3))
+
+    try:
+        cluster_permutation_rank_test({}, {"b": [1.0]})
+        check("empty-cluster-arm raises", False)
+    except ValueError:
+        check("empty-cluster-arm raises", True)
+
+    # Unequal replicate counts, real within-config spread: group1 is 3 configs
+    # all at value 1.0 (3/2/1 replicates); group2 is two 1-replicate configs at
+    # 5.0 and one 10-replicate config at 0.5. By CONFIG MEANS, group2 looks
+    # mostly higher (5, 5, 0.5) so group1 (all 1.0) reads as ranking slightly
+    # BELOW expectation (negative statistic). By RAW ROWS, group2 is dominated
+    # by its ten 0.5-valued rows (12 of its 12 rows: 2 high + 10 low), which
+    # drags the whole pooled ranking down and makes group1's constant 1.0s read
+    # as ranking ABOVE expectation instead (positive statistic) -- the two
+    # tests don't just disagree in magnitude here, they disagree in DIRECTION,
+    # because one config's mean (0.5) and its 10x replicate weight in the raw
+    # rows are very different quantities. That disagreement is exactly why
+    # this function exists as a separate tool from the mean-collapsed one.
+    rows_case_g1 = {"c1": [1.0, 1.0, 1.0], "c2": [1.0, 1.0], "c3": [1.0]}
+    rows_case_g2 = {"c4": [5.0], "c5": [5.0], "c6": [0.5] * 10}
+    cr2 = cluster_permutation_rank_test(rows_case_g1, rows_case_g2)
+    means_case_g1 = {k: sum(v) / len(v) for k, v in rows_case_g1.items()}
+    means_case_g2 = {k: sum(v) / len(v) for k, v in rows_case_g2.items()}
+    sr2 = stratified_cluster_permutation_test({"only": (means_case_g1, means_case_g2)})
+    check("row-preserving and mean-collapsed statistics have opposite sign here",
+          cr2.statistic > 0 and sr2.statistic < 0)
+    check("row-preserving and mean-collapsed p-values disagree",
+          not math.isclose(cr2.p_value, sr2.p_value, abs_tol=1e-9))
+
+    # 18v18 clusters (C(36,18)~9e9) -- the exact shape window_type_recovery_leak.py's
+    # COARSE table hits (full threshold x window_size grid per wait_duration
+    # bucket), not a contrived stress test.
+    big_g1 = {f"c{i}": [1.0 + 0.01 * i] for i in range(18)}
+    big_g2 = {f"c{i}": [5.0 + 0.01 * i] for i in range(18, 36)}
+    cr_big = cluster_permutation_rank_test(big_g1, big_g2, resamples=2000)
+    check("18v18 clusters falls through to Monte Carlo", cr_big.method == "monte-carlo")
+    check("Monte Carlo p is never exactly 0", cr_big.p_value > 0)
+    check("Monte Carlo catches the complete separation here (p small)", cr_big.p_value < 0.01)
 
     print()
     print("D24's D_w=5/15 comparison, done correctly at the configuration level")

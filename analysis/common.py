@@ -12,6 +12,7 @@ Day 3 (MixedLM, power analysis), not on Days 1-2.
 
 import json
 import os
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -180,6 +181,11 @@ def load(name, apply_exclusions=True):
     """
     spec = DATASETS[name]
     df = pd.read_csv(spec["path"])
+    n_expected = spec.get("n_expected")
+    if n_expected is not None and len(df) != n_expected:
+        print(f"WARN: DATASETS[{name!r}]['n_expected']={n_expected} but {spec['path']} has "
+              f"{len(df)} rows -- the registry annotation has drifted from the real file.",
+              file=sys.stderr)
     df["dataset"] = name
     df["legs"] = df.get("leg_failure_rates", pd.Series([""] * len(df))).map(parse_legs)
     df["blast_frac"] = pd.to_numeric(df["blast_radius"], errors="coerce") / spec["blast_scale"]

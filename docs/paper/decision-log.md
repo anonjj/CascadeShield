@@ -54,6 +54,34 @@ genuine multi-service cascading. Re-derive this table again once D17's fix lands
 re-collected; the qualitative dead-zone/H4 findings are expected to survive, but exact numbers
 will shift.
 
+**Update (2026-09-18, the LATENCY-only re-derivation — not the revisit condition above, which
+still needs FANOUT CRASH).** `analysis/tau_sweep.py`'s own output (`analysis/out/tau_sweep.json`
+and `tau_sweep.csv`) was still the 2026-09-06, pre-CRASH-strip, 704-row file — stale since the
+same day it was written, never re-run since. Re-run against `"current"` as it exists today
+(360 rows, 100% `fault_type=LATENCY`, 198 LINEAR / 162 FANOUT — the 2026-09-06 strip's 324 plus
+the D13 top-up's 36, 2026-09-15):
+
+- **Only order-service ever fires** (`services_that_ever_fire: ["order-service"]`) — back to
+  Day 1's single-leg regime, not the two-leg regime the 2026-09-06 update above described.
+  Expected, not a regression: inventory-service's nonzero readings were 100% CRASH rows (the
+  D17-leg-blending artifact this same update flagged), and CRASH rows are entirely absent from
+  `current` right now (stripped 2026-09-06, LINEAR re-collection sits unmerged in PR #47,
+  FANOUT re-collection never happened).
+- **108 configs, 360 runs.** 153 of 153 non-degenerate threshold pairs still rank differently
+  (H4's core claim unchanged in direction). **Minimum pairwise Kendall's τ is now 0.0189** —
+  down from 0.891 on the 704-row CRASH+LATENCY file, and below even the original 80-row
+  archive's 0.238. **Report this as what it is: the LATENCY-only, single-leg floor, not a
+  contradiction of the 0.891 figure** — that number needed CRASH's second leg to exist at all,
+  and this dataset doesn't have one right now. The three figures (0.238 → 0.891 → 0.0189) are
+  three different datasets answering the same question, not a trend.
+- The τ=0.50 dead-zone finding is unchanged in kind: `informative_tau_range` is now
+  `[0.05, 0.9]` (max observed leg rate 0.9044, up from 0.5 — this session's LINEAR/FANOUT LATENCY
+  sweep reaches higher failure rates than the archives this entry originally cited).
+
+**Still blocked, not answered here:** the *combined* CRASH+LATENCY re-derivation this entry's
+2026-09-06 update asked for needs FANOUT CRASH collected and merged — untouched by this update.
+`STATUS.md`'s embargo on quoting a combined-dataset number stands.
+
 ---
 
 ## D-002 · Contaminated rows are marked, never dropped
@@ -732,6 +760,33 @@ how many parallel downstream paths the topology offers).
 order-service's and inventory-service's CRASH-row values to jump toward the true per-breaker
 rate once the max-of-breakers fix is in, likely resolving (or reshaping, not necessarily
 restoring) the separation on the combined dataset.
+
+**Update (2026-09-18, LATENCY-only re-derivation — the "clean separation" sub-claim above no
+longer holds, corrected here rather than left stale).** `analysis/order_leg_containment.json`
+was still the 2026-09-06, pre-strip, 704-row output — stale the same day it was written. Re-run
+against `"current"` as it exists today (360 rows, 100% LATENCY, 198 LINEAR / 162 FANOUT — the
+strip's 324 plus the D13 top-up's 36 replicates, 2026-09-15):
+
+| window_type | window_size | n | mean `order_leg` |
+|---|---|---|---|
+| COUNT_BASED | 5 | 60 | 0.1150 |
+| COUNT_BASED | 10 | 60 | 0.0881 |
+| COUNT_BASED | 20 | 60 | 0.1958 |
+| TIME_BASED | 5 | 60 | 0.4668 |
+| TIME_BASED | 10 | 60 | 0.4357 |
+| TIME_BASED | 20 | 60 | 0.4005 |
+
+**The "clean separation, no overlap" claim (COUNT max 0.2250 < TIME min 0.2686) does not
+survive the D13 top-up.** COUNT_BASED's max on the current file is **0.3667** — some of the 36
+new rows pushed a `window_size=20` cell higher than before — which now overlaps TIME_BASED's
+min of 0.2686. This is not a reversal of D15's core claim: the pooled 95% CI on the mean is
+[0.116, 0.150] for COUNT vs [0.409, 0.460] for TIME (no overlap at the distribution level), and
+Cliff's $\delta$ = **-0.987** ("large", $n_a$=180, $n_b$=180) — barely moved from -1.0. **What
+changes is the specific sentence that's safe to write**: "clean separation, zero overlap" is no
+longer literally true and should not be quoted; "COUNT and TIME are non-overlapping at the CI
+level with a large, near-maximal Cliff's δ" is the accurate replacement. `STATUS.md` updated to
+match. The combined-dataset embargo two paragraphs up is untouched by this — still blocked on
+FANOUT CRASH.
 
 ---
 

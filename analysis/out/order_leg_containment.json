@@ -1,73 +1,73 @@
 {
   "dataset": "current",
   "topology_counts": {
-    "FANOUT": 354,
-    "LINEAR": 350
+    "LINEAR": 198,
+    "FANOUT": 162
   },
-  "n_rows": 704,
-  "n_distinct_order_leg": 132,
+  "n_rows": 360,
+  "n_distinct_order_leg": 149,
   "by_cell": [
     {
       "window_type": "COUNT_BASED",
       "window_size": 5,
-      "mean": 0.3274193548387097,
-      "count": 124
+      "mean": 0.115,
+      "count": 60
     },
     {
       "window_type": "COUNT_BASED",
       "window_size": 10,
-      "mean": 0.30076754385964916,
-      "count": 114
+      "mean": 0.088125,
+      "count": 60
     },
     {
       "window_type": "COUNT_BASED",
       "window_size": 20,
-      "mean": 0.34434553571428567,
-      "count": 112
+      "mean": 0.19583666666666666,
+      "count": 60
     },
     {
       "window_type": "TIME_BASED",
       "window_size": 5,
-      "mean": 0.46723790322580644,
-      "count": 124
+      "mean": 0.466845,
+      "count": 60
     },
     {
       "window_type": "TIME_BASED",
       "window_size": 10,
-      "mean": 0.45092192982456136,
-      "count": 114
+      "mean": 0.43568500000000004,
+      "count": 60
     },
     {
       "window_type": "TIME_BASED",
       "window_size": 20,
-      "mean": 0.43693275862068964,
-      "count": 116
+      "mean": 0.40049833333333335,
+      "count": 60
     }
   ],
   "ci_by_window_type": {
     "COUNT_BASED": {
-      "n_rows": 350,
-      "n_groups": 108,
-      "point": 0.3241548571428572,
-      "lo": 0.28659970368657506,
-      "hi": 0.3600525494350283
+      "n_rows": 180,
+      "n_groups": 54,
+      "point": 0.13298722222222223,
+      "lo": 0.11624871249173828,
+      "hi": 0.149890709209269
     },
     "TIME_BASED": {
-      "n_rows": 354,
-      "n_groups": 108,
-      "point": 0.4520531073446328,
-      "lo": 0.4403616223163841,
-      "hi": 0.4629306123603621
+      "n_rows": 180,
+      "n_groups": 54,
+      "point": 0.4343427777777778,
+      "lo": 0.408606497564935,
+      "hi": 0.45987405797697367
     }
   },
   "count_time_separation": {
-    "count_max": 0.5,
+    "count_max": 0.3667,
     "time_min": 0.2686,
     "cliffs_delta": {
-      "delta": -0.21704600484261502,
-      "magnitude": "small",
-      "n_a": 350,
-      "n_b": 354
+      "delta": -0.9874074074074074,
+      "magnitude": "large",
+      "n_a": 180,
+      "n_b": 180
     }
   }
 }

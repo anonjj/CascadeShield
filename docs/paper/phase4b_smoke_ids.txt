@@ -1,0 +1,6 @@
+# Phase 4B -- SMOKE list. Exactly one config, deliberately NOT one of the 24 in
+# phase4b_only_ids.txt, so the smoke run can never occupy a sweep cell or be
+# mistaken for sweep data. T30 is absent from Option C (which uses T50 and T70
+# only); W5/D5 is the cheapest cell in the grid.
+# Tracked copy; the launch copies it to data/phase4b_smoke_ids.txt.
+LIN-LAT-CNT-T30-W5-D5

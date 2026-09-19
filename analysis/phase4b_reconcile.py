@@ -94,11 +94,24 @@ FALLBACK_WAIT_S = 30.0
 # forever, and that must not permanently block reconciliation.
 STATUS_FRESH_S = 900.0
 
+# Pre-registered re-collection cap (analysis plan Section 10, 2026-09-20 amendment):
+# at most 2 RE-attempts per (experiment_id, replicate), i.e. 3 attempts in total.
+# A key that is still unusable after 2 re-attempts stays EXCLUDED and is reported as
+# such; it is never re-collected a fourth time and never quietly retried.
+MAX_REATTEMPTS = 2
+# Each quarantine event grants exactly one re-attempt, and each event writes exactly one
+# phase4b_orphans_<timestamp>.csv. So the attempt ledger is derived from those files --
+# no new state to keep in sync, and it survives any session boundary. A key quarantined
+# twice in ONE event (both rows of a DUPLICATE_KEY pair) is one event, so the count is
+# over distinct FILES, not rows.
+ORPHANS_GLOB = "phase4b_orphans_*.csv"
+
 MATCHED = "MATCHED"
 ORPHAN_ROW = "ORPHAN_ROW"
 ORPHAN_ROW_ABORTED = "ORPHAN_ROW_ABORTED"
 DUPLICATE_KEY = "DUPLICATE_KEY"
 ORPHAN_RECORD = "ORPHAN_RECORD"
+AT_REATTEMPT_CAP = "AT_REATTEMPT_CAP"
 
 
 # ----------------------------------------------------------------- primitives
@@ -161,14 +174,44 @@ def key_of(obj):
             str(obj.get("machine_id") or ""), str(obj.get("mode") or ""))
 
 
+def cell_of(obj):
+    """The (experiment_id, replicate) cell -- the unit the re-collection cap counts."""
+    return (str(obj.get("experiment_id") or ""), str(obj.get("replicate") or ""))
+
+
+def count_prior_attempts(audit_dir):
+    """{cell: number of prior quarantine events} read from phase4b_orphans_*.csv.
+
+    One quarantine event -> one orphans file -> one re-attempt granted, so a cell
+    appearing in N distinct files has used N re-attempts. Counting files rather than
+    rows keeps a DUPLICATE_KEY pair (two rows, one event) from consuming two.
+    """
+    import glob
+    counts = {}
+    for path in sorted(glob.glob(os.path.join(audit_dir, ORPHANS_GLOB))):
+        try:
+            with open(path, newline="", encoding="utf-8-sig") as f:
+                cells = {cell_of(r) for r in csv.DictReader(f)}
+        except OSError:
+            continue
+        for c in cells:
+            counts[c] = counts.get(c, 0) + 1
+    return counts
+
+
 # -------------------------------------------------------------------- matching
 
-def reconcile(rows, records, machine_id=None, mode="full"):
+def reconcile(rows, records, machine_id=None, mode="full", prior_attempts=None):
     """Pure function: no I/O. Returns a report dict.
 
-    rows    -- list of CSV row dicts (order preserved; index is identity)
-    records -- list of sidecar record dicts (index is identity)
+    rows           -- list of CSV row dicts (order preserved; index is identity)
+    records        -- list of sidecar record dicts (index is identity)
+    prior_attempts -- {cell: prior quarantine events}, from count_prior_attempts().
+                      A cell at MAX_REATTEMPTS is classified AT_REATTEMPT_CAP and is
+                      NOT quarantined: its row stays in the CSV, which is what stops
+                      the runner re-collecting it (see the caveat in `capped_aborted`).
     """
+    prior_attempts = prior_attempts or {}
     # 1. Duplicate (experiment_id, replicate) keys in the CSV. A cell with two
     #    measurements cannot be reconciled -- we cannot know which is the real
     #    one -- so EVERY row of a duplicated key is quarantined and the cell is
@@ -219,18 +262,33 @@ def reconcile(rows, records, machine_id=None, mode="full"):
 
     classes = {}
     for i, row in enumerate(rows):
-        if i in dup_idx:
-            classes[i] = DUPLICATE_KEY
-        elif i in row_to_rec:
+        if i in row_to_rec and i not in dup_idx:
             classes[i] = MATCHED
+        elif prior_attempts.get(cell_of(row), 0) >= MAX_REATTEMPTS:
+            # Cap reached BEFORE any other unusable-row class is assigned, so a capped
+            # key can never be re-collected by way of DUPLICATE_KEY or ORPHAN_ROW.
+            classes[i] = AT_REATTEMPT_CAP
+        elif i in dup_idx:
+            classes[i] = DUPLICATE_KEY
         elif str(row.get("precondition_ok") or "") != "True":
             classes[i] = ORPHAN_ROW_ABORTED
         else:
             classes[i] = ORPHAN_ROW
 
     orphan_records = [j for j in range(len(records)) if j not in rec_to_row]
-    keep = [i for i in range(len(rows)) if classes[i] == MATCHED]
-    quarantine = [i for i in range(len(rows)) if classes[i] != MATCHED]
+    capped = [i for i in range(len(rows)) if classes[i] == AT_REATTEMPT_CAP]
+    # Rows that STAY in the CSV: the good ones, plus the capped ones. Leaving a capped
+    # row in place is the enforcement mechanism -- load_completed() keeps treating it as
+    # done, so the runner never reschedules that cell.
+    keep = [i for i in range(len(rows)) if classes[i] in (MATCHED, AT_REATTEMPT_CAP)]
+    quarantine = [i for i in range(len(rows)) if classes[i] not in (MATCHED, AT_REATTEMPT_CAP)]
+    # ...with one honest exception. load_completed() only skips rows with
+    # precondition_ok=="True", so leaving an ABORTED capped row in place does NOT stop
+    # the runner retrying it. The runner has no per-attempt state and is read-only for
+    # this phase, so these are reported for the operator to act on (stop resuming that
+    # config) rather than silently "handled".
+    capped_aborted = [i for i in capped
+                      if str(rows[i].get("precondition_ok") or "") != "True"]
 
     counts = {}
     for c in classes.values():
@@ -239,6 +297,8 @@ def reconcile(rows, records, machine_id=None, mode="full"):
 
     return {"classes": classes, "row_to_rec": row_to_rec, "rec_to_row": rec_to_row,
             "orphan_records": orphan_records, "keep": keep, "quarantine": quarantine,
+            "capped": capped, "capped_aborted": capped_aborted,
+            "attempts": {cell_of(r): prior_attempts.get(cell_of(r), 0) + 1 for r in rows},
             "counts": counts, "fallback_wait_rows": sorted(fallback_rows),
             "n_rows": len(rows), "n_records": len(records)}
 
@@ -453,6 +513,60 @@ def self_test():
     expect("row matched once", r["classes"][0], MATCHED)
     expect("exactly one record left over", len(r["orphan_records"]), 1)
 
+    print("10. re-collection cap: at most 2 re-attempts per (experiment_id, replicate)")
+    rows_ = [_row(A, 1, RTS), _row(B, 1, RTS)]
+    recs_ = [_rec(A, 1, INJ, CLR)]           # B is an orphan every time
+    r = reconcile(rows_, recs_, prior_attempts={})
+    expect("attempt 1 (no priors) -> quarantined", r["classes"][1], ORPHAN_ROW)
+    expect("attempt 1 -> attempt number reported", r["attempts"][(B, "1")], 1)
+    r = reconcile(rows_, recs_, prior_attempts={(B, "1"): 1})
+    expect("after 1 re-attempt -> still quarantined", r["classes"][1], ORPHAN_ROW)
+    expect("attempt number reported", r["attempts"][(B, "1")], 2)
+    r = reconcile(rows_, recs_, prior_attempts={(B, "1"): 2})
+    expect("after 2 re-attempts -> AT_REATTEMPT_CAP", r["classes"][1], AT_REATTEMPT_CAP)
+    expect("capped row is NOT quarantined", r["quarantine"], [])
+    expect("capped row STAYS in the csv", r["keep"], [0, 1])
+    expect("attempt number reported", r["attempts"][(B, "1")], 3)
+    r = reconcile(rows_, recs_, prior_attempts={(B, "1"): 5})
+    expect("beyond the cap stays capped", r["classes"][1], AT_REATTEMPT_CAP)
+    # the cap outranks every other unusable class
+    r = reconcile([_row(A, 1, RTS), _row(A, 1, "2026-09-21T11:01:10Z")],
+                  [_rec(A, 1, INJ, CLR)], prior_attempts={(A, "1"): 2})
+    expect("cap outranks DUPLICATE_KEY", [r["classes"][0], r["classes"][1]],
+           [AT_REATTEMPT_CAP, AT_REATTEMPT_CAP])
+    r = reconcile([_row(B, 1, RTS, ok="False")], [], prior_attempts={(B, "1"): 2})
+    expect("cap outranks ORPHAN_ROW_ABORTED", r["classes"][0], AT_REATTEMPT_CAP)
+    expect("capped ABORTED row is flagged -- the runner would still retry it",
+           r["capped_aborted"], [0])
+    r = reconcile([_row(B, 1, RTS)], [], prior_attempts={(B, "1"): 2})
+    expect("capped COMPLETED row needs no operator action", r["capped_aborted"], [])
+    # a matched row is never capped, however many prior attempts it took
+    r = reconcile([_row(A, 1, RTS)], [_rec(A, 1, INJ, CLR)], prior_attempts={(A, "1"): 2})
+    expect("a good row on attempt 3 is MATCHED, not capped", r["classes"][0], MATCHED)
+
+    print("10b. attempt ledger is derived from the orphans files, counting FILES not rows")
+    tmpd = tempfile.mkdtemp(prefix="phase4b_ledger_selftest_")
+    try:
+        def write_orphans(name, cells):
+            with open(os.path.join(tmpd, name), "w", newline="", encoding="utf-8") as f:
+                w = csv.DictWriter(f, fieldnames=["experiment_id", "replicate"])
+                w.writeheader()
+                for e, rp in cells:
+                    w.writerow({"experiment_id": e, "replicate": rp})
+        expect("no files -> no priors", count_prior_attempts(tmpd), {})
+        write_orphans("phase4b_orphans_20260921T000000Z.csv", [(A, "1"), (B, "1")])
+        expect("one event -> 1 each", count_prior_attempts(tmpd), {(A, "1"): 1, (B, "1"): 1})
+        write_orphans("phase4b_orphans_20260921T010000Z.csv", [(B, "1")])
+        expect("second event -> B at 2", count_prior_attempts(tmpd)[(B, "1")], 2)
+        expect("A unchanged", count_prior_attempts(tmpd)[(A, "1")], 1)
+        # a DUPLICATE_KEY pair is two rows in ONE file: still one re-attempt
+        write_orphans("phase4b_orphans_20260921T020000Z.csv", [(A, "1"), (A, "1")])
+        expect("duplicate rows in one file count once", count_prior_attempts(tmpd)[(A, "1")], 2)
+        write_orphans("unrelated_file.csv", [(A, "1")])
+        expect("non-orphans files are ignored", count_prior_attempts(tmpd)[(A, "1")], 2)
+    finally:
+        shutil.rmtree(tmpd, ignore_errors=True)
+
     print("9. --apply rewrites the CSV so the runner reschedules the quarantined key")
     tmpd = tempfile.mkdtemp(prefix="phase4b_reconcile_selftest_")
     try:
@@ -530,21 +644,26 @@ def main():
     with open(a.transitions, encoding="utf-8") as f:
         records = [json.loads(l) for l in f if l.strip()]
 
-    rep = reconcile(rows, records, machine_id=a.machine_id, mode=a.mode)
+    prior = count_prior_attempts(a.audit_dir)
+    rep = reconcile(rows, records, machine_id=a.machine_id, mode=a.mode,
+                    prior_attempts=prior)
 
     print(f"dataset      : {a.dataset}  ({rep['n_rows']} rows, sha256 {sha256_file(a.dataset)})")
     print(f"transitions  : {a.transitions}  ({rep['n_records']} records, "
           f"sha256 {sha256_file(a.transitions)})")
     print(f"filter       : mode={a.mode!r}  machine_id={a.machine_id!r}")
     print(f"window       : [inj-{LOW_SLACK_S:g}s, cleared+3*wait+60+{POST_RECOVERY_MARGIN_S:g}s]")
+    print(f"attempt cap  : {MAX_REATTEMPTS} re-attempts per key "
+          f"({len(prior)} key(s) have prior quarantine events)")
     print()
-    for k in (MATCHED, ORPHAN_ROW, ORPHAN_ROW_ABORTED, DUPLICATE_KEY, ORPHAN_RECORD):
+    for k in (MATCHED, ORPHAN_ROW, ORPHAN_ROW_ABORTED, DUPLICATE_KEY,
+              AT_REATTEMPT_CAP, ORPHAN_RECORD):
         print(f"  {k:<20} {rep['counts'].get(k, 0)}")
     if rep["fallback_wait_rows"]:
         print(f"\n  !! {len(rep['fallback_wait_rows'])} row(s) had no usable wait_duration; "
               f"the widest window ({FALLBACK_WAIT_S:g}s) was used for them")
 
-    print("\nCSV rows without a sidecar record:")
+    print("\nCSV rows to quarantine (their keys will be re-collected):")
     any_row = False
     for i in rep["quarantine"]:
         any_row = True
@@ -552,9 +671,24 @@ def main():
         print(f"  line {i + 2:>4}  {rep['classes'][i]:<20} {r.get('experiment_id')} "
               f"rep={r.get('replicate')} machine={r.get('machine_id')} "
               f"mode={r.get('mode')} ts={r.get('run_timestamp')} "
-              f"precondition_ok={r.get('precondition_ok')}")
+              f"precondition_ok={r.get('precondition_ok')} "
+              f"attempt={rep['attempts'].get(cell_of(r))}/{MAX_REATTEMPTS + 1}")
     if not any_row:
         print("  (none)")
+
+    if rep["capped"]:
+        print(f"\nAT RE-ATTEMPT CAP -- permanently EXCLUDED, not re-collected "
+              f"({MAX_REATTEMPTS} re-attempts already used):")
+        for i in rep["capped"]:
+            r = rows[i]
+            print(f"  line {i + 2:>4}  {r.get('experiment_id')} rep={r.get('replicate')} "
+                  f"attempt={rep['attempts'].get(cell_of(r))} "
+                  f"precondition_ok={r.get('precondition_ok')}")
+        if rep["capped_aborted"]:
+            print("  !! OPERATOR ACTION: the rows above marked precondition_ok != True are "
+                  "NOT\n     protected by leaving them in place -- load_completed() only "
+                  "skips True rows,\n     so a resume WILL retry them. Stop resuming, or "
+                  "accept and report the extra\n     attempts as a deviation.")
 
     print("\nSidecar records without a CSV row:")
     if not rep["orphan_records"]:

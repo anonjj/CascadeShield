@@ -12,8 +12,8 @@ later approval.
 
 | artifact | value |
 |---|---|
-| Pre-registration, **superseded** | `8f1623b` — superseded on 2026-09-20, **before any run** |
-| Pre-registration, **FINAL** | **`34bfda7c7fe5cda70725508b654a162ef28161c9`** |
+| Pre-registration, **superseded** | `8f1623b`, then `34bfda7` — both superseded on 2026-09-20, **before any run** |
+| Pre-registration, **FINAL** | **`3e4ad1e5d0596883bbd35604828d0d2db39a9eb2`** |
 | Branch | `h3-evidence-audit` (not pushed) |
 | Design | Option C — 24 configs x 3 replicates = **72 runs** |
 | Arms | LINEAR topology, LATENCY fault, COUNT_BASED vs TIME_BASED |
@@ -25,8 +25,20 @@ later approval.
 | Sidecar baseline | `data/cb_transitions.jsonl`, **73** records, sha256 `ffad69d6755c8a33e5d2b064a56354981a4fda82c742d642c0097abbf0dbee0e` (verified 2026-09-20) |
 | Host | Windows 11 Pro 26200, inside OneDrive; **OneDrive sync paused for the run** |
 
-The analytic rules are frozen as of `34bfda7`. Any later change is reported as a deviation,
+The analytic rules are frozen as of `3e4ad1e`. Any later change is reported as a deviation,
 never edited in.
+
+Two amendments were made on 2026-09-20, both before any run. `8f1623b` → `34bfda7` added the
+lambda gate (§9), quarantine/re-collection (§10) and the poller duty cycle (§11).
+`34bfda7` → `3e4ad1e` added:
+
+| new | what it fixes |
+|---|---|
+| **§3.2** censoring sensitivity | the primary rule (drop censored replicates) biases config means **downward**; the sensitivity imputes each at `3*wait+60` and both are reported |
+| **§5.1** horizon fallback | a null `time_to_recover` used to collapse the horizon to `cleared + 5 s`; it now falls back to `3*wait+60` |
+| **§9.1** lambda instrument | `lambda_achieved` is **2.3x-3.9x noisier in the COUNT arm** — 39-59 intervals over 4-6 s vs 199-599 over 20-60 s |
+| **§9.2** exclusion reporting + margin | per-arm exclusion counts before any p-value; a no-lambda-exclusion sensitivity fires at **>10 pp** between arms, or **>20%** in either |
+| **§10.1** re-collection cap | at most **2 re-attempts** per key; every attempt counted; a key past the cap stays excluded |
 
 ### Tracked input lists
 
@@ -92,7 +104,7 @@ Get-Process OneDrive -ErrorAction SilentlyContinue |
 
 | item | value | note |
 |---|---|---|
-| `git rev-parse HEAD` | `34bfda7` at the time of writing | re-read at launch; it moves |
+| `git rev-parse HEAD` | `3e4ad1e` at the time of writing | re-read at launch; it moves |
 | `git status --porcelain` | clean before this session's commits | must be clean at launch |
 | Sidecar | 73 records, `ffad69d6…bee0e` | matches the decided baseline |
 | Disk `C:` | 232 G total, **27 G free (89% used)** | see the warning below |
@@ -104,8 +116,8 @@ Get-Process OneDrive -ErrorAction SilentlyContinue |
 
 > **Disk.** 27 G free with a 17.8 G Docker build cache is the thinnest resource here. A 72-run
 > sweep force-recreates six containers 72 times and writes a ~300 KB/run poll log — small — but
-> a full image rebuild mid-sweep is not. `docker builder prune` would reclaim ~15 G. That is a
-> write operation, so it is **not** done here; decide before GO SMOKE.
+> a full image rebuild mid-sweep is not. `docker builder prune` would reclaim ~15 G but was
+> **declined** (§2.0), so the sweep launches with this margin. Re-check `df -h .` at launch.
 
 > **RAM.** 2.96 G free is measured with the mesh **down**. Bring the mesh up and re-check
 > before GO SMOKE; if the JVMs swap, `time_to_recover` is measuring the host, not the breaker.
@@ -113,6 +125,14 @@ Get-Process OneDrive -ErrorAction SilentlyContinue |
 ---
 
 ## 2. Smoke run (Part B — requires "GO SMOKE")
+
+### 2.0 Decisions carried in from the Part A review (2026-09-20)
+
+| decision | status |
+|---|---|
+| Smoke writes to `data/phase4b_smoke.csv`, not the sweep file | **approved** |
+| `docker builder prune` | **skipped** — launching with ~27 G free; re-check `df -h .` at launch |
+| Dummy-job survival test | **PASSED** (closed-window test only; no logout/lock/suspend variant was run, so job survival is established against *closing the terminal* and nothing stronger) |
 
 ### 2.1 The output-path problem, and the decision taken
 
@@ -300,6 +320,18 @@ will **silently skip** those cells, because `load_completed()` counts any
 5. **Record** how many keys were re-collected, by class. Pre-registration §10 requires that
    number in the results, alongside the exclusion counts and before any p-value.
 
+**The re-attempt cap (§10.1) is enforced here.** `phase4b_reconcile.py` derives each key's
+attempt number from the `data/audit/phase4b_orphans_*.csv` files — one quarantine event per
+file — and prints it next to every row it would quarantine. A key that has already used its
+**2 re-attempts** is classified `AT_REATTEMPT_CAP`, is **not** quarantined, and its row is left
+in the CSV so `load_completed()` keeps skipping it.
+
+> **Watch the one case that is not self-enforcing.** If a capped key's row has
+> `precondition_ok != True`, leaving it in place does **not** stop a resume retrying it —
+> `load_completed()` only skips `True` rows. The reconciler prints an explicit OPERATOR ACTION
+> warning for exactly these rows. Stop resuming that sweep, or report the extra attempts as a
+> deviation. Do not edit the dataset to work around it.
+
 ---
 
 ## 5. Post-sweep integrity check
@@ -316,10 +348,11 @@ Every item is a gate: if one fails, the dataset is not cleared for the H3 analys
 | 3a | the sidecar was **appended to**, not truncated or rewritten |
 | 3b | its first 73 records are still the recorded baseline (structural hash) |
 | 3c | exactly **72 in-scope** post-baseline records. Every post-baseline record is validated on `experiment_id` + `replicate` + `machine_id` + `mode` + the sweep's time window **and** the manifest's `--only-ids` list. Anything unexpected, on the wrong machine, in the wrong mode, with an out-of-range replicate, outside the sweep's time range, **or the smoke run's own record**, is reported with its reason and **excluded — never silently counted** |
-| 4 | all 72 rows reconcile **one-to-one** with an in-scope record; zero orphan rows, zero orphan records |
+| 4 | all 72 rows reconcile **one-to-one** with an in-scope record; zero orphan rows, zero orphan records, zero keys at the re-attempt cap |
+| 4b | **no key exceeded 2 re-attempts** (§10.1), and the full attempt ledger is printed *whether or not* the gate fires — the re-collection count is required output, not just a tripwire |
 | 5 | all 72 rows have `precondition_ok == True` |
 | 6 | **no gateway `CLOSED_TO_OPEN`** in any in-scope record |
-| 7 | **poller coverage per run**: every run `VERIFIED_CLEAN` under the pre-registered §5 horizon and §6 verdict rule, with `POLL_ERROR` / `MISSING_TICK` / `GATEWAY_NOT_CLOSED` / `POLLER_STOPPED` reported separately. A missing poll log is reported as UNVERIFIED, which the plan treats as `NOT_VERIFIED`, not as clean |
+| 7 | **poller coverage per run**: every run `VERIFIED_CLEAN` under the pre-registered §5 horizon and §6 verdict rule, with `POLL_ERROR` / `MISSING_TICK` / `GATEWAY_NOT_CLOSED` / `POLLER_STOPPED` reported separately. A missing poll log is reported as UNVERIFIED, which the plan treats as `NOT_VERIFIED`, not as clean. Runs with a **null `time_to_recover`** use the §5.1 `3*wait+60` fallback horizon and are counted and flagged |
 | 8 | gateway **image ID unchanged** vs the manifest, and the running container is still on that image |
 
 Self-tested with synthetic data (`--self-test`): the exclusion path is exercised for a smoke
@@ -353,8 +386,9 @@ before, or is the Windows analogue of something that has.
    curl -o /dev/null -w '%{http_code}\n' http://localhost:8080/api/v1/linear   # expect 200
    ```
    `up -d --build` is also what makes the §7 image check pass — see the note there.
-5. **Free disk.** Currently **27 G**. Decide whether to `docker builder prune` (~15 G
-   reclaimable) first. Also re-check free RAM with the mesh **up**, not down.
+5. **Free disk.** Currently **27 G**. `docker builder prune` was **declined** (§2.0), so the
+   17.8 G build cache stays. Re-check `df -h .` at launch, and re-check free RAM with the mesh
+   **up**, not down — 2.96 G free was measured with it down.
 6. **OneDrive stays paused** for longer than the run will take. OneDrive's pause is a fixed
    duration (2 / 8 / 24 h); confirm the window covers it. The repo lives inside OneDrive, so a
    resumed sync mid-run can touch files under `data/` while the runner is appending to them.
@@ -369,6 +403,11 @@ before, or is the Windows analogue of something that has.
    must not be launched from an interactive window — use a detached launcher or a scheduled
    task instead, and record which.
 
+   **Status: PASSED** (2026-09-20) — the job survived the window closing. Scope of that
+   result, stated precisely: it establishes survival against **closing the terminal only**.
+   It says nothing about a logout, a lock-screen suspend, or the S0 low-power idle state this
+   machine supports, none of which were tested. Item 2 is still the binding risk.
+
 ---
 
 ## 7. Manifest JSON (consumed by the post-sweep check)
@@ -379,8 +418,8 @@ filled in. `sidecar_baseline_struct_sha256` is optional; omit it to skip gate 3b
 ```json
 {
   "git_head": "<git rev-parse HEAD at launch>",
-  "preregistration_sha": "34bfda7c7fe5cda70725508b654a162ef28161c9",
-  "preregistration_superseded": "8f1623b",
+  "preregistration_sha": "3e4ad1e5d0596883bbd35604828d0d2db39a9eb2",
+  "preregistration_superseded": ["8f1623b", "34bfda7"],
   "machine_id": "soham-local",
   "mode": "full",
   "fault": "latency",
@@ -390,6 +429,7 @@ filled in. `sidecar_baseline_struct_sha256` is optional; omit it to skip gate 3b
   "dataset_path": "data/phase4b_postd25.csv",
   "transitions_path": "data/cb_transitions.jsonl",
   "poll_path": "data/audit/phase4b_poll.jsonl",
+  "audit_dir": "data/audit",
   "only_ids_file": "docs/paper/phase4b_only_ids.txt",
   "only_ids_sha256": "6d6e57452ba56e814cb525d1a0f48c7b6c198830f7d8296a6bf856f2e36a0f12",
   "smoke_ids_sha256": "35aa1a330cc17c7cbbdb760b0aa851c7862ae693a7e49979f879bb64ce9e518d",

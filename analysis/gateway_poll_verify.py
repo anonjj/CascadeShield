@@ -154,8 +154,15 @@ def load_poll(path):
     return ticks, start, stop
 
 
-def horizon_for(fault_injected_at, fault_cleared_at, time_to_recover):
-    """Pre-registered observation horizon.
+def half_open_probe_deadline_s(wait_duration):
+    """Mirror of experiments/breaker_observer.py:half_open_probe_deadline_s (3*wait + 60).
+    Duplicated rather than imported so this stays an independent witness that pulls in
+    nothing from the harness it is checking."""
+    return 3.0 * float(wait_duration) + 60.0
+
+
+def horizon_for(fault_injected_at, fault_cleared_at, time_to_recover, wait_duration=None):
+    """Pre-registered observation horizon (analysis plan Section 5).
 
     start = fault_injected_at                       (sidecar record)
     end   = fault_cleared_at                        (sidecar record)
@@ -165,12 +172,38 @@ def horizon_for(fault_injected_at, fault_cleared_at, time_to_recover):
     time_to_recover is measured from cb_open_at, not from fault_cleared_at, so adding it
     to fault_cleared_at over-covers rather than under-covers. That is deliberate: this
     horizon gates a coverage REQUIREMENT, and erring long makes the requirement stricter.
+
+    NULL time_to_recover (2026-09-20 amendment). A blank time_to_recover means the run
+    never observed a closure, so there is no measured recovery interval to add. The old
+    behaviour substituted 0.0, which SHORTENED the horizon to fault_cleared_at + 5s --
+    making coverage trivially easy to satisfy for exactly the runs whose evidence is
+    weakest. The pre-registered fallback is half_open_probe_deadline_s(wait_duration) =
+    3*wait + 60 (75s / 105s / 150s at D_w 5 / 15 / 30): the longest interval the harness
+    could still have been watching for a closure, which keeps the requirement strictest
+    where the measurement failed, consistent with the "err long" rule above.
+
+    If time_to_recover is null AND wait_duration is unusable, the horizon is UNDEFINED and
+    (None, None) is returned -- the caller must treat that as NOT_VERIFIED, never as a
+    zero-length recovery.
     """
     lo = parse_ts(fault_injected_at)
     hi_base = parse_ts(fault_cleared_at) or lo
     if lo is None or hi_base is None:
         return None, None
-    ttr = float(time_to_recover) if time_to_recover not in (None, "") else 0.0
+    if time_to_recover not in (None, ""):
+        try:
+            ttr = float(time_to_recover)
+        except (TypeError, ValueError):
+            ttr = None
+    else:
+        ttr = None
+    if ttr is None:
+        if wait_duration in (None, ""):
+            return None, None
+        try:
+            ttr = half_open_probe_deadline_s(wait_duration)
+        except (TypeError, ValueError):
+            return None, None
     return lo, hi_base + ttr + HORIZON_MARGIN_S
 
 
@@ -289,6 +322,24 @@ def self_test():
     a, b = horizon_for("2026-09-20T10:00:00Z", "2026-09-20T10:00:09Z", "31.1")
     expect("horizon length = 9 + 31.1 + 5", round(b - a, 1), 45.1)
 
+    # 9. NULL time_to_recover falls back to 3*wait + 60, never to 0 (2026-09-20 amendment)
+    for wait, deadline in ((5, 75.0), (15, 105.0), (30, 150.0)):
+        a, b = horizon_for("2026-09-20T10:00:00Z", "2026-09-20T10:00:09Z", "",
+                           wait_duration=wait)
+        expect(f"null ttr, D_w={wait} -> 9 + {deadline:g} + 5",
+               round(b - a, 1), round(9 + deadline + 5, 1))
+    a, b = horizon_for("2026-09-20T10:00:00Z", "2026-09-20T10:00:09Z", None,
+                       wait_duration=30)
+    expect("None ttr behaves like blank", round(b - a, 1), 164.0)
+    a, b = horizon_for("2026-09-20T10:00:00Z", "2026-09-20T10:00:09Z", "not-a-number",
+                       wait_duration=5)
+    expect("unparseable ttr also falls back", round(b - a, 1), 89.0)
+    expect("null ttr + no wait_duration -> UNDEFINED, not zero-length",
+           horizon_for("2026-09-20T10:00:00Z", "2026-09-20T10:00:09Z", ""), (None, None))
+    a0, b0 = horizon_for("2026-09-20T10:00:00Z", "2026-09-20T10:00:09Z", "3.0",
+                         wait_duration=30)
+    expect("a measured ttr still wins over the fallback", round(b0 - a0, 1), 17.0)
+
     print("\nself-test:", "PASS" if ok else "FAIL")
     return ok
 
@@ -323,16 +374,21 @@ def main():
     ticks, pstart, pstop = load_poll(a.polls)
     recs = [json.loads(l) for l in open(a.transitions, encoding="utf-8") if l.strip()]
     rows = list(csv.DictReader(open(a.dataset, newline="", encoding="utf-8-sig")))
-    ttr = {(r["experiment_id"], str(r["replicate"])): r.get("time_to_recover", "")
+    # wait_duration travels with time_to_recover so horizon_for can apply the
+    # pre-registered 3*wait+60 fallback when the recovery time is null.
+    ttr = {(r["experiment_id"], str(r["replicate"])):
+           (r.get("time_to_recover", ""), r.get("wait_duration", ""))
            for r in rows}
     print(f"poll ticks={len(ticks)}  sidecar records={len(recs)}  dataset rows={len(rows)}")
     counts = {}
     for rec in recs:
         key = (rec.get("experiment_id"), str(rec.get("replicate")))
+        r_ttr, r_wait = ttr.get(key, ("", ""))
         lo, hi = horizon_for(rec.get("fault_injected_at"), rec.get("fault_cleared_at"),
-                             ttr.get(key, ""))
+                             r_ttr, wait_duration=r_wait)
         if lo is None:
-            print(f"  {key}: NOT_VERIFIED (no usable timestamps)")
+            print(f"  {key}: NOT_VERIFIED (horizon undefined -- unusable timestamps, or "
+                  "a null time_to_recover with no wait_duration to fall back on)")
             counts["NOT_VERIFIED"] = counts.get("NOT_VERIFIED", 0) + 1
             continue
         trips = [t for t in rec.get("transitions", [])

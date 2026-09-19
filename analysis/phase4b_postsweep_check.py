@@ -42,8 +42,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from phase4b_reconcile import (MATCHED, parse_ts, reconcile,  # noqa: E402
-                               sha256_file)
+from phase4b_reconcile import (AT_REATTEMPT_CAP, MATCHED, MAX_REATTEMPTS,  # noqa: E402
+                               cell_of, count_prior_attempts, parse_ts,
+                               reconcile, sha256_file)
 import gateway_poll_verify as gpv  # noqa: E402
 
 N_EXPECTED_CONFIGS = 24
@@ -163,22 +164,43 @@ def _sha(text):
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def check_4_reconcile(rep, rows, in_scope, machine_id, mode):
-    r = reconcile(rows, in_scope, machine_id=machine_id, mode=mode)
+def check_4_reconcile(rep, rows, in_scope, machine_id, mode, prior_attempts=None):
+    r = reconcile(rows, in_scope, machine_id=machine_id, mode=mode,
+                  prior_attempts=prior_attempts)
     det = [f"matched={r['counts'].get(MATCHED, 0)}",
            f"orphan CSV rows={len(r['quarantine'])}",
+           f"at re-attempt cap={len(r['capped'])}",
            f"orphan sidecar records={len(r['orphan_records'])}"]
-    for i in r["quarantine"]:
-        det.append(f"orphan row line {i + 2}: {rows[i].get('experiment_id')} "
+    for i in r["quarantine"] + r["capped"]:
+        det.append(f"unmatched row line {i + 2}: {rows[i].get('experiment_id')} "
                    f"rep={rows[i].get('replicate')} [{r['classes'][i]}]")
     for j in r["orphan_records"]:
         det.append(f"orphan record {j}: {in_scope[j].get('experiment_id')} "
                    f"rep={in_scope[j].get('replicate')}")
     rep.add(r["counts"].get(MATCHED, 0) == N_EXPECTED_RUNS
-            and not r["quarantine"] and not r["orphan_records"],
+            and not r["quarantine"] and not r["capped"] and not r["orphan_records"],
             f"4. all {N_EXPECTED_RUNS} rows reconcile one-to-one with a record",
             "\n".join(det))
     return r
+
+
+def check_4b_attempts(rep, rows, prior_attempts):
+    """Pre-registration Section 10: every attempt is counted and reported, and no key
+    exceeds MAX_REATTEMPTS. This gate reports the ledger even when it passes -- the
+    re-collection count is required output, not just a tripwire."""
+    per = {}
+    for row in rows:
+        c = cell_of(row)
+        per[c] = prior_attempts.get(c, 0) + 1
+    recollected = {c: n for c, n in per.items() if n > 1}
+    over = {c: n for c, n in per.items() if n > MAX_REATTEMPTS + 1}
+    det = [f"keys collected on the first attempt: {len(per) - len(recollected)}",
+           f"keys re-collected at least once   : {len(recollected)}",
+           f"cap: {MAX_REATTEMPTS} re-attempts ({MAX_REATTEMPTS + 1} attempts) per key"]
+    for c, n in sorted(recollected.items()):
+        det.append(f"  {c[0]} rep={c[1]}: attempt {n} of {MAX_REATTEMPTS + 1}"
+                   + ("   <-- OVER CAP" if n > MAX_REATTEMPTS + 1 else ""))
+    rep.add(not over, f"4b. no key exceeded {MAX_REATTEMPTS} re-attempts", "\n".join(det))
 
 
 def check_5_precondition(rep, rows):
@@ -207,22 +229,34 @@ def check_7_poller(rep, rows, in_scope, poll_path):
                 "the plan treats as NOT_VERIFIED, not as clean")
         return {}
     ticks, pstart, pstop = gpv.load_poll(poll_path)
-    ttr = {(r.get("experiment_id"), str(r.get("replicate"))): r.get("time_to_recover", "")
+    # wait_duration rides along so a null time_to_recover falls back to the
+    # pre-registered 3*wait+60 horizon rather than collapsing to +0s.
+    ttr = {(r.get("experiment_id"), str(r.get("replicate"))):
+           (r.get("time_to_recover", ""), r.get("wait_duration", ""))
            for r in rows}
     counts, lines = {}, [f"poll ticks={len(ticks)}"]
+    n_fallback = 0
     for rec in in_scope:
         key = (rec.get("experiment_id"), str(rec.get("replicate")))
+        r_ttr, r_wait = ttr.get(key, ("", ""))
+        if r_ttr in (None, ""):
+            n_fallback += 1
         lo, hi = gpv.horizon_for(rec.get("fault_injected_at"), rec.get("fault_cleared_at"),
-                                 ttr.get(key, ""))
+                                 r_ttr, wait_duration=r_wait)
         if lo is None:
             counts["NOT_VERIFIED"] = counts.get("NOT_VERIFIED", 0) + 1
-            lines.append(f"{key[0]} rep={key[1]}: NOT_VERIFIED (no usable timestamps)")
+            lines.append(f"{key[0]} rep={key[1]}: NOT_VERIFIED (horizon undefined -- "
+                         "unusable timestamps, or a null time_to_recover with no "
+                         "wait_duration to fall back on)")
             continue
         res = gpv.check_run(ticks, pstart, pstop, lo, hi, gateway_trips(rec))
         counts[res["verdict"]] = counts.get(res["verdict"], 0) + 1
         lines.append(f"{key[0]:26s} rep={key[1]:>2s} {res['verdict']:<15} "
                      f"ticks={res['ticks']:>4d} uncovered={res['uncovered_s']:>3d} "
                      f"issues={','.join(res['issues']) or '-'}")
+    if n_fallback:
+        lines.append(f"!! {n_fallback} run(s) had a null time_to_recover; their horizon "
+                     "used the pre-registered 3*wait+60 fallback")
     lines.append(f"totals: {counts}")
     rep.add(counts.get("VERIFIED_CLEAN", 0) == N_EXPECTED_RUNS,
             f"7. all {N_EXPECTED_RUNS} runs VERIFIED_CLEAN under the pre-registered "
@@ -335,6 +369,30 @@ def self_test():
     expect("duplicate key caught", r.rows[1][0], False)
     expect("wrong row count caught", r.rows[0][0], False)
 
+    # --- 2026-09-20 amendment: re-collection cap ledger (Section 10) ---------------
+    cell = ("LIN-LAT-CNT-T50-W5-D5", "1")
+    rows1 = [{"experiment_id": cell[0], "replicate": cell[1]}]
+    r = Report(); check_4b_attempts(r, rows1, {})
+    expect("first-attempt key passes the cap gate", r.rows[0][0], True)
+    expect("first-attempt key is not listed as re-collected",
+           "re-collected at least once   : 0" in r.rows[0][2], True)
+    r = Report(); check_4b_attempts(r, rows1, {cell: 2})
+    expect("attempt 3 (2 re-attempts) is at the cap, not over it", r.rows[0][0], True)
+    expect("re-collection is reported even when it passes",
+           "attempt 3 of 3" in r.rows[0][2], True)
+    r = Report(); check_4b_attempts(r, rows1, {cell: 3})
+    expect("attempt 4 exceeds the cap", r.rows[0][0], False)
+    expect("over-cap key is named", "OVER CAP" in r.rows[0][2], True)
+
+    # --- 2026-09-20 amendment: Section 5 horizon fallback -------------------------
+    INJ2, CLR2 = "2026-09-21T10:00:00Z", "2026-09-21T10:00:09Z"
+    a, b = gpv.horizon_for(INJ2, CLR2, "", wait_duration="30")
+    expect("null time_to_recover -> 9 + (3*30+60) + 5", round(b - a, 1), 164.0)
+    a, b = gpv.horizon_for(INJ2, CLR2, "2.5", wait_duration="30")
+    expect("measured time_to_recover still wins", round(b - a, 1), 16.5)
+    expect("null ttr and no wait_duration -> horizon undefined",
+           gpv.horizon_for(INJ2, CLR2, "", wait_duration=""), (None, None))
+
     print("\nself-test:", "PASS" if ok else "FAIL")
     return ok
 
@@ -369,10 +427,14 @@ def main():
     print(f"poll log     : {m.get('poll_path')}")
     print(f"sweep window : {m['sweep_window']['start']} .. {m['sweep_window']['end']}")
 
+    audit_dir = m.get("audit_dir", os.path.join("data", "audit"))
+    prior = count_prior_attempts(audit_dir)
+
     rep = Report()
     check_1_2_rows(rep, rows, m["only_ids"])
     in_scope, _excluded = check_3_sidecar(rep, records, m)
-    check_4_reconcile(rep, rows, in_scope, m["machine_id"], m["mode"])
+    check_4_reconcile(rep, rows, in_scope, m["machine_id"], m["mode"], prior)
+    check_4b_attempts(rep, rows, prior)
     check_5_precondition(rep, rows)
     check_6_gateway(rep, in_scope)
     check_7_poller(rep, rows, in_scope, m.get("poll_path"))

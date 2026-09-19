@@ -104,7 +104,8 @@ Applied in this order, before any value is computed:
    missing target by more than `LAMBDA_DEVIATION_THRESHOLD`) are excluded from the primary
    analysis and reported separately. `lambda_deviation_flag` is `None`, not `False`, when the
    rate could not be measured; `None` is treated as **not excluded but flagged**, since
-   "couldn't measure" is not "deviated".
+   "couldn't measure" is not "deviated". The threshold is frozen at the runner's own
+   value and is not re-tuned after the smoke run — see **§9**.
 
 Every exclusion is counted and reported by arm x stratum. Exclusion counts are reported
 before any p-value.
@@ -141,6 +142,9 @@ Gateway status comes **only** from the sidecar and the independent poller. `cb_s
 a pre-load snapshot and is not evidence about mid-run state. The D21 censoring columns record
 half-open probe censoring and are not evidence about gateway trips.
 
+The poller is itself a load source on the gateway. Its duty cycle is pre-registered in
+**§11** so that load is identical for both arms.
+
 ## 7. Validity condition — checked before any p-value is quoted
 
 The stratified rank-sum statistic is only interpretable if the effect points the **same way
@@ -174,3 +178,101 @@ The inference this design supports, stated in full:
   claim is made from them, and no per-cell p-value is reported as a result.
 * Results apply to the post-D25 gateway configuration only and are never pooled with
   pre-D25 rows, including the `RUN_LEVEL_CLEAN_PRE_D25` tier.
+
+---
+
+*Sections 9-11 were added by the 2026-09-20 amendment, before any Phase 4B run. See the
+launch manifest for the superseded and final commit SHAs.*
+
+## 9. Lambda gate — frozen threshold, applied identically to all 72 runs
+
+The arrival-rate gate is the **runner's own** `LAMBDA_DEVIATION_THRESHOLD`, imported from
+`experiments/constants.py`, whose value is **0.15**. It is frozen at that value for the whole
+of Phase 4B and is **not** adjusted after the smoke run's observed lambda, nor after any part
+of the sweep. Tuning a gate to the data it will gate is how an exclusion rule becomes a
+result.
+
+The implemented test is `compute_lambda_deviation_flag` (`experiments/runner.py:539`):
+
+```
+lambda_deviation_flag = abs(lambda_achieved - lambda_target) / lambda_target > 0.15
+```
+
+**It is two-sided.** A row is retained iff
+
+```
+0.85  <=  lambda_achieved / lambda_target  <=  1.15
+```
+
+so over-delivery beyond +15% is excluded on the same footing as under-delivery beyond -15%.
+(A one-sided reading, `lambda_achieved / lambda_target >= 0.85`, is the lower half of this
+rule only and is **not** what the harness computes or what this plan applies.)
+
+Consequences, all pre-registered:
+
+* `lambda_target` for every Phase 4B run is `LOAD_RATE_RPS` = 10 req/s (`runner.py:270`);
+  it is not swept.
+* The gate is applied **identically to all 72 runs**, both arms, all three strata. There is
+  no per-arm, per-stratum or per-window-type threshold.
+* The flag is computed by the runner at write time and read from the CSV column; the
+  analysis does not recompute it, so the gate cannot drift between collection and analysis.
+* `None` (rate unmeasurable) remains "not excluded but flagged", per §4 rule 5.
+* If the smoke run's lambda deviates, that is information about the **host**, to be resolved
+  before the sweep launches (or accepted and reported). It is never grounds for moving the
+  threshold.
+
+## 10. Re-collection and quarantine
+
+Aborted, orphaned and gate-failing runs are re-collected at **the same
+`(experiment_id, replicate)` key**, and only after that key's existing row has been
+**quarantined** — moved out of the dataset into `data/audit/phase4b_orphans_<timestamp>.csv`
+by `analysis/phase4b_reconcile.py --apply`, which also writes a hashed backup of the CSV.
+Nothing is hand-edited, and nothing is overwritten in place.
+
+Quarantine is what makes re-collection possible at all:
+`resumable_runner.load_completed()` keys resumption on `(experiment_id, replicate)` and
+treats any row with `precondition_ok == "True"` as done, so a row that is present but
+unusable permanently blocks its own cell. Removing the row is the only thing that makes the
+runner reschedule that key.
+
+Four quarantine classes, each counted separately and never merged:
+
+| class | meaning |
+|---|---|
+| `ORPHAN_ROW_ABORTED` | `precondition_ok != True`; no sidecar record was ever written (`observer.log` is reached only on a completed run). The §4.1 **unverifiable** category |
+| `ORPHAN_ROW` | the run completed but no sidecar record matches it on experiment_id + replicate + machine_id + mode + time window |
+| `DUPLICATE_KEY` | two or more rows share `(experiment_id, replicate)`; which one is real cannot be determined, so **all** of them are quarantined and the cell is re-collected |
+| gate-failing | excluded by §4 rules 2-5 (gateway trip, poller coverage, implausible duration, lambda). Re-collected the same way |
+
+**The number of runs re-collected is reported**, by arm x stratum x class, alongside the
+exclusion counts required by §4 and before any p-value. A re-collected key is reported as
+re-collected; it is not silently presented as a first-attempt measurement. The sidecar is
+append-only and is **never** rewritten by quarantine, so the orphaned record stays on record
+as evidence and is excluded by the post-sweep check's in-scope filter rather than deleted.
+
+The sweep's `--seed` is unchanged across a re-collection, so the run order of the remaining
+cells is the one the original shuffle assigned.
+
+## 11. Poller duty cycle is constant across arms
+
+`analysis/gateway_poll_verify.py poll` runs as **one continuous session for the whole
+sweep** — started before the first run and stopped after the last — at a fixed ~1 s cadence
+against the gateway's actuator endpoints. It is not started or stopped per run, per arm or
+per stratum.
+
+This is a design requirement, not an implementation detail. The poller issues two HTTP GETs
+per tick against the gateway, so it is itself a (small) load source on the measured service.
+If it ran only during COUNT_BASED runs, or only for the runs where a trip was suspected, its
+load would be **confounded with the arm**, and any COUNT-vs-TIME difference would be partly
+a difference in how hard the gateway was being scraped. Running it throughout makes that load
+a constant of the experiment, shared identically by both arms and all three strata.
+
+Two consequences that are accepted in advance:
+
+* The poller also covers the inter-run container-recreate gaps, during which the gateway JVM
+  is down and ticks will show errors. Those seconds are **outside** every run's §5 horizon,
+  so they cannot make a run `NOT_VERIFIED`; this is the same re-cut the Phase 1 canary
+  README records, applied prospectively rather than after the fact.
+* A poller restart mid-sweep breaks the "one continuous session" property. If it happens it
+  is recorded, the affected runs are classified `POLLER_STOPPED` by §6, and they are
+  re-collected under §10 rather than analysed.

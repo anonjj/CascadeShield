@@ -1135,6 +1135,60 @@ rather than three independent ones. Not done as part of this update; flagged bec
 $D_w$=15 cluster shape found here (1 vs 3 configs) is the identical shape that made H3's
 per-$D_w$ testing invalid in the first place.
 
+**Update (2026-09-19, second pass) — the "Revisit if" above is closed.**
+`stratified_cluster_permutation_rank_test` (`analysis/exact_tests.py`) does what it asked:
+$D_w$ held fixed as a blocking stratum, van-Elteren-combined across strata, while still never
+collapsing a configuration's replicates to a mean — same row-preserving design as this entry's
+own §5.2 fix, for the same reason (D19 §5.2 ruled mean-collapsing out for this comparison).
+Wired into `window_type_recovery_leak.py` for every table it produces: the three COARSE
+sub-tables (`time_to_recover`, `time_to_open_anchor`, `excess_over_wait_duration`) and both
+PRECISE sub-tables (`half_open_to_closed`, `open_to_half_open_sanity_check`), each run against
+the pooled data and a new gateway-cleaned slice (D24's cleaning rule —
+`gateway_tripped_lookup`/`gateway_cleaned_slice`, new in `window_type_recovery_leak.py`,
+applied here for the first time outside `half_open_survival.py`). The per-$D_w$ rows stay in
+the output as description; the stratified test is now the inferential claim, per DV.
+
+**The cluster-structure check run before writing any test code found something worth stating
+plainly: the "Revisit if" above assumed the $D_w$=15-shaped flooring problem (1 vs 3 configs)
+applied across the board. It doesn't.** The COARSE table pools the full threshold×window_size
+grid within every $D_w$ bucket — 18 configurations per arm at every level, one-sided floor
+≈$1.1×10^{-10}$ — so COARSE's per-$D_w$ rows were never underpowered the way H3's
+per-window_size cells were; stratifying them is a methodological improvement (one claim
+instead of three), not a fix for a floor that was actually biting. The *actual* $D_w$=15-shaped
+problem (1 COUNT config vs 3 TIME configs, $D_w$=30's COUNT arm empty) lives entirely in the
+PRECISE `half_open_to_closed` table — almost certainly what this "Revisit if" had in mind,
+since it draws on the same `cb_transitions.jsonl`-derived per-episode data H3's own D24 fix
+corrected. Confirmed by the diagnostic (configs per arm per $D_w$, both slices, all DVs), not
+assumed.
+
+**Result, diffed against the pre-change committed `window_type_recovery_leak.json`** (nothing
+outside the new `stratified_test` blocks and two new join-key columns on PRECISE's row dump
+changed — checked field-by-field):
+
+- COARSE, all three DVs, both slices: $p≈5×10^{-5}$ (Monte Carlo floor, 20,000 resamples,
+  quoted as an upper bound; the exact floor is ≈$1.3×10^{-30}$, the product of three
+  $\binom{36}{18}$ strata). Consistent with the already-large per-$D_w$ ratios; no verdict
+  changed.
+- PRECISE `half_open_to_closed`: $D_w$=30 excluded (COUNT arm empty, decided per DV — same
+  rule D24 used for H3), leaving $D_w$=5 (3v3) and $D_w$=15 (1v3) as the two strata, identical
+  in the pooled and gateway-cleaned slices (this $D_w$'s single COUNT config's gateway status
+  doesn't change between them). **Joint stratified result: $p=0.025$ two-sided, exactly the
+  floor** — complete separation across both strata, the strongest result attainable at n=6
+  total configurations. Worth stating plainly: *neither* $D_w$=5 nor $D_w$=15 reached
+  significance on its own in this entry's first update ($p=0.1$, $p=0.5$) — the stratified
+  joint test recovers the power per-$D_w$ testing was throwing away, the same story as D24's
+  fix for H3 itself.
+- PRECISE `open_to_half_open_sanity_check` (negative control): stays solidly non-significant,
+  pooled ($p=0.51$, all three $D_w$ strata present) and gateway-cleaned ($p=0.41$, $D_w$=30
+  excluded — gateway-cleaning removes essentially all COUNT rows at $D_w$≥15 on this leg,
+  consistent with D24's own finding that gateway trips concentrate there). Correctly behaves as
+  a negative control in both slices.
+- Top-level verdict: `LEAK_SUGGESTIVE_INCOMPLETE_DUE_TO_CENSORING`, unchanged.
+
+No verdict flipped. The new joint PRECISE `half_open_to_closed` number is the one genuinely new
+inferential claim this update adds, and it strengthens rather than weakens the mechanism
+finding — full detail in `statistical-treatment.md` §5.2.
+
 ---
 
 ## D20 · Throughput (`throughput_loss`) is retired as a reported outcome, not repaired

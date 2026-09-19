@@ -19,6 +19,8 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
+from exact_tests import cluster_permutation_rank_test
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 OUT_DIR = Path(__file__).resolve().parent / "out"
@@ -377,19 +379,62 @@ def censored_timing_summary(df, value_col, group_col="experiment_id",
     }
 
 
+def _config_value_lists(df, value_col, group_col):
+    """{config_id: [observed values]} for the non-null rows of value_col, grouped
+    by group_col -- the shape cluster_permutation_rank_test needs. A config with
+    zero observed rows (fully censored) contributes no entry, same as it
+    contributes nothing to censored_timing_summary's conditional-timing half."""
+    sub = df[[group_col, value_col]].dropna()
+    return {k: g[value_col].tolist() for k, g in sub.groupby(group_col)}
+
+
 def compare_censored_groups(df_a, df_b, value_col, group_col="experiment_id"):
     """The full two-group protocol for a right-censored timing DV (B5): compares the RATE at
     which the event occurred (e.g. did group B trip more often than group A) and, separately,
-    compares timing conditional on the event having occurred (Mann-Whitney + Cliff's delta,
-    via compare_groups). Call this instead of hand-rolling a mean-of-non-null-rows comparison
-    -- see censored_timing_summary above and docs/paper/statistical-treatment.md."""
+    compares timing conditional on the event having occurred. Call this instead of hand-rolling
+    a mean-of-non-null-rows comparison -- see censored_timing_summary above and
+    docs/paper/statistical-treatment.md.
+
+    The conditional-timing significance test is `cluster_permutation_rank_test`
+    (exact_tests.py), not `compare_groups` -- closed 2026-09-19, statistical-treatment.md
+    section 5.2. Replicates of one configuration are not independent rows for a
+    significance test (they are for the cluster-bootstrapped CIs above, which
+    already handled this correctly); the p-value now comes from permuting whole
+    configurations, not raw rows, while still using every raw row's rank (unlike
+    the mean-collapsed stratified_cluster_permutation_test in exact_tests.py,
+    which is the right tool for a different question -- see that module's
+    docstring). Cliff's delta stays row-level and unchanged: it is a descriptive
+    effect size, not a significance test, and D19 section 5.1 already established
+    it doesn't need to move with whichever significance test runs alongside it."""
     summary_a = censored_timing_summary(df_a, value_col, group_col=group_col)
     summary_b = censored_timing_summary(df_b, value_col, group_col=group_col)
+
+    configs_a = _config_value_lists(df_a, value_col, group_col)
+    configs_b = _config_value_lists(df_b, value_col, group_col)
+    if configs_a and configs_b:
+        cr = cluster_permutation_rank_test(configs_a, configs_b)
+        cluster_rank_test = {
+            "statistic": cr.statistic, "p": cr.p_value, "p_one_sided": cr.p_value_one_sided,
+            "n1_clusters": cr.n1_clusters, "n2_clusters": cr.n2_clusters,
+            "n1_rows": cr.n1_rows_observed, "n2_rows": cr.n2_rows_observed,
+            "total_assignments": cr.total_assignments, "method": cr.method,
+        }
+    else:
+        cluster_rank_test = {
+            "statistic": None, "p": None, "p_one_sided": None,
+            "n1_clusters": len(configs_a), "n2_clusters": len(configs_b),
+            "n1_rows": int(sum(len(v) for v in configs_a.values())),
+            "n2_rows": int(sum(len(v) for v in configs_b.values())),
+            "total_assignments": None, "method": "undefined (an arm has zero observed configs)",
+        }
+
     return {
         "a": summary_a,
         "b": summary_b,
-        "conditional_timing_comparison": compare_groups(
-            df_a[value_col].dropna(), df_b[value_col].dropna()),
+        "conditional_timing_comparison": {
+            "mann_whitney": cluster_rank_test,
+            "cliffs_delta": cliffs_delta(df_a[value_col].dropna(), df_b[value_col].dropna()),
+        },
     }
 
 

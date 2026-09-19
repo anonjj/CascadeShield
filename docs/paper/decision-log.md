@@ -1117,6 +1117,79 @@ contrast's significance, which is the same class of decision this entry's own **
 paragraph declines to make as a side effect. Pending review by this standard's author and
 Soham.
 
+**Update (2026-09-19) — §5.2 closed. The objection that blocked the 2026-09-14 fix doesn't
+apply to the fix actually shipped.** The rejected fix was "aggregate each config to one
+mean/median before testing" — that changes the unit of analysis (rows → configs) and can flip
+a contrast, exactly as this entry's own §5.1 precedent says shouldn't happen as a side effect.
+What actually closed this is a different design: `cluster_permutation_rank_test`
+(`analysis/exact_tests.py`, new) permutes which whole *configurations* are labeled group 1 vs
+group 2, but ranks every raw row under each relabeling — no configuration is ever collapsed to
+a single value. This preserves within-configuration variance instead of averaging it away, so
+the "changes the unit of analysis" objection doesn't apply: the unit being tested is still the
+row, only the unit being *randomly assigned* is the configuration (which is what independence
+actually requires). `compare_censored_groups` now builds `{config_id: [values]}` from the
+`group_col` parameter it already carried but never used for significance, and calls this
+instead of raw-row `compare_groups`. `cliffs_delta` is unchanged (row-level, as §5.1 already
+established for the same reason — an effect size isn't the thing with the exchangeability
+assumption).
+
+**Verified by running both ways and diffing, not swapped in and trusted** — same standard this
+entry sets for itself. `analysis/window_type_recovery_leak.py` (the only caller of
+`compare_censored_groups` in the codebase) re-run before/after, all three COARSE sub-tables
+(`time_to_recover`, `time_to_open_anchor`, `excess_over_wait_duration`) and both PRECISE
+sub-tables (`half_open_to_closed`, `open_to_half_open` sanity check), `"current"` archive:
+
+- **COARSE tables (18 vs 18 configs per $D_w$ bucket — the full threshold×window_size grid):**
+  row-level p-values were absurd ($10^{-13}$ to $10^{-21}$) — Cliff's $\delta$ = -1.0 (complete
+  separation) confirms the direction is real, but no permutation test on 18v18 independent
+  units produces a $10^{-21}$ p. $\binom{36}{18} \approx 9 \times 10^9$ forced the new function's
+  first-ever Monte Carlo fallback (not anticipated when it was scoped for H3's single-digit
+  cluster counts — added here, same `+1`/`+1`-corrected convention as `exact_logrank_test`).
+  Corrected p sits at the Monte Carlo floor, $\approx 5\times 10^{-5}$ (20,000 resamples) — an
+  honest upper bound, not a precise estimate; the true exact floor at 18v18 complete separation
+  is $\approx 1.1\times 10^{-10}$, just not resolvable by Monte Carlo at this resample count.
+  **No verdict flag changed** (`consistent_time_slower`/`consistent_count_slower`/
+  `partial_ratios_agree` identical before/after in all three tables) — direction and
+  significance both survive, only the wildly overclaimed magnitude is corrected.
+- **PRECISE `half_open_to_closed` — one real crossing, the kind this update promised to report
+  rather than bury.** $D_w$=5: **p goes from 0.00216 (significant) to 0.1 (not significant)**
+  once the true 3-vs-3 configuration count replaces the 6-vs-6 row count. $D_w$=15: p 0.0714 →
+  0.5 — already non-significant before, more clearly so after, and the cluster counts now
+  printed directly (1 COUNT config vs 3 TIME configs) are the same clustering shape H3's own
+  stratified-permutation fix (this session, `decision-log.md` D24) found and corrected — this
+  script tests each $D_w$ separately rather than stratified, which is a related but distinct
+  open question from today's fix, not resolved here (see Revisit-if). $D_w$=30: unaffected,
+  still fully censored on the COUNT arm both ways. **No verdict flag changed** here either —
+  `window_type_recovery_leak.py`'s verdict logic reads ratio-consistency, not p-values, so a
+  p-value crossing 0.05 doesn't itself flip `LEAK_SUGGESTIVE_INCOMPLETE_DUE_TO_CENSORING` — but
+  the crossing is real and is the actual finding this verification step exists to surface.
+  **No published number is affected**: this table's p-values were never cited in
+  `hypotheses.md` §4.1 or anywhere else (only its ratios were, confirmed by grep) — the
+  "nothing published depends on it" statement two paragraphs up was true when written and
+  stays true after this fix, it just stops being true by accident.
+- **PRECISE `open_to_half_open` (negative control, should be window-type-agnostic):** all three
+  $D_w$ stay solidly non-significant before and after (p 0.48→0.70, 0.39→0.50, 0.70→0.90) — the
+  sanity check the script's own docstring wants continues to pass.
+
+**Top-level verdict unchanged:** `LEAK_SUGGESTIVE_INCOMPLETE_DUE_TO_CENSORING`, before and
+after.
+
+**A methods point worth recording directly, since §IV-E will claim a centralized protocol
+rather than one reimplemented per script.** `compare_groups`, `mann_whitney`, and
+`compare_censored_groups` each have exactly **one caller** in this codebase (grepped
+2026-09-18) — `compare_censored_groups`'s one caller is `window_type_recovery_leak.py`,
+`compare_groups`'s one caller was `compare_censored_groups` itself (now replaced), and
+`mann_whitney`'s one caller was `compare_groups`. A three-function standard with a single
+consumer chain is *why* this defect was containable — one call site to audit and fix, not a
+dozen. Recorded in `statistical-treatment.md` §5.2's own closing note, not just here.
+
+**Revisit if:** `window_type_recovery_leak.py`'s per-$D_w$ testing (three separate contrasts,
+one per wait_duration bucket) gets redesigned the way H3's own test was — stratified across
+$D_w$ as blocking factor, one combined p-value for "does window_type affect this timing DV" —
+rather than three independent ones. Not done as part of this update; flagged because the
+$D_w$=15 cluster shape found here (1 vs 3 configs) is the identical shape that made H3's
+per-$D_w$ testing invalid in the first place.
+
 ---
 
 ## D20 · Throughput (`throughput_loss`) is retired as a reported outcome, not repaired
@@ -1582,3 +1655,192 @@ fixed) — that would finally give H3 a testable $D_w$=30 `COUNT_BASED` arm. Als
 ~2x/1x batch artifact found in step 1 gets investigated and turns out to be gateway-related
 after all (it currently shows no relationship to D23's parameter region, but its actual cause
 is still unknown).
+
+**Update (2026-09-18, the chi-square p-values were asymptotic artifacts — corrected below; the
+correction below was itself wrong and is retracted in the second update further down. Kept,
+struck through in spirit rather than deleted, per this file's append-only convention — the
+retraction explains exactly what was wrong and why, which a silent rewrite would lose.**
+`half_open_survival.logrank()`'s p-values come from a chi-square approximation, valid only
+asymptotically; it has no floor and can report values a permutation test could never produce at
+small n. `analysis/exact_tests.py` (new, `--self-test`) implemented
+`exact_p_floor`/`exact_logrank_test` and reported, at $D_w$=5 ($n_1$=6, $n_2$=5 rows): exact
+p=0.004329 vs. floor 1/462; at $D_w$=15 ($n_1$=2, $n_2$=5 rows): exact p=0.047619, "== floor",
+both read as "H3's direction and significance survive at both $D_w$."
+
+**These row counts were never checked against the actual number of independent configurations
+behind them, and they should have been.** See the next update.
+
+**Update (2026-09-18, second pass — the row-level "exact" p-values above are RETRACTED
+entirely, not merely re-weakened; replaced with a stratified cluster permutation test that is
+the first correct significance test this repository has run on this comparison.** Prompted by a
+direct question: is "$n_1$=6, $n_2$=5" at $D_w$=5 six independent configurations, or fewer
+configurations with repeated replicates? Checked directly, `data/cb_transitions.jsonl`,
+`--since 2026-09-16`, gateway-cleaned:
+
+| $D_w$ | COUNT rows | COUNT **configs** | TIME rows | TIME **configs** |
+|---|---|---|---|---|
+| 5  | 6 | **3** (W5, W10, W20 × 2 replicates each) | 5 | **3** (W5×2, W10×2, W20×1) |
+| 15 | 2 | **1** (W20 × 2 replicates — W5/W10 both entirely gateway-tripped) | 5 | **3** (W5×2, W10×2, W20×1) |
+| 30 | 0 | 0 (all gateway-tripped) | 6 | 3 |
+
+**No cell has rows == configs.** The row-level exact test above treated each *replicate* as an
+independent unit for the permutation's exchangeability assumption, which is false — two
+replicates of the same configuration are not exchangeable with a replicate of a different
+configuration; they share everything except run-to-run noise. This is worse than a weaker
+result at $D_w$=15: with only **1** independent COUNT configuration there, there is no
+between-configuration variation on that side to test at all. A permutation test needs $\ge 2$
+independent units per arm to say anything; the previous "exact p=0.047619" at $D_w$=15 was
+computed on 2 units that were not independent, so it was never a valid test of anything, not
+just an optimistic one. **$D_w$=15 alone is unsupportable — its own cluster floor,
+$1/\binom{4}{1}=0.25$ one-sided, can never reach significance no matter what the data show,
+because $\binom{4}{1}=4$ is the entire space of ways to relabel 1 COUNT config among 4 pooled
+configs.**
+
+**The fix: test what H3 actually claims, once, holding $D_w$ fixed as a blocking factor
+instead of testing each $D_w$ separately.** H3 is "TIME_BASED recovers slower than
+COUNT_BASED" — one claim, not "...at $D_w$=5" and "...at $D_w$=15" as two claims requiring two
+significant p-values. `analysis/exact_tests.py` gains
+`stratified_cluster_permutation_test`/`stratified_p_floor`: the unit is a configuration (mean
+of its replicates), $D_w$ is a stratum, and the null is the exact product of each stratum's
+own $\binom{n_1+n_2}{n_1}$ config relabelings ($D_w$=30 excluded — COUNT arm empty, contributes
+no label information). $D_w$=5: $\binom{6}{3}=20$ ways to relabel. $D_w$=15: $\binom{4}{1}=4$
+ways. Total joint assignments: $20 \times 4 = 80$. Floor: $1/80=0.0125$ one-sided,
+$2/80=0.025$ two-sided.
+
+Config-level means (COUNT / TIME, seconds):
+
+| $D_w$ | COUNT configs | TIME configs |
+|---|---|---|
+| 5  | W5=2.071, W10=2.041, W20=2.066 | W5=19.259, W10=19.327, W20=28.739 |
+| 15 | W20=2.471 | W5=20.852, W10=30.527, W20=39.608 |
+
+**Every COUNT config beats every TIME config in both strata (complete separation).** Run
+through `stratified_cluster_permutation_test` (unweighted stratified rank-sum, exact
+enumeration of all 80 joint relabelings — not Monte Carlo, not asymptotic): the observed
+labeling is the single most extreme of all 80, so **the exact p equals the floor exactly:
+two-sided p = 0.025, one-sided p = 0.0125.** This is the correct, honest, first-ever valid
+significance test of H3's actual claim on this data — no inflated n, no per-$D_w$ multiple
+testing, no row-replicate exchangeability violation.
+
+**Consequence for the paper.** State H3's significance as **one number**: stratified cluster
+permutation, $p=0.025$ (two-sided), $n=6$ configurations total (3+3 at $D_w$=5, 1+3 at
+$D_w$=15, $D_w$=30 excluded for an empty COUNT arm). Retire every per-$D_w$ p-value this
+comparison has ever reported (the chi-square ones from D13/D21, and both row-level and
+config-blind framings above) — they were each testing a narrower, unintended claim, at an
+inflated or otherwise invalid n. The *direction* (TIME slower than COUNT) is unchanged and was
+never in question; what changes is that there is now exactly one correct p-value for it,
+instead of three incorrect ones.
+
+**Rejected:** matched-pairs by window_size at $D_w$=5 (3 configs per arm happen to share the
+same swept window_size values). Tempting, but it halves the permutation space for no
+statistical gain here — a sign-based paired test on 3 pairs has only $2^3=8$ assignments
+(floor 1/8), strictly worse than the unpaired $\binom{6}{3}=20$ the data actually supports.
+Pairing is the right move only when it removes a real nuisance source of variance the unpaired
+test can't otherwise control for; window_size is already the stratifying axis's covariate here,
+not a nuisance to be differenced away.
+
+**Same root cause as this session's other small-n traps (D18, D23, the resilience4j javadoc
+entry under D13, and this same entry's own first-pass row-level "fix" above):** the unit of
+independence was never checked before being fed to a formula that assumes it. A floor check
+without a cluster check catches an asymptotic-approximation bug but walks straight into the
+next one.
+
+---
+
+## D25 · `measurement-plane`'s inheritance gap is fixed — every field pinned explicitly, live-verified against a real fault, zero gateway transitions
+
+**Date:** 2026-09-18 · **Decided by:** Jay, closing the "own decision-log entry" D23 deferred ·
+**Status:** final — the fix is live in `services/gateway-service/src/main/resources/application.yml`
+and verified against the running mesh, not just reasoned about
+
+**The diagnostic D23 asked for, run.** Rebuilt `gateway-service` with a disposable
+`CB_CONFIG_DUMP` `CommandLineRunner` (same convention as D18/D23's, worktree-only, deleted
+before this commit) and set `infra/.env` to a real W5 sweep (`CB_SLIDING_WINDOW_SIZE=5`,
+`COUNT_BASED`) — the specific case D23's own dump hadn't isolated (D23 tested at W20/W10).
+Result, pre-fix, all three gateway breakers identical:
+
+```
+slidingWindowType=COUNT_BASED slidingWindowSize=5 minimumNumberOfCalls=1000000
+failureRateThreshold=100.0 slowCallRateThreshold=100.0 slowCallDurationThreshold=PT1M
+waitDurationInOpenStateMs=5000 permittedCallsInHalfOpen=5 autoTransitionEnabled=true
+rejected(4xx)Recorded=false rejected(4xx)Ignored=true unavailable(5xx)Recorded=true
+```
+
+**D23 is right as written, at W5 too** — `slidingWindowSize` tracks the swept value (5), not
+the library default (100). The hardcoded `minimum-number-of-calls: 1000000` gate is silently
+capped by `min(1000000, slidingWindowSize)` = `slidingWindowSize` exactly as D23's bytecode
+analysis predicted.
+
+**The three other gaps flagged alongside the diagnostic turned out not to be gaps.**
+`record-exceptions`/`ignore-exceptions`, `wait-duration-in-open-state`,
+`permitted-number-of-calls-in-half-open-state`, and
+`automatic-transition-from-open-to-half-open-enabled` were all unset on `measurement-plane`
+too — and the live dump shows every one of them **also** silently inherited from
+`configs.default`'s real values (the 4xx firewall is present: `DownstreamRejectedException`
+tested `Ignored=true`/`Recorded=false`, `DownstreamUnavailableException` tested
+`Recorded=true`; `waitDurationInOpenStateMs=5000` and `permittedCallsInHalfOpen=5` both match
+`default`'s then-current swept/env values, not the library defaults of 60000ms/10;
+`autoTransitionEnabled=true` matches `default`'s hardcoded value). D23's 2.2.0
+implicit-fallback mechanism isn't scoped to the two window fields it was originally verified
+against — it's whole-config: **any field `measurement-plane` doesn't set, it gets from
+`configs.default`, not from Resilience4j's library defaults.** This resolves the "23.7s
+OPEN→HALF_OPEN matches neither 60s nor 30s cleanly" puzzle without further mystery: gateway's
+wait-duration-in-open-state was never a fixed 60s to begin with, it was whatever `default`'s
+swept value was at the time of that trace — the 23.7s figure is a gap between two different
+breakers' transition timestamps (order's OPEN to gateway's own later HALF_OPEN), not a
+single breaker's wait-duration measured from its own OPEN.
+
+**The fix — pin everything explicitly, in both directions, switch to `TIME_BASED`.**
+`measurement-plane` now sets `sliding-window-type: TIME_BASED`, `sliding-window-size: 600`,
+`minimum-number-of-calls: 1000000` (now genuinely unreachable — `TIME_BASED` has no
+ring-buffer-fill bypass, D18), plus explicit `wait-duration-in-open-state: 60s`,
+`permitted-number-of-calls-in-half-open-state: 10`,
+`automatic-transition-from-open-to-half-open-enabled: false`, `event-consumer-buffer-size`,
+and the same `record-exceptions`/`ignore-exceptions` pair `default` uses. No field is left to
+inherit from anywhere, in either direction — the ambiguity that caused this is removed, not
+just patched around for the current parameter grid.
+
+**Live-verified, not just rebuilt.** Post-fix dump, all three gateway breakers:
+
+```
+slidingWindowType=TIME_BASED slidingWindowSize=600 minimumNumberOfCalls=1000000
+failureRateThreshold=100.0 slowCallRateThreshold=100.0 slowCallDurationThreshold=PT1M
+waitDurationInOpenStateMs=60000 permittedCallsInHalfOpen=10 autoTransitionEnabled=false
+rejected(4xx)Recorded=false rejected(4xx)Ignored=true unavailable(5xx)Recorded=true
+```
+
+Then a real fault run through the actual harness (`experiments/runner.py --mode canary
+--only-ids LIN-LAT-CNT-T70-W20-D30 --replicates 1` — canary's own "Extreme Conservative"
+config, `COUNT_BASED`, `wait_duration=30`, `window_size=20`, writing to the disposable
+`data/canary_runs.csv`/`canary_cb_transitions.jsonl`, not the real dataset): 60 requests
+against a 3000ms latency fault, 17/60 failed (28.3% error rate) — order's own breaker engaged
+normally. `gateway-service`'s `/actuator/circuitbreakerevents`: `orderServiceCB` recorded 310
+real `SUCCESS`/`ERROR` call events (`bufferedCalls=310, failedCalls=42` by run's end,
+`failureRate` still `-1.0%` — never evaluated, exactly as intended) and **zero**
+`CLOSED_TO_OPEN` events; `inventoryServiceCB`/`paymentServiceCB` (not on the fault path) show
+zero events at all. `failureRateThreshold` reads back `100.0%` live, not the swept run's `70%`
+— confirms `measurement-plane` is no longer touched by the sweep's env vars in any field.
+
+**Scope check — is `measurement-plane` the only place this shape exists?** `grep -rn
+"base-config" services/`: every instance in `order-service`, `inventory-service`,
+`payment-service`, and `notification-service` declares `base-config: default` explicitly.
+`measurement-plane` was the only *named, non-`default`* config profile with no `base-config`
+of its own anywhere in the codebase — the one shape that exercises 2.2.0's implicit-fallback
+branch at all. **Not a repo-wide pattern, confined to the one block now fixed.**
+
+**Consequence for the paper.** D23's finding (gateway silently tripped under `COUNT_BASED`,
+`wait_duration∈{15,30}`, 20/73 sidecar records) describes the *pre-2026-09-18* mesh state and
+is unaffected by this fix — historical data keeps its D23/D24 correction. Any run collected
+**after** this commit has a gateway that structurally cannot trip (`TIME_BASED`, `minimumNumberOfCalls`
+genuinely unreachable) — if D15/D-001 gets re-derived post-FANOUT-CRASH on freshly collected
+data, that re-collection inherits the fix and the D23 gateway-contamination caveat no longer
+applies to it. Worth a one-line note wherever the re-derivation happens, not a rewrite of D23/D24.
+
+**Rejected:** touching `hypotheses.md`'s H6 disposition here. D23 already corrected the
+isolation claim's text; whether H6 becomes newly untestable (isolation now genuinely holds,
+same as it does for `TIME_BASED` sweeps already) or stays as D23 left it is a separate
+decision, not made in this entry.
+
+**Revisit if:** a future config change reintroduces a named, non-`default` profile without an
+explicit `base-config` — `grep -rn "base-config" services/` is now the fast way to check for
+that shape before it becomes a silent leak again.

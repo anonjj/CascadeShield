@@ -43,44 +43,79 @@ every stratum**; a design whose direction flips between $D_w$ levels violates it
 pooled statistic becomes uninterpretable. The test also **cannot be pooled with pre-D25
 data** — RUN_LEVEL_CLEAN_PRE_D25 rows are a separate tier and must never be mixed in.
 
-## 2. Power by Monte Carlo over the repo's actual stratified test
+## 2. Power by Monte Carlo over the repo's stratified test
 
-Simulated on the log scale with per-config random effects; effect model is a multiplicative
-COUNT/TIME recovery ratio. **Ratios are hypothetical scenarios, not findings.**
+**A Monte Carlo estimate under an assumed effect and variance model is not proof of a
+probability.** Ratios are hypothetical scenarios, not findings.
 
-Assumptions: seed `20260920`, 3 replicates/config, config summary = mean of replicate values
-(what `stratified_cluster_permutation_test` consumes). Ties use average ranks; p is the exact
-enumerated two-sided proportion and can never fall below the tabulated floor. Empirical
-log-scale SDs from `data/audit/planning_inputs_dw5.json`: between-config 0.006, within 0.005.
+**The permutation floor is the exact test's resolution, not its power.** A design whose floor
+is 5.83e-06 has not "achieved" anything; it can merely *express* a p-value that small if the
+data warrant it. Do not read a low floor as evidence.
 
-**First grid (ratio 9x/2x/1.5x, SD x1/x1.5/x2, 150 sims) saturated**: every cell returned
-P(p<0.05)=1.000, P(complete separation)=1.000, median p exactly at the floor. That is itself
-the finding — **at the observed dispersion the design is floor-limited, not power-limited**.
-It also means x1.5/x2 is far too narrow a range to be informative: log(1.5)=0.405 is ~67x the
-empirical between-config SD.
+### Implementation and timing
 
-Breakdown sweep, {15,30} x 4v4, 120 sims, widening the SD multiplier until the design fails:
+One stratified test, repo implementation, measured: {15,30}x3v3 = 0.3 ms (400 assignments);
+{5,15,30}x3v3 = 4.0 ms (8,000); {15,30}x5v5 = 30.3 ms (63,504); {5,15,30}x4v4 = **163.8 ms**
+(343,000). At 163.8 ms, 10,000 simulations of Option C would take 27.3 min per scenario cell.
 
-| ratio | SD x | between-config log SD | P(p<0.05) | P(complete separation) | median p |
-|---|---|---|---|---|---|
-| 9.0 | 1 | 0.006 | 1.000 | 1.000 | 4.08e-04 |
-| 9.0 | 50 | 0.300 | 1.000 | 1.000 | 4.08e-04 |
-| 9.0 | 100 | 0.600 | 1.000 | 0.817 | 4.08e-04 |
-| 9.0 | 150 | 0.900 | 0.958 | 0.267 | 3.27e-03 |
-| 2.0 | 25 | 0.150 | 1.000 | 0.958 | 4.08e-04 |
-| 2.0 | 50 | 0.300 | 0.925 | 0.200 | 3.27e-03 |
-| 2.0 | 75 | 0.450 | 0.617 | 0.050 | 2.86e-02 |
-| 2.0 | 100 | 0.600 | 0.317 | 0.008 | 8.20e-02 |
-| 1.5 | 10 | 0.060 | 1.000 | 1.000 | 4.08e-04 |
-| 1.5 | 25 | 0.150 | 0.992 | 0.383 | 1.22e-03 |
-| 1.5 | 50 | 0.300 | 0.417 | 0.033 | 5.02e-02 |
-| 1.5 | 100 | 0.600 | 0.108 | 0.000 | 2.70e-01 |
+So the simulation runs against a **precomputed-null** implementation, proven exactly
+equivalent. Absent ties, the per-stratum rank-sum null is the multiset
+`{sum(S) - e1 : S an n1-subset of {1..n}}`, which depends only on (n1, n2) and not on the
+data; the joint null over independent strata is its convolution, computable once per design
+instead of re-enumerated per simulation. Only the observed statistic depends on the data.
+Equivalence was verified against `stratified_cluster_permutation_test` on **84 fixed-seed
+cases across 7 designs**, matching `p_value` to 1e-12, the statistic to 1e-9, and
+`total_assignments` exactly. Ties would invalidate the shortcut, so they are detected and
+asserted absent (continuous draws make them probability-zero). Result: 46.8 us/test, ~3500x
+faster; 10,000 sims in 0.47 s.
 
-None of this is "power achieved". Read it as: the 4v4 x 2-strata design tolerates a
-between-config log SD up to roughly 0.15 for a hypothetical 2x effect and roughly 0.06 for a
-hypothetical 1.5x effect. The observed 0.006 leaves a wide margin — **but that estimate rests
-on 3 COUNT and 2 TIME configs at one $D_w$, on one machine, at n=2 replicates each.** Treat
-the margin as provisional, not as licence to shrink the design.
+### Scenarios
+
+**N = 10,000 simulations per scenario, seed 20260920, 3 replicates/config, total runtime
+292.6 s.** Every probability carries a Clopper-Pearson 95% interval. A cell at 10000/10000 is
+reported with its 95% lower bound, never as a bare "1.000".
+
+| opt | strata | n/arm | ratio | SD x | floor | P(p<0.05) [95% CI] | P(separation) [95% CI] | med p |
+|---|---|---|---|---|---|---|---|---|
+| A | {15,30} | 3 | 9.0 | 1 | 5.00e-03 | 1.0000 [>=0.9996] | 1.0000 [>=0.9996] | 5.00e-03 |
+| A | {15,30} | 3 | 2.0 | 25 | 5.00e-03 | 0.9997 [0.9991,0.9999] | 0.9754 [0.9722,0.9783] | 5.00e-03 |
+| A | {15,30} | 3 | 2.0 | 50 | 5.00e-03 | 0.8169 [0.8092,0.8244] | 0.4241 [0.4144,0.4339] | 1.50e-02 |
+| A | {15,30} | 3 | 1.5 | 25 | 5.00e-03 | 0.9147 [0.9091,0.9201] | 0.5859 [0.5762,0.5956] | 5.00e-03 |
+| A | {15,30} | 3 | 1.5 | 50 | 5.00e-03 | 0.3887 [0.3791,0.3983] | 0.1093 [0.1032,0.1156] | 9.00e-02 |
+| B | {5,15,30} | 3 | 2.0 | 50 | 2.50e-04 | 0.9521 [0.9477,0.9562] | 0.2753 [0.2666,0.2842] | 3.25e-03 |
+| B | {5,15,30} | 3 | 1.5 | 25 | 2.50e-04 | 0.9873 [0.9849,0.9894] | 0.4465 [0.4367,0.4563] | 1.00e-03 |
+| B | {5,15,30} | 3 | 1.5 | 50 | 2.50e-04 | 0.5715 [0.5617,0.5812] | 0.0359 [0.0323,0.0397] | 4.10e-02 |
+| **C** | **{5,15,30}** | **4** | **9.0** | **1** | **5.83e-06** | **1.0000 [>=0.9996]** | **1.0000 [>=0.9996]** | **5.83e-06** |
+| **C** | **{5,15,30}** | **4** | **2.0** | **25** | **5.83e-06** | **1.0000 [>=0.9996]** | **0.9333 [0.9282,0.9381]** | **5.83e-06** |
+| **C** | **{5,15,30}** | **4** | **2.0** | **50** | **5.83e-06** | **0.9900 [0.9879,0.9919]** | **0.1346 [0.1280,0.1414]** | **2.04e-04** |
+| **C** | **{5,15,30}** | **4** | **1.5** | **25** | **5.83e-06** | **0.9988 [0.9979,0.9994]** | **0.2823 [0.2735,0.2912]** | **7.58e-05** |
+| **C** | **{5,15,30}** | **4** | **1.5** | **50** | **5.83e-06** | **0.7044 [0.6953,0.7133]** | **0.0075 [0.0059,0.0094]** | **1.34e-02** |
+| D | {15,30} | 5 | 2.0 | 50 | 3.15e-05 | 0.9828 [0.9801,0.9853] | 0.1655 [0.1583,0.1729] | 5.67e-04 |
+| D | {15,30} | 5 | 1.5 | 50 | 3.15e-05 | 0.6607 [0.6513,0.6700] | 0.0136 [0.0114,0.0161] | 1.93e-02 |
+
+Full grid in `data/audit/power_scenarios.txt`.
+
+### The variance input is thin, and this is the main caveat
+
+> The between/within SDs driving every row above come from **3 COUNT and 2 TIME configs at
+> $D_w$=5, with 2 replicates each, on one machine**, after excluding one host-sleep artifact.
+> That is not a variance estimate anyone should lean on. `SD x25` and `x50` columns exist
+> because the empirical value (between-config log SD 0.006) is so small that x1.5 and x2 are
+> indistinguishable from x1 -- log(1.5) = 0.405 is ~67x that SD. Treat the x25/x50 rows, not
+> the x1 row, as the planning-relevant cases.
+
+There is **no** dispersion estimate at all for COUNT at $D_w$=15 (1 clean config) or $D_w$=30
+(**0** clean configs), and TIME variance likely grows with $D_w$ via bounce count.
+
+### Do not buy a smaller floor with more configurations
+
+Adding configs purely to lower the floor is not justified by anything measured here. The
+floor is resolution, not power, and Option C's floor is already three orders below 0.05.
+**A top-up should be triggered by evidence, not by arithmetic:** specifically, if the Phase 4B
+run itself shows a between-config log SD at $D_w$=15 or $D_w$=30 above roughly 0.15 (the point
+at which the x25 column starts degrading separation), or if the observed COUNT/TIME direction
+is inconsistent across strata -- which would independently invalidate the stratified test.
+Decide that from the pilot's own dispersion, not in advance.
 
 ## 3. Design options
 

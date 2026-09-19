@@ -54,6 +54,79 @@ D25_PIN = dt.datetime.fromisoformat("2026-09-18T13:20:50+05:30")
 # minutes apart at most; this bounds an accidental cross-run match.
 MATCH_TOLERANCE_S = 1800
 
+# ---------------------------------------------------------------------------
+# Event-buffer capacity, and how a row's applicable capacity is established.
+#
+# CB_EVENT_BUFFER_SIZE history as written into infra/.env by the runner:
+#     6618f3d 2026-08-04  50
+#     eb10d489 2026-08-18  2000   (via a shadowing EVENT_BUFFER_SIZE)
+#     f64e8a9  2026-08-26  50
+#     0494dd06 2026-08-27  5000   ("was silently dropping CLOSED_TO_OPEN")
+# Never hardcode one of these as "the" capacity -- which applies depends on the
+# runner version that produced the row, and that is NOT recorded anywhere in the
+# data (there is no git_commit column; the 48-col master_dataset_schema.csv stub
+# declares one, but runner.py has never emitted it).
+#
+# Schema presence gives a real lower bound on runner version, independent of any
+# assumption about when a machine last pulled:
+#     load_concurrency        entered 51cfa92 2026-09-02  (AFTER the 5000 bump)
+#     half_open_probe_*       entered 0a863dc 2026-09-16  (PR #57)
+# So a row carrying load_concurrency was produced by a runner at or after
+# 2026-09-02, which necessarily carried CB_EVENT_BUFFER_SIZE = 5000. That is
+# confirmation from the artifact itself, not inference from a timestamp.
+BUFFER_HISTORY = [
+    (dt.datetime.fromisoformat("2026-08-04T02:53:24+05:30"), 50),
+    (dt.datetime.fromisoformat("2026-08-18T01:22:16+05:30"), 2000),
+    (dt.datetime.fromisoformat("2026-08-26T01:18:43+05:30"), 50),
+    (dt.datetime.fromisoformat("2026-08-27T17:16:00+05:30"), 5000),
+]
+BUFFER_FIX_COMMIT_TS = dt.datetime.fromisoformat("2026-08-27T17:16:00+05:30")
+SCHEMA_MARKER_CAPACITY_5000 = "load_concurrency"
+
+# Eviction headroom: a run's events must sit far enough below capacity that a
+# STATE_TRANSITION cannot have been pushed out. _fetch_breaker_events filters the
+# actuator ring to type == STATE_TRANSITION, but the ring itself holds every event
+# (SUCCESS/ERROR included), so transitions are a small minority of what competes
+# for the buffer -- capacity must be compared against TOTAL events, not transitions.
+EVICTION_HEADROOM = 3.0
+
+
+def buffer_capacity_at(ts):
+    """Applicable CB_EVENT_BUFFER_SIZE at a wall-clock time, per BUFFER_HISTORY.
+    Returns None when ts precedes the first known value."""
+    if ts is None:
+        return None
+    cap = None
+    for when, value in BUFFER_HISTORY:
+        if ts >= when:
+            cap = value
+    return cap
+
+
+def estimated_events_per_breaker(row):
+    """Upper-ish estimate of events a single busy breaker records in one run:
+    warmup requests plus fault-phase requests (lambda_achieved x effective_horizon).
+    Both columns are real dataset fields. Returns None when they are unavailable,
+    in which case eviction cannot be ruled out from the data and the caller must
+    not claim it was."""
+    def num(key):
+        v = row.get(key, "")
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+    warm = num("warmup_requests")
+    lam = num("lambda_achieved")
+    hor = num("effective_horizon")
+    if warm is None and (lam is None or hor is None):
+        return None
+    total = 0.0
+    if warm is not None:
+        total += warm
+    if lam is not None and hor is not None:
+        total += lam * hor
+    return total if total > 0 else None
+
 GATEWAY_SERVICE = "gateway"
 TRIP = "CLOSED_TO_OPEN"
 
@@ -147,7 +220,11 @@ def sidecar_complete(rec):
     return bool(rec.get("fault_injected_at")) and "transitions" in rec
 
 
-def classify(rec, run_ts):
+def classify(rec, run_ts, row=None, header=None):
+    """Assigns exactly one category. `row`/`header` are needed for the
+    RUN_LEVEL_CLEAN_PRE_D25 tier, which requires precondition_ok and an
+    eviction judgement; without them the function degrades to the pre-existing
+    behaviour rather than silently promoting anything."""
     if rec is None:
         if run_ts is None:
             return "UNVERIFIED_NO_SIDECAR_UNDATED"
@@ -160,11 +237,33 @@ def classify(rec, run_ts):
     collected = parse_ts(rec.get("fault_injected_at")) or run_ts
     if collected is None:
         return "NOT_VERIFIED_INCOMPLETE"
-    if collected < EVENTS_BUFFER_FIX:
+    if collected >= D25_PIN:
+        return "VERIFIED_CLEAN"
+
+    # --- everything below is pre-D25: isolation was not in force -------------
+    # Establish the applicable buffer capacity. Schema presence is confirmation;
+    # a bare timestamp is only inference and is NOT enough to promote a row.
+    header = header or []
+    capacity_confirmed = SCHEMA_MARKER_CAPACITY_5000 in header
+    capacity = 5000 if capacity_confirmed else buffer_capacity_at(collected)
+
+    if not capacity_confirmed:
+        # Cannot confirm which runner produced this row, so cannot rule out a
+        # 50- or 2000-entry ring having evicted a CLOSED_TO_OPEN.
         return "NOT_VERIFIED_EVICTION"
-    if collected < D25_PIN:
-        return "NOT_VERIFIED_PRE_D25"
-    return "VERIFIED_CLEAN"
+    if collected < BUFFER_FIX_COMMIT_TS:
+        return "NOT_VERIFIED_EVICTION"
+
+    est = estimated_events_per_breaker(row or {})
+    if est is None or est * EVICTION_HEADROOM > capacity:
+        return "NOT_VERIFIED_EVICTION"
+
+    if str((row or {}).get("precondition_ok", "")).strip().lower() != "true":
+        return "NOT_VERIFIED_INCOMPLETE"
+
+    # No gateway trip was observed in THIS run under a confirmed 5000-event
+    # buffer. This is NOT evidence that D25 isolation was in force.
+    return "RUN_LEVEL_CLEAN_PRE_D25"
 
 
 def audit_dataset(fname, note, strict, loose):
@@ -234,7 +333,7 @@ def audit_dataset(fname, note, strict, loose):
                 matched_strict += 1
             else:
                 matched_loose += 1
-        cat = classify(rec, run_ts)
+        cat = classify(rec, run_ts, row=row, header=header)
         per_row.append({
             "experiment_id": eid, "replicate": rep, "machine_id": mid or "",
             "window_type": row.get("window_type", ""),
@@ -265,6 +364,7 @@ def tabulate(result):
 SHORT = {
     "VERIFIED_TRIPPED": "TRIPPED",
     "VERIFIED_CLEAN": "CLEAN",
+    "RUN_LEVEL_CLEAN_PRE_D25": "RUNCLEAN:preD25",
     "NOT_VERIFIED_EVICTION": "NV:evict",
     "NOT_VERIFIED_PRE_D25": "NV:preD25",
     "NOT_VERIFIED_INCOMPLETE": "NV:incompl",

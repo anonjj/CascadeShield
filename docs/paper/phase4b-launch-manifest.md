@@ -1,10 +1,12 @@
 # Phase 4B — launch manifest
 
-**Nothing in this document has been run.** No experiment, no mesh, no smoke run. This is the
-frozen launch record: what will be run, with which inputs, and what must be true first.
+The frozen launch record: what will be run, with which inputs, and what must be true first.
 
-Part B (the smoke run) starts only on an explicit "GO SMOKE". The 72-run sweep is a separate,
-later approval.
+**Status: the smoke run (Part B) was executed on 2026-09-20 under GO SMOKE and PASSED every
+gate — see §10.** The 72-run sweep has **not** been launched and is a separate approval.
+
+§1-§9 were written before any run and are left as written; §10 records what actually happened,
+including where the pre-launch figures in §1 were superseded by the values measured at GO SMOKE.
 
 ---
 
@@ -121,6 +123,8 @@ Get-Process OneDrive -ErrorAction SilentlyContinue |
 
 > **RAM.** 2.96 G free is measured with the mesh **down**. Bring the mesh up and re-check
 > before GO SMOKE; if the JVMs swap, `time_to_recover` is measuring the host, not the breaker.
+> **Superseded by §10:** at GO SMOKE this read 4.38 G free with the mesh down and **1.28 G free
+> (90.8 % used) with the mesh up**. Disk read 30 G free, not 27 G.
 
 ---
 
@@ -258,34 +262,174 @@ happened to the sidecar, and the baseline for the sweep is no longer established
 
 ---
 
-## 3. The 72-run sweep (NOT APPROVED — recorded for completeness)
+## 3. The 72-run sweep — launch commands (NOT LAUNCHED)
+
+**Nothing below has been run.** These are the exact commands, to be issued from your own
+interactive Git Bash window, at the repo root, with the mesh already up (§6 step 4). The
+smoke run left the mesh up and the start state clean (§10), so steps 0-2 are the only
+preconditions still to re-confirm.
+
+### 3.0 Re-confirm the start state (read-only, 10 seconds)
+
+```bash
+cd /c/Users/Lenovo/OneDrive/Desktop/CascadeShield
+
+git rev-parse HEAD; git status --porcelain
+sha256sum data/cb_transitions.jsonl          # must be ffad69d6...bee0e
+wc -l     data/cb_transitions.jsonl          # must be 73
+ls data/phase4b_postd25.csv data/audit/phase4b_poll.jsonl 2>&1   # both must be absent
+df -h .                                                          # free space
+docker ps --format '{{.Names}}\t{{.Status}}' | wc -l             # expect 11
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8080/api/v1/linear   # expect 200
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8474/proxies         # expect 200
+docker image inspect infra-gateway-service --format '{{.Id}}'
+docker inspect gateway-service --format '{{.Image}}'   # must equal the line above
+```
+
+### 3.1 Copy the ID list in and verify it
 
 ```bash
 cp docs/paper/phase4b_only_ids.txt data/phase4b_only_ids.txt
-sha256sum docs/paper/phase4b_only_ids.txt data/phase4b_only_ids.txt   # must match
+sha256sum docs/paper/phase4b_only_ids.txt data/phase4b_only_ids.txt
+#   both must be 6d6e57452ba56e814cb525d1a0f48c7b6c198830f7d8296a6bf856f2e36a0f12
+cmp docs/paper/phase4b_only_ids.txt data/phase4b_only_ids.txt && echo "byte-identical"
+```
 
+### 3.2 Write the launch manifest JSON
+
+Fill §7's template into `data/audit/phase4b_manifest.json`. The values established by the
+smoke run:
+
+```json
+  "git_head":           "<git rev-parse HEAD, re-read now>",
+  "preregistration_sha": "3e4ad1e5d0596883bbd35604828d0d2db39a9eb2",
+  "gateway_image_id":   "sha256:ce110c0a0bfbc290e735fe810f4bb5a60b2ef84ad5e63c0b627a0b90cecbabfc",
+  "poll_path":          "data/audit/phase4b_poll.jsonl",
+  "audit_dir":          "data/audit",
+  "sweep_window": { "start": "<UTC ISO, just before launch>", "end": "<UTC ISO, after it finishes>" }
+```
+
+Re-read `gateway_image_id` from `docker image inspect` rather than pasting it, in case the
+image has been rebuilt since.
+
+### 3.3 Start the poller — FIRST, and leave it running for the whole sweep
+
+Pre-registration §11 requires **one continuous session** across all 72 runs. Start it before
+the sweep, stop it after the last run, and do not restart it in between.
+
+```bash
+mkdir -p data/audit logs
+
+nohup python -u analysis/gateway_poll_verify.py poll \
+  --base http://localhost:8080 \
+  --out  data/audit/phase4b_poll.jsonl \
+  --interval 1.0 --label phase4b \
+  > logs/phase4b_poller.log 2>&1 &
+echo $! > data/audit/phase4b_poller.shellpid
+disown
+```
+
+Confirm it is ticking before going further:
+
+```bash
+sleep 5; wc -l data/audit/phase4b_poll.jsonl     # expect >= 5 and growing
+tail -1 data/audit/phase4b_poll.jsonl            # states should all read CLOSED
+```
+
+> **Stopping it afterwards — established empirically during the smoke (§10).** On this host
+> `kill -INT` against the shell job PID does **not** reach the Python process, and
+> `taskkill /PID <pid>` is refused (*"can only be terminated forcefully"*). What works:
+>
+> ```bash
+> PID=$(powershell -NoProfile -Command "Get-CimInstance Win32_Process | \
+>   Where-Object { \$_.CommandLine -like '*gateway_poll_verify*poll*' -and \$_.Name -like 'python*' } | \
+>   Select-Object -ExpandProperty ProcessId")
+> echo "poller PID: $PID"
+> powershell -NoProfile -Command "Stop-Process -Id $PID -Force"
+> ```
+>
+> A forced stop skips the poller's `finally` block, so **no `poller_stop` marker is written**.
+> `check_run()` handles this — it falls back to the last tick — and the smoke run still
+> verified clean. If you would rather have the clean marker, run the poller **in the
+> foreground in a second Git Bash window** instead of the `nohup` form above, and press
+> Ctrl-C when the sweep finishes. Either is acceptable; the foreground form is tidier.
+
+### 3.4 Launch the sweep, detached
+
+```bash
 export DATASET_PATH_OVERRIDE=data/phase4b_postd25.csv
 
-python experiments/runner.py \
-  --mode full --fault latency --topology linear \
+nohup python -u experiments/runner.py \
+  --mode full \
+  --fault latency \
+  --topology linear \
   --only-ids data/phase4b_only_ids.txt \
   --replicates 3 \
   --seed 20260920 \
-  --machine-id soham-local
+  --machine-id soham-local \
+  > logs/phase4b_sweep.log 2>&1 &
+echo $! > data/audit/phase4b_sweep.shellpid
+disown
 ```
 
-with the poller running in its own window for the whole sweep (pre-registration §11):
+`export` must be in the **same shell** as the `nohup` line — `DATASET_PATH_OVERRIDE` is read
+at `runner.py` import time (`runner.py:33`), and CLAUDE.md records that a missed override has
+misfiled data twice.
+
+### 3.5 First-run check — do this ~5 minutes after launch, before walking away
 
 ```bash
-python analysis/gateway_poll_verify.py poll --base http://localhost:8080 \
-  --out data/audit/phase4b_poll.jsonl --interval 1.0 --label phase4b
+# 1. the output file exists and the header is the runner's own 38 columns
+ls -la data/phase4b_postd25.csv
+head -1 data/phase4b_postd25.csv | tr ',' '\n' | wc -l          # expect 38
+
+# 2. exactly one data row so far, and it is one of the 24 IDs
+wc -l data/phase4b_postd25.csv                                  # expect 2 after run 1
+cut -d, -f1 data/phase4b_postd25.csv | tail -n +2 | sort -u
+grep -f - -c docs/paper/phase4b_only_ids.txt <<< "$(cut -d, -f1 data/phase4b_postd25.csv | tail -n +2 | sort -u)"
+
+# 3. the sidecar grew by exactly the number of completed runs
+wc -l data/cb_transitions.jsonl                                 # expect 73 + completed runs
+tail -1 data/cb_transitions.jsonl | python -m json.tool | head -12
+#    machine_id must be soham-local, mode must be full
+
+# 4. the poller is still alive and clean
+wc -l data/audit/phase4b_poll.jsonl
+grep -c '"ok": false' data/audit/phase4b_poll.jsonl             # errors are expected ONLY in
+                                                                # container-recreate windows
+python - <<'EOF'
+import json
+ticks=[json.loads(l) for l in open("data/audit/phase4b_poll.jsonl",encoding="utf-8") if l.strip()]
+bad=[(t.get("iso"),b,s) for t in ticks if "_meta" not in t
+     for b,s in (t.get("states") or {}).items() if s and s!="CLOSED"]
+print("non-CLOSED gateway observations:", len(bad), bad[:5])
+EOF
+#    this must print 0. Anything else is a gateway trip -> stop and report.
+
+# 5. progress and no silent stall
+python -c "import json;d=json.load(open('data/run_status.json'));print(d['phase'],d['success_runs'],'/',d['total_runs'],d['updated_at'])"
+tail -5 logs/phase4b_sweep.log
+
+# 6. reconcile, dry run -- every row written so far has a matching record
+python analysis/phase4b_reconcile.py \
+  --dataset data/phase4b_postd25.csv \
+  --transitions data/cb_transitions.jsonl \
+  --machine-id soham-local --mode full
+#    expect MATCHED == rows so far, ORPHAN_ROW 0, DUPLICATE_KEY 0, AT_REATTEMPT_CAP 0.
+#    ORPHAN_RECORD will read 73 -- that is the untouched baseline, not a problem; the
+#    post-sweep check skips the baseline prefix and only scores records after it.
 ```
 
-CLAUDE.md's "long sweeps run detached" rule assumes a POSIX host. On this Windows host the
-equivalent property — *does a job survive its terminal closing?* — is not assumed; it is
-tested as a precondition (§6, dummy-job survival test).
+**Stop and report if any of these is true:** the file did not appear within ~2 minutes; the
+header is not 38 columns; an `experiment_id` appears that is not in the 24; the sidecar did not
+grow; the poller died; any non-CLOSED gateway observation; `run_status.json` stops advancing
+for more than ~10 minutes.
 
----
+### 3.6 While it runs
+
+Do not touch `data/phase4b_postd25.csv`, `data/cb_transitions.jsonl` or the poll log. Do not
+start a second runner. Do not run `phase4b_reconcile.py --apply` — it will refuse anyway while
+`run_status.json` reads `phase=running`.
 
 ## 4. Resume procedure
 
@@ -551,3 +695,154 @@ entries are unchanged and all still verify. (That file mixes two path convention
 line is repo-root-relative while the rest are bare filenames — so `sha256sum -c` must be run
 twice, once from the repo root and once from inside the directory. That predates this change
 and was left as-is.)
+
+---
+
+## 10. Smoke run record — 2026-09-20 (PASSED)
+
+Run under GO SMOKE. Every gate passed; nothing was stopped early. Evidence quarantined under
+`data/audit/smoke_20260919T235235Z/` (gitignored), hashes below.
+
+### Gate results
+
+| # | gate | result |
+|---|---|---|
+| 1 | preflight recorded | PASS — see below |
+| 2 | sidecar baseline `ffad69d6…bee0e`, 73 lines | **PASS** |
+| 3a | `up -d --build`, Toxiproxy 5 proxies, `GET /api/v1/linear` == 200 | **PASS** (200 in 2 s; all 6 services UP) |
+| 3b | `docker image inspect .Id` == `docker inspect gateway-service .Image` | **PASS** — both `sha256:ce110c0a0bfb…cbabfc`; short ID `ce110c0a0bfb` is a prefix of it |
+| 4 | 3 gateway breakers CLOSED at 100.0 / 100.0 while the container env carries swept `CB_*` | **PASS** — see the readback below |
+| 5 | poller detached, smoke run once, poller stopped | **PASS** — 194 ticks over 210.1 s |
+| 6a | header 38 cols == `runner.DATASET_HEADERS`; `wc -l` == 2 | **PASS** |
+| 6b | sidecar exactly 74 records | **PASS** |
+| 6c | new record matches the CSV row (`phase4b_reconcile.py`, dry run) | **PASS** — `MATCHED 1`, 0 orphan rows, 0 duplicates, 0 capped |
+| 6d | poller coverage clean over the pre-registered §5 horizon | **PASS** — `VERIFIED_CLEAN`, 19 ticks, 0 uncovered s, no issues |
+| 6e | no gateway `CLOSED_TO_OPEN` | **PASS** — 0 gateway transitions of any kind; 0 non-CLOSED gateway states across all 194 ticks |
+| 6f | lambda reported against the frozen two-sided rule | **PASS** — reported, threshold not touched |
+| 7 | quarantine, restore, start state | **PASS** |
+
+### Gate 4 readback — the D25 pin, verified live on `ce110c0a`
+
+Gateway container env (swept, from `infra/.env`) vs what the gateway breakers actually report:
+
+```
+CB_FAILURE_RATE_THRESHOLD=70      CB_SLIDING_WINDOW_TYPE=TIME_BASED
+CB_SLIDING_WINDOW_SIZE=20         CB_WAIT_DURATION_OPEN=30s
+CB_MINIMUM_CALLS=5                CB_PERMITTED_CALLS_HALF_OPEN=5
+CB_EVENT_BUFFER_SIZE=5000
+
+gateway   orderServiceCB      state=CLOSED  failureRateThreshold=100.0%  slowCallRateThreshold=100.0%
+gateway   inventoryServiceCB  state=CLOSED  failureRateThreshold=100.0%  slowCallRateThreshold=100.0%
+gateway   paymentServiceCB    state=CLOSED  failureRateThreshold=100.0%  slowCallRateThreshold=100.0%
+
+order     inventoryServiceCB  state=CLOSED  failureRateThreshold= 70.0%  slowCallRateThreshold= 70.0%
+order     sharedDbCB          state=CLOSED  failureRateThreshold= 70.0%  slowCallRateThreshold= 70.0%
+```
+
+The downstream readback is the control: the swept `70` **is** live in `order-service`, so the
+gateway's `100.0` is the `measurement-plane` pin winning over a present env var — not an env
+var that failed to arrive.
+
+### Gate 6f — lambda, reported, threshold untouched
+
+| | |
+|---|---|
+| `lambda_target` | 10.0000 |
+| `lambda_achieved` | **9.1639** |
+| ratio achieved/target | **0.9164** |
+| `|achieved − target| / target` | **0.0836** (8.36 %) |
+| `lambda_cv` | 0.0142 |
+| frozen rule (§9, `3e4ad1e`) | 0.15 two-sided → retain iff `0.85 ≤ ratio ≤ 1.15` |
+| `lambda_deviation_flag` | `False` — **not** excluded |
+
+The threshold was **not** adjusted, per §9. One observation is not a variance estimate and
+sets no expectation for the sweep.
+
+### Gate 6d/6e detail, and a live check of §11
+
+The §5 horizon for this run was `2026-09-19T23:49:37Z` + **18.8 s**
+(`fault_cleared_at` + `time_to_recover` 6.774 s + 5 s). `time_to_recover` was measured, so the
+§5.1 fallback was not exercised.
+
+The poller logged **39 error ticks** and two gaps over 2 s (8.169 s, 8.182 s), all between
+`23:48:15Z` and `23:49:08Z` — the `update_containers()` recreate window, when the gateway JVM
+is down. **Zero of them fall inside the run horizon**, where coverage was 19 ticks and
+0 uncovered seconds. That is the §11 prediction confirmed on real data rather than argued.
+
+The sidecar record for the run contains a complete interior lifecycle and no gateway events:
+
+```
+order / inventoryServiceCB   CLOSED_TO_OPEN        23:49:41.092Z
+order / inventoryServiceCB   OPEN_TO_HALF_OPEN     23:49:46.093Z
+order / inventoryServiceCB   HALF_OPEN_TO_CLOSED   23:49:49.426Z
+```
+
+### Preflight values recorded at GO SMOKE
+
+| item | mesh down | mesh up |
+|---|---|---|
+| `git rev-parse HEAD` | `534d3700b57e44696654287e308a40ee671a04b6`, tree clean | — |
+| Free RAM | 4.38 G of 13.84 G | **1.28 G of 13.84 G (90.8 % used)** |
+| Disk `C:` | 30 G free (88 % used) | — |
+| Docker | 17 images, 11 containers, build cache 18 G | 11 containers healthy |
+| `STANDBYIDLE` | 0 (never) on AC and DC | — |
+| `HIBERNATEIDLE` | 0 (never) on AC; `0x7fffffff` (never) on DC | — |
+| `LIDACTION` | **no setting index returned** — this setting is hidden on this machine and was not verifiable | — |
+| OneDrive | process not running (sync stopped) | — |
+
+> **Free RAM with the mesh up is 1.28 G (90.8 % used).** This is the thinnest resource at
+> launch and it was not measurable before the mesh came up. Six JVMs plus Prometheus and
+> Grafana on 13.84 G leaves little headroom for a 4.3 h sweep; if the host starts paging,
+> `time_to_recover` measures the host rather than the breaker. Stopping Grafana and Prometheus
+> would free headroom and costs nothing measurable — CLAUDE.md records that the dataset comes
+> from `runner.py` polling `/actuator/metrics` directly and never touches Prometheus. That is
+> a change to the running mesh, so it is **not** done here.
+
+### Quarantine — `data/audit/smoke_20260919T235235Z/`
+
+| file | sha256 |
+|---|---|
+| `phase4b_smoke.csv` | `3ce2acb1d36158df9786d4adcc7aa4786fae35e0abad37fab370bdde2ae45682` |
+| `cb_transitions_post_smoke_74.jsonl` | `caa068c08ed32f75050e1d39510985a86339720741fadbe57e4fb3dfd2bfabbc` |
+| `smoke_sidecar_record.jsonl` | `fd971b4b7709898a33a1ac92859fcf4b9095fe547534a6432b6a0ee82d22dbb6` |
+| `phase4b_smoke_poll.jsonl` | `282a4f65024116dcaed7a6c5ee0437d5bd1a2484b6dcbac664a08e7d92ac72d2` |
+| `phase4b_smoke_ids.txt` | `35aa1a330cc17c7cbbdb760b0aa851c7862ae693a7e49979f879bb64ce9e518d` |
+| `infra_env_at_smoke.env` | `c1e24dfad2ff165f6ade1b515db3b0998b13978bcc10f0ed8e9eacd120c4d547` |
+
+### Restore and sweep start state
+
+`data/cb_transitions.jsonl` restored by copying `data/audit/sidecar_baseline_73.jsonl` back:
+**`ffad69d6755c8a33e5d2b064a56354981a4fda82c742d642c0097abbf0dbee0e`, 73 lines** — byte-identical
+to the baseline. Nothing was hand-edited at any point.
+
+| start-state assertion | |
+|---|---|
+| `data/phase4b_postd25.csv` absent | YES |
+| `data/phase4b_smoke.csv` absent (preserved in quarantine) | YES |
+| `data/audit/phase4b_poll.jsonl` absent | YES |
+| sidecar at baseline, 73 lines | YES |
+| no `data/audit/phase4b_orphans_*.csv` | YES |
+| no poller process | YES (`runner_active()` → `False`) |
+| no runner process | YES |
+| `data/run_status.json` phase | `completed` |
+| mesh | up, 11 containers healthy |
+| gateway image | `sha256:ce110c0a0bfb…cbabfc`, container on the same image after the runner's own recreate |
+| `infra/.env` | left at the smoke config (`T30/W5/D5/COUNT_BASED`); the runner rewrites it per run, so this is not a launch precondition |
+
+**Record `"gateway_image_id": "sha256:ce110c0a0bfbc290e735fe810f4bb5a60b2ef84ad5e63c0b627a0b90cecbabfc"`
+in the §7 manifest JSON at launch.** The image ID changed from the Part A value (`406bc235`)
+when `up -d --build` re-exported it; the container now runs the same ID as the tag, which is
+what gate 3b requires. The image's `.Created` is `2026-09-19T22:14:43Z`, later than the last
+commit touching `services/gateway-service` (`d1c6a481`, `2026-09-18T07:50:50Z`) on a clean
+tree — still the best available evidence, still not proof, for the reason §8 gives.
+
+### Operational finding: stopping the poller on this host
+
+`kill -INT` against the Git Bash job PID did **not** reach the Python process, and
+`taskkill /PID <pid>` was refused (*"can only be terminated forcefully"*). Only
+`Stop-Process -Force` worked, which skips the poller's `finally` block, so **no `poller_stop`
+marker was written**. `check_run()` handles that — it falls back to the last tick when
+`poll_stop` is `None` — and the run still verified clean. For the sweep, prefer the
+foreground-in-its-own-window form in §11 so Ctrl-C produces a clean marker.
+
+---

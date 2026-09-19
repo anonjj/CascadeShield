@@ -30,6 +30,22 @@ recovers slower than COUNT_BASED," one claim, not one per D_w).
 (distinct configurations, one observation each) -- they are not wrong, they
 were misapplied. Use `stratified_cluster_permutation_test` whenever your
 units carry replicates.
+
+Four tools, four different questions -- pick by what "the unit" and "the
+value" need to be, not by which one is newest:
+  - `exact_p_floor`/`exact_logrank_test`: unclustered rows.
+  - `stratified_cluster_permutation_test`: one value per configuration
+    (mean of replicates), D_w (or similar) held fixed as a blocking stratum.
+    Right when the claim is about a config-level summary.
+  - `cluster_permutation_rank_test`: raw replicate rows preserved, whole
+    configurations permuted as the unit of assignment, no stratification.
+    Right when collapsing to a mean would beg the question (D19 section 5.2,
+    statistical-treatment.md) but the claim doesn't need a blocking factor.
+  - `stratified_cluster_permutation_rank_test`: both at once -- raw rows
+    preserved AND D_w held fixed as a blocking stratum. Right whenever a
+    claim is per-D_w-blocked *and* mean-collapsing would beg the question --
+    closes the "Revisit if" D19's 2026-09-19 update left open for
+    window_type_recovery_leak.py.
 """
 from __future__ import annotations
 
@@ -472,6 +488,188 @@ def cluster_permutation_rank_test(group1_clusters: dict, group2_clusters: dict,
     )
 
 
+# ---------------------------------------------------------------------------
+# Stratified + row-preserving -- D_w as a blocking factor, replicates never collapsed
+# ---------------------------------------------------------------------------
+
+@dataclass
+class StratumRankInfo:
+    name: str
+    n1: int
+    n2: int
+    n_assignments: int
+    numerator: float
+    variance: float
+
+
+@dataclass
+class StratifiedClusterRankResult:
+    statistic: float
+    p_value: float
+    p_value_one_sided: float
+    p_floor_one_sided: float
+    p_floor_two_sided: float
+    total_assignments: int
+    two_sided: bool
+    strata: list = field(default_factory=list)
+    method: str = "exact-enumeration"
+    note: str = ""
+
+
+def stratified_cluster_permutation_rank_test(strata: dict, two_sided: bool = True,
+                                              resamples: int = DEFAULT_RESAMPLES,
+                                              seed: int = 0) -> StratifiedClusterRankResult:
+    """Combines stratified_cluster_permutation_test's blocking-by-stratum design with
+    cluster_permutation_rank_test's row-preserving statistic. Neither existing function
+    alone answers "does window_type affect this timing DV, holding wait_duration fixed as
+    a blocking factor, without collapsing any configuration's replicates to a mean" --
+    D19 section 5.2 (statistical-treatment.md) ruled out the mean-collapse for exactly
+    this kind of contrast, and D24 (decision-log.md) showed per-stratum testing alone
+    reproduces H3's own now-fixed inflated-n mistake one D_w bucket at a time.
+
+    strata: {stratum_name: (group1_clusters, group2_clusters)}, each side a
+    {config_id: [raw replicate values]} dict -- list-valued, never pre-averaged, same
+    contract as cluster_permutation_rank_test. Every stratum must have >=1 configuration
+    on each side; exclude an empty-arm stratum (e.g. every configuration in that D_w
+    gateway-tripped on one side) before calling this, same as
+    stratified_cluster_permutation_test's own contract.
+
+    Statistic: within each stratum, compute the row-preserving rank-sum numerator
+    (R1 - E1, E1 = n1_rows*(N+1)/2) and variance (V1 = n1_rows*n2_rows*(N+1)/12) exactly
+    as cluster_permutation_rank_test does for a single stratum -- ranking the pooled rows
+    of THAT stratum only, never across strata (D_w buckets aren't on a shared scale).
+    Combine van-Elteren style: Z = sum(numerator_s) / sqrt(sum(variance_s)).
+
+    Note: unlike stratified_cluster_permutation_test, this statistic's permutation null
+    is NOT guaranteed symmetric around 0 -- a block-size-weighted design has no general
+    "mirror combo" with negated statistic the way a one-value-per-config rank sum does
+    (see cluster_permutation_rank_test's own self-test, where two-sided p already equals
+    one-sided p for its complete-separation case). So p_value (two-sided) can equal
+    p_value_one_sided rather than roughly double it; that is expected, not a bug.
+
+    Null: independently relabel each stratum's configurations (respecting its own
+    n1/n2), recompute the combined Z. Exact enumeration via the Cartesian product of
+    each stratum's C(n1+n2, n1) relabelings when the PRODUCT across strata stays within
+    EXACT_ENUMERATION_MAX_ASSIGNMENTS; Monte Carlo otherwise (each resample independently
+    redraws every stratum's relabeling), same +1/+1-corrected convention used everywhere
+    else in this module. Unlike stratified_cluster_permutation_test, a Monte Carlo
+    fallback is not optional here: window_type_recovery_leak.py's COARSE table pools
+    18v18 configs per wait_duration bucket on its own (C(36,18)~9e9), so even a single
+    stratum already exceeds the exact budget before any product across strata.
+    """
+    EXACT_ENUMERATION_MAX_ASSIGNMENTS = 50000
+
+    names = list(strata.keys())
+    strata_meta = []
+    for name in names:
+        g1, g2 = strata[name]
+        n1, n2 = len(g1), len(g2)
+        if n1 < 1 or n2 < 1:
+            raise ValueError(f"stratum {name!r} has an empty arm (n1={n1}, n2={n2}); "
+                              "exclude it before calling stratified_cluster_permutation_rank_test")
+        blocks = [g1[k] for k in g1] + [g2[k] for k in g2]
+        block_sizes = [len(b) for b in blocks]
+        all_rows = [v for block in blocks for v in block]
+        N = len(all_rows)
+        ranks = _ranks(all_rows)
+        block_rank_sums = []
+        idx = 0
+        for size in block_sizes:
+            block_rank_sums.append(sum(ranks[idx:idx + size]))
+            idx += size
+        strata_meta.append({
+            "name": name, "n1": n1, "n2": n2, "N": N,
+            "block_sizes": block_sizes, "block_rank_sums": block_rank_sums,
+            "n_assignments": math.comb(n1 + n2, n1),
+        })
+
+    def stratum_num_var(meta, combo) -> tuple[float, float]:
+        n1_rows = sum(meta["block_sizes"][i] for i in combo)
+        n2_rows = meta["N"] - n1_rows
+        if n1_rows == 0 or n2_rows == 0:
+            return 0.0, 0.0
+        R1 = sum(meta["block_rank_sums"][i] for i in combo)
+        E1 = n1_rows * (meta["N"] + 1) / 2.0
+        V1 = n1_rows * n2_rows * (meta["N"] + 1) / 12.0
+        return (R1 - E1), V1
+
+    # First n1 blocks of each stratum are that stratum's group1 blocks by construction
+    # (same invariant cluster_permutation_rank_test relies on and verifies in self_test).
+    strata_info = []
+    observed_num = 0.0
+    observed_var = 0.0
+    for meta in strata_meta:
+        num, var = stratum_num_var(meta, tuple(range(meta["n1"])))
+        observed_num += num
+        observed_var += var
+        strata_info.append(StratumRankInfo(name=meta["name"], n1=meta["n1"], n2=meta["n2"],
+                                            n_assignments=meta["n_assignments"],
+                                            numerator=num, variance=var))
+    observed_z = (observed_num / math.sqrt(observed_var)) if observed_var > 0 else 0.0
+
+    total_assignments = 1
+    for meta in strata_meta:
+        total_assignments *= meta["n_assignments"]
+
+    floor = stratified_p_floor([(m["n1"], m["n2"]) for m in strata_meta])
+
+    def joint_z(combos) -> float:
+        num = var = 0.0
+        for meta, combo in zip(strata_meta, combos):
+            n_, v_ = stratum_num_var(meta, combo)
+            num += n_
+            var += v_
+        return (num / math.sqrt(var)) if var > 0 else 0.0
+
+    if total_assignments <= EXACT_ENUMERATION_MAX_ASSIGNMENTS:
+        per_stratum_combos = [list(combinations(range(m["n1"] + m["n2"]), m["n1"]))
+                               for m in strata_meta]
+        two_sided_extreme = 0
+        one_sided_extreme = 0
+        for joint in itertools.product(*per_stratum_combos):
+            z = joint_z(joint)
+            if abs(z) >= abs(observed_z) - 1e-9:
+                two_sided_extreme += 1
+            if z <= observed_z + 1e-9:
+                one_sided_extreme += 1
+        p_two_sided = two_sided_extreme / total_assignments
+        p_one_sided = one_sided_extreme / total_assignments
+        method, note = "exact-enumeration", ""
+    else:
+        rng = random.Random(seed)
+        two_sided_extreme = 0
+        one_sided_extreme = 0
+        for _ in range(resamples):
+            combos = [tuple(rng.sample(range(m["n1"] + m["n2"]), m["n1"])) for m in strata_meta]
+            z = joint_z(combos)
+            if abs(z) >= abs(observed_z) - 1e-9:
+                two_sided_extreme += 1
+            if z <= observed_z + 1e-9:
+                one_sided_extreme += 1
+        p_two_sided = (two_sided_extreme + 1) / (resamples + 1)
+        p_one_sided = (one_sided_extreme + 1) / (resamples + 1)
+        method = "monte-carlo"
+        note = (f"product of per-stratum C(n1+n2,n1) = {total_assignments} exceeds "
+                f"EXACT_ENUMERATION_MAX_ASSIGNMENTS={EXACT_ENUMERATION_MAX_ASSIGNMENTS}; "
+                f"Monte Carlo over {resamples} resamples (each draw independently "
+                "resamples every stratum's relabeling), +1/+1 correction so p is never "
+                "exactly 0 -- quote as an upper bound on the true p-value, not the value "
+                "itself.")
+
+    return StratifiedClusterRankResult(
+        statistic=observed_z,
+        p_value=(p_two_sided if two_sided else p_one_sided),
+        p_value_one_sided=p_one_sided,
+        p_floor_one_sided=floor["one_sided_floor"],
+        p_floor_two_sided=floor["two_sided_floor"],
+        total_assignments=total_assignments,
+        two_sided=two_sided,
+        strata=strata_info,
+        method=method,
+        note=note,
+    )
+
+
 def self_test() -> bool:
     ok = True
 
@@ -624,6 +822,67 @@ def self_test() -> bool:
     check("18v18 clusters falls through to Monte Carlo", cr_big.method == "monte-carlo")
     check("Monte Carlo p is never exactly 0", cr_big.p_value > 0)
     check("Monte Carlo catches the complete separation here (p small)", cr_big.p_value < 0.01)
+
+    print("stratified_cluster_permutation_rank_test")
+    # Hand-computed: 2 strata, 1 config/arm each, 1 row/config (degenerate but exact).
+    # s1: {a:[1.0]} vs {b:[10.0]}; s2: {c:[2.0]} vs {d:[20.0]}. Each stratum's pooled
+    # ranks are [1,2] -> block_rank_sums=[1,2], N=2, E1=1*3/2=1.5, V1=1*1*3/12=0.25.
+    # Observed (group1=a/c first): numerator=1-1.5=-0.5, variance=0.25 per stratum ->
+    # combined numerator=-1.0, variance=0.5, z=-1.0/sqrt(0.5)=-1.41421356...
+    # 4 joint assignments total (2x2): per-stratum numerator is -0.5 (group1 block first)
+    # or +0.5 (swapped), variance always 0.25 -> joint z in {-1.41421356, 0, 0, +1.41421356}.
+    # Two-sided extreme (|z|>=1.41421356): 2/4=0.5. One-sided (z<=-1.41421356): 1/4=0.25.
+    sr_small = stratified_cluster_permutation_rank_test(
+        {"s1": ({"a": [1.0]}, {"b": [10.0]}), "s2": ({"c": [2.0]}, {"d": [20.0]})})
+    check("total_assignments == C(2,1)*C(2,1) == 4", sr_small.total_assignments == 4)
+    check("hand-computed z == -1.41421356...", math.isclose(sr_small.statistic, -1.0 / math.sqrt(0.5)))
+    check("hand-computed two-sided p == 0.5", math.isclose(sr_small.p_value, 0.5))
+    check("hand-computed one-sided p == 0.25", math.isclose(sr_small.p_value_one_sided, 0.25))
+    check("per-stratum numerator/variance recorded (-0.5, 0.25)",
+          math.isclose(sr_small.strata[0].numerator, -0.5) and math.isclose(sr_small.strata[0].variance, 0.25))
+
+    try:
+        stratified_cluster_permutation_rank_test({"D30": ({}, {"t1": [1.0]})})
+        check("empty-arm stratum raises", False)
+    except ValueError:
+        check("empty-arm stratum raises", True)
+
+    # Row-preserving vs mean-collapsed disagreement, now under stratification: stratum
+    # "s1" reuses cluster_permutation_rank_test's own asymmetric-replicate-count case
+    # (opposite-sign statistic vs its mean-collapsed counterpart); stratum "s2" is a
+    # smaller, real-signal stratum so the combined test isn't driven by one stratum
+    # alone. Confirms the disagreement documented for the single-stratum tool persists
+    # once D_w is added as a blocking factor, not just algebraically absorbed away.
+    strat_rows_g1 = {"c1": [1.0, 1.0, 1.0], "c2": [1.0, 1.0], "c3": [1.0]}
+    strat_rows_g2 = {"c4": [5.0], "c5": [5.0], "c6": [0.5] * 10}
+    sr_diverge = stratified_cluster_permutation_rank_test({
+        "s1": (strat_rows_g1, strat_rows_g2),
+        "s2": ({"e": [1.0]}, {"f": [1.1]}),
+    })
+    strat_means_g1 = {k: sum(v) / len(v) for k, v in strat_rows_g1.items()}
+    strat_means_g2 = {k: sum(v) / len(v) for k, v in strat_rows_g2.items()}
+    sr_mean_collapsed = stratified_cluster_permutation_test({
+        "s1": (strat_means_g1, strat_means_g2),
+        "s2": ({"e": 1.0}, {"f": 1.1}),
+    })
+    check("stratified row-preserving and mean-collapsed statistics have opposite sign here",
+          sr_diverge.statistic > 0 and sr_mean_collapsed.statistic < 0)
+    check("stratified row-preserving and mean-collapsed p-values disagree",
+          not math.isclose(sr_diverge.p_value, sr_mean_collapsed.p_value, abs_tol=1e-9))
+
+    # Monte Carlo fallback: one stratum shaped like window_type_recovery_leak.py's
+    # COARSE table (18v18 configs, C(36,18)~9e9 on its own), a second small stratum.
+    # The product across strata is astronomically past EXACT_ENUMERATION_MAX_ASSIGNMENTS
+    # even though the second stratum alone would enumerate fine.
+    big_g1 = {f"c{i}": [1.0 + 0.01 * i] for i in range(18)}
+    big_g2 = {f"c{i}": [5.0 + 0.01 * i] for i in range(18, 36)}
+    sr_big = stratified_cluster_permutation_rank_test(
+        {"big": (big_g1, big_g2), "small": ({"e": [1.0]}, {"f": [1.1]})}, resamples=2000)
+    check("stratified Monte Carlo fallback triggers when the product exceeds the exact budget",
+          sr_big.method == "monte-carlo")
+    check("stratified Monte Carlo p is never exactly 0", sr_big.p_value > 0)
+    check("stratified Monte Carlo catches the complete separation in the big stratum (p small)",
+          sr_big.p_value < 0.01)
 
     print()
     print("D24's D_w=5/15 comparison, done correctly at the configuration level")

@@ -56,7 +56,9 @@ Let a configuration have 3 replicate rows after the §4 exclusions are applied.
 | all 3 replicates excluded by §4 | **config is EXCLUDED** | |
 | exact tie between two configs' values | `_ranks()` assigns **average ranks** (already the implementation's behaviour); no tie-break is applied | ties are recorded and reported |
 
-"Censored" means `half_open_probe_timed_out == True` for that row.
+"Censored" means `half_open_probe_timed_out == True` for that row. The primary rule above —
+**drop** censored replicates — is paired with a pre-registered imputation sensitivity analysis
+in **§3.2**, because dropping them is not neutral.
 
 **If a stratum ends with fewer than 4 configurations in an arm:** the analysis proceeds with
 the reduced $n$ and the **recomputed** floor for the actual arm sizes is reported (never the
@@ -80,6 +82,55 @@ The power simulation assumed one value per configuration, no ties, and no censor
   2-replicate mean, not a 3-replicate mean); and, if a censoring-aware value rule is ever
   adopted instead of the table above, a null model that generates censoring at the realised
   rate. That re-simulation is a new artifact with its own seed and N, reported as such.
+
+### 3.2 Censoring sensitivity — impute at the probe deadline *(2026-09-20 amendment)*
+
+**Direction of the primary rule's bias, stated before any data.** A censored replicate is
+right-censored: its true `time_to_recover` is **at least** the probe deadline, it is simply
+unobserved beyond it. Those are the largest values in the distribution. Dropping them means
+the config mean is taken only over replicates that recovered *before* the deadline, i.e. over
+the truncated lower part of the distribution. **The primary rule therefore biases every
+affected config's mean DOWNWARD — recovery looks faster than it was.** The bias grows with
+that config's censoring rate, so if censoring is differential between arms, the more-censored
+arm's means are pulled down further, which can manufacture *or* mask an arm difference. This
+is not a small-print caveat; it is the reason the sensitivity analysis below is mandatory
+rather than optional.
+
+**The sensitivity rule.** Re-run the entire primary analysis with one change: each censored
+replicate takes the value `half_open_probe_deadline_s(wait_duration)` = `3 * wait_duration
++ 60` — **75 s** at $D_w$=5, **105 s** at $D_w$=15, **150 s** at $D_w$=30 — and the config
+mean is the arithmetic mean of all **3** replicates. Nothing else changes: same test, same
+strata, same unit, same §4 exclusions, same §7 validity check.
+
+Why the deadline and not something larger. It is the **smallest value consistent with the
+censoring event** — the run is known to have not closed by then, and nothing in the data
+bounds it above. So:
+
+```
+drop-censored mean   <=   impute-at-deadline mean   <=   true mean
+```
+
+with equality throughout only when nothing is censored. The proof of the first inequality is
+immediate: every uncensored value is strictly below the deadline, so replacing a dropped
+replicate with the deadline can only raise the mean. **Both rules are lower bounds on the
+truth; the imputed one is the tighter of the two.** Neither is unbiased, and no claim is made
+that the imputed value is the replicate's real recovery time.
+
+Three consequences, all pre-registered:
+
+1. **Configs excluded by the primary rule re-enter.** A 0/3-uncensored config is EXCLUDED by
+   the §3 table but takes the value `3 * wait_duration + 60` here. Per-arm, per-stratum $n$
+   therefore differs between the two analyses, so **the sensitivity analysis reports its own
+   recomputed exact floor**, never the primary's.
+2. **Ties are expected and are not tie-broken.** Within a stratum the imputed value is a
+   single constant, so two configs with the same censoring pattern can land on identical
+   values. `_ranks()` assigns average ranks, as §3 already specifies. Ties are counted and
+   reported, and §3.1's `Power simulation applicability: NOT ESTABLISHED` applies to the
+   sensitivity analysis whenever they occur.
+3. **Both results are reported side by side, always** — not only when they disagree. If they
+   disagree in direction or in significance at the pre-registered level, **that disagreement
+   is itself the reported finding**, and neither result is presented as the answer. The
+   primary remains the primary; the sensitivity does not silently replace it.
 
 ## 4. Exclusion rules
 
@@ -105,7 +156,10 @@ Applied in this order, before any value is computed:
    analysis and reported separately. `lambda_deviation_flag` is `None`, not `False`, when the
    rate could not be measured; `None` is treated as **not excluded but flagged**, since
    "couldn't measure" is not "deviated". The threshold is frozen at the runner's own
-   value and is not re-tuned after the smoke run — see **§9**.
+   value and is not re-tuned after the smoke run — see **§9**. What the rate is measured
+   over, and why it is a noisier instrument in the COUNT arm, is **§9.1**; the per-arm
+   exclusion reporting and the trigger for a no-lambda-exclusion sensitivity analysis are
+   **§9.2**.
 
 Every exclusion is counted and reported by arm x stratum. Exclusion counts are reported
 before any p-value.
@@ -125,6 +179,30 @@ end   = fault_cleared_at                       (sidecar record for that run)
 `fault_cleared_at` **over-covers**. That is deliberate: the horizon gates a coverage
 *requirement*, so erring long makes the requirement stricter, not looser. A second of the
 horizon counts as covered if some poll tick lies within **1.6 s** of it.
+
+### 5.1 Fallback when `time_to_recover` is null *(2026-09-20 amendment)*
+
+A blank `time_to_recover` means the run never observed a closure, so there is no measured
+recovery interval to add. **The horizon then uses `half_open_probe_deadline_s(wait_duration)`
+= `3 * wait_duration + 60` in its place** — **75 s** at $D_w$=5, **105 s** at $D_w$=15,
+**150 s** at $D_w$=30:
+
+```
+end = fault_cleared_at
+    + (time_to_recover  if measured  else  3 * wait_duration + 60)
+    + 5 s
+```
+
+Why this value and not 0. `analysis/gateway_poll_verify.py` previously substituted `0.0`,
+which **shortened** the horizon to `fault_cleared_at + 5 s` — making the coverage requirement
+trivially easy to satisfy for exactly the runs whose evidence is weakest, and in the opposite
+direction to the "err long" rule stated above. The deadline is the longest interval the
+harness could still have been watching for a closure, so substituting it keeps the requirement
+strictest where the measurement failed. It is the same constant §4 rule 4 already uses, so no
+new number enters the plan.
+
+If `time_to_recover` is null **and** `wait_duration` is unusable, the horizon is **undefined**
+and the run is `NOT_VERIFIED`. It is never treated as a zero-length recovery.
 
 ## 6. Verification rule for a run
 
@@ -181,8 +259,10 @@ The inference this design supports, stated in full:
 
 ---
 
-*Sections 9-11 were added by the 2026-09-20 amendment, before any Phase 4B run. See the
-launch manifest for the superseded and final commit SHAs.*
+*Sections 9-11 were added by the first 2026-09-20 amendment, and §3.2, §5.1, §9.1, §9.2 and
+§10.1 by the second, both **before any Phase 4B run**. See the launch manifest for the
+superseded and final commit SHAs. Nothing above was rewritten: the amendments add rules and
+state, in place, which earlier text they qualify.*
 
 ## 9. Lambda gate — frozen threshold, applied identically to all 72 runs
 
@@ -221,6 +301,102 @@ Consequences, all pre-registered:
   before the sweep launches (or accepted and reported). It is never grounds for moving the
   threshold.
 
+### 9.1 What `lambda_achieved` is actually measured over *(2026-09-20 amendment)*
+
+Established from the code before any data, because the answer is not symmetric between arms.
+
+`lambda_achieved` is computed **only from the fault-phase load call** (`runner.py:1326`); the
+20-request pre-fault baseline call at `runner.py:1259` discards its rate. Inside
+`generate_load` (`runner.py:656-663`):
+
+```
+span             = last dispatch timestamp - first dispatch timestamp
+lambda_achieved  = (n_dispatched - 1) / span        ==  1 / mean inter-dispatch interval
+lambda_cv        = stdev(intervals) / mean(intervals)
+```
+
+`n_dispatched` and the dispatch window come from `compute_load_plan`, which sizes the two arms
+**completely differently** — COUNT_BASED by call count, TIME_BASED by seconds. At
+`LOAD_RATE_RPS` = 10 req/s (`interval_s` = 0.1 s) the Option C grid gives:
+
+| arm | configs | requests | dispatch window | intervals in the estimate |
+|---|---|---|---|---|
+| COUNT, W=5 and W=10 | 8 of 12 | `max(3W, 15, 40)` = **40** | **4.0 s** | **39** |
+| COUNT, W=20 | 4 of 12 | **60** | **6.0 s** | **59** |
+| TIME | all 12 | `10 * (W + D_w + 10)` = **200-600** | **20-60 s** | **199-599** |
+
+**So the two arms' lambda estimates are not comparable instruments.** Since
+`lambda_achieved` = 1/(mean of $n-1$ intervals), its relative standard error is
+$\mathrm{CV}/\sqrt{n-1}$:
+
+| arm | relative SE per unit of `lambda_cv` |
+|---|---|
+| COUNT | **0.130 - 0.160** |
+| TIME | **0.041 - 0.071** |
+
+**The COUNT arm's rate estimate is 2.3x to 3.9x noisier than the TIME arm's, for identical
+underlying jitter.** Two mechanisms make it worse, and one makes it better — all three are
+recorded here because the net sign cannot be predicted:
+
+* **(worse) `span` is a difference of two order statistics.** One delayed dispatch at either
+  end moves it. A single 0.5 s stall shifts `lambda_achieved` by **-11.4%** at $n$=40 (three
+  quarters of the way to the 15% gate on its own) versus **-2.5%** at $n$=200 and **-0.8%**
+  at $n$=600. A stall the length of one fault latency (3.0 s) shifts it **-43%** at $n$=40 and
+  only **-13.1%** at $n$=200.
+* **(worse) the gate is tight in absolute terms.** Tripping it needs a mean inter-dispatch
+  interval above 117.65 ms or below 86.96 ms — i.e. a sustained **+17.6 ms / -13.0 ms** per
+  interval. Windows' default timer granularity is 15.6 ms, and `time.sleep(0.1)` overshoots
+  one-sidedly, so this is not a comfortable margin for either arm — but only COUNT lacks the
+  sample size to average it away.
+* **(better) COUNT's two smallest configs cannot queue at all.** `concurrency` is
+  `ceil(10 * 3.0 * 1.5)` = **45** workers, and the W=5/W=10 COUNT configs dispatch only **40**
+  requests, so no request ever waits for a free worker. Every other config in the grid (COUNT
+  W=20 at 60 requests, all 12 TIME configs at 200-600) exceeds the pool and *can* have
+  dispatch timestamps deferred by thread-pool queueing, which is the mechanism
+  `lambda_achieved` exists to detect. **8 of 12 COUNT configs are structurally immune to the
+  failure the gate looks for; all 12 TIME configs are exposed to it.**
+
+The **systematic** component (mean sleep overshoot) is the same in both arms — same
+`interval_s`, same loop — so it does not by itself create a differential. The **sampling**
+component does, in the COUNT arm's disfavour; the **queueing exposure** does, in the TIME
+arm's disfavour. Which dominates is an empirical question this design cannot settle in
+advance, which is exactly why §9.2 exists rather than a prediction.
+
+### 9.2 Lambda exclusion reporting and the sensitivity trigger *(2026-09-20 amendment)*
+
+**(a) Exclusion counts by arm are reported before any p-value.** For each arm, and for each
+arm x stratum cell, report: runs excluded by rule §4.5 (`lambda_deviation_flag == True`), runs
+flagged-but-retained (`lambda_deviation_flag` is `None`), and runs retained clean — as counts
+and as rates over the 36 runs per arm. These appear in the results **above** the test output,
+not in an appendix.
+
+**(b) The sensitivity trigger, with the margin stated now.** Let $r_\mathrm{C}$ and
+$r_\mathrm{T}$ be the lambda-exclusion rates in the COUNT and TIME arms, each over that arm's
+36 runs. A **sensitivity analysis with rule §4.5 switched off entirely** — every run retained
+regardless of `lambda_deviation_flag`, everything else identical — is run and reported
+alongside the primary whenever **either**:
+
+> **(i) $|r_\mathrm{C} - r_\mathrm{T}| > 0.10$** — a difference of more than 10 percentage
+> points, equivalently **4 or more runs out of 36**; **or**
+>
+> **(ii) $\max(r_\mathrm{C}, r_\mathrm{T}) > 0.20$** — either arm losing more than
+> 7 of its 36 runs, whatever the balance.
+
+Why 10 points. The resolution of a 36-run arm is 1/36 = 2.78 points, so the margin must be a
+small multiple of that to mean anything. Under a null of equal true exclusion probability
+$p \le 0.10$ in both arms, the standard deviation of $r_\mathrm{C} - r_\mathrm{T}$ is at
+most $\sqrt{2p(1-p)/36}$ = 7.07 points, so a 10-point margin is about 1.4 SD: **it will fire
+occasionally on noise, and that is the intended direction of error.** The sensitivity analysis
+costs a paragraph; a differential exclusion that silently reshapes the comparison costs the
+result. Criterion (ii) exists because a large *balanced* exclusion rate means rule §4.5 is
+doing a lot of work in both arms, which is worth bounding even when it is doing it evenly.
+
+Both criteria are evaluated and their values reported **whether or not** either fires. If a
+sensitivity analysis is triggered, it is reported next to the primary with its own recomputed
+exact floor (retaining excluded runs changes the per-arm, per-stratum configuration counts),
+and **any disagreement in direction or significance is reported as the finding** — the primary
+is not quietly preferred.
+
 ## 10. Re-collection and quarantine
 
 Aborted, orphaned and gate-failing runs are re-collected at **the same
@@ -252,6 +428,32 @@ as evidence and is excluded by the post-sweep check's in-scope filter rather tha
 
 The sweep's `--seed` is unchanged across a re-collection, so the run order of the remaining
 cells is the one the original shuffle assigned.
+
+### 10.1 Re-collection cap *(2026-09-20 amendment)*
+
+**At most 2 re-attempts per `(experiment_id, replicate)` key — 3 attempts in total.**
+
+* **Every attempt is counted and reported**, per key, including keys that succeeded on the
+  first attempt. The ledger is derived, not kept by hand: one quarantine event writes exactly
+  one `data/audit/phase4b_orphans_<timestamp>.csv`, so a key's attempt number is
+  `1 + (number of distinct orphans files it appears in)`. Two rows of one `DUPLICATE_KEY` pair
+  live in the same file and therefore consume **one** re-attempt, not two.
+* **A key still unusable after 2 re-attempts stays EXCLUDED and is reported as such** — class
+  `AT_REATTEMPT_CAP`. It is not quarantined a third time, not re-collected, and never quietly
+  retried. Its exclusion is reported alongside the §4 exclusion counts, by arm x stratum, with
+  the reason each attempt failed.
+* `analysis/phase4b_reconcile.py` enforces this: a capped key is classified before any other
+  unusable-row class, so it cannot be re-collected by way of `DUPLICATE_KEY` or `ORPHAN_ROW`,
+  and its row is **left in the CSV** — which is what stops the runner rescheduling it, since
+  `load_completed()` treats a `precondition_ok=="True"` row as done.
+
+**One honest limitation.** That mechanism does not cover a capped key whose row has
+`precondition_ok != True`: `load_completed()` only skips `True` rows, so a resume **would**
+retry it. The runner has no per-attempt state and is read-only for this phase, and neither
+editing the dataset nor editing the runner is in scope. Such keys are therefore reported to
+the operator with an explicit warning, and the cap is enforced by stopping the resume. If a
+capped aborted key is nevertheless re-run, that is recorded and reported as a **deviation**,
+not absorbed.
 
 ## 11. Poller duty cycle is constant across arms
 

@@ -57,6 +57,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -470,8 +471,12 @@ def cmd_report(args: argparse.Namespace) -> int:
         median = statistics.median(vals)
         q1 = vals[n // 4]
         q3 = vals[(3 * n) // 4]
-        print(f"{label}: n={n}  median={median:.3f}/s  "
-              f"IQR=[{q1:.3f}, {q3:.3f}]  min={vals[0]:.4g}  max={vals[-1]:.4g}")
+        n_above_1 = sum(1 for v in vals if v > 1)
+        n_above_10 = sum(1 for v in vals if v > 10)
+        print(f"{label}: n={n}  min={vals[0]:.4g}  Q1={q1:.3f}/s  median={median:.3f}/s  "
+              f"Q3={q3:.3f}/s  max={vals[-1]:.4g}  "
+              f"(>1/s: {n_above_1}/{n} [{100*n_above_1/n:.0f}%]  "
+              f">10/s: {n_above_10}/{n} [{100*n_above_10/n:.0f}%])")
 
     print("lambda* (calls/sec needed to ever evaluate) by stratum:")
     report_stratum("  ALL", rows)
@@ -480,6 +485,49 @@ def cmd_report(args: argparse.Namespace) -> int:
     for bucket in ("0", "1-9", "10-99", "100+"):
         report_stratum(f"  stars={bucket}",
                         [r for r in rows if r["stars_bucket"] == bucket])
+
+    # Median-composition check: is the reported median driven by many independent authors
+    # landing near the same rate, or by one copy-pasted (minimum_number_of_calls, T) pair
+    # showing up repeatedly? Grouped on the raw config pair, not lambda_star itself -- two
+    # different pairs can coincidentally share a ratio, which would understate duplication.
+    all_vals_sorted = sorted(r["lambda_star"] for r in rows)
+    n_all = len(all_vals_sorted)
+    all_median = statistics.median(all_vals_sorted)
+    at_median = [r for r in rows if r["lambda_star"] == all_median]
+    pair_counts = Counter((r["minimum_number_of_calls"], r["sliding_window_size_s"]) for r in rows)
+    at_median_pair_counts = Counter(
+        (r["minimum_number_of_calls"], r["sliding_window_size_s"]) for r in at_median)
+
+    print(f"\nMedian composition check (is {all_median:.3f}/s driven by one duplicated config, "
+          f"not real diversity?):")
+    print(f"  {len(at_median)}/{n_all} ({100*len(at_median)/n_all:.0f}%) of ALL instances sit "
+          f"exactly at the sample median.")
+    print("  top 3 (minimum_number_of_calls, sliding_window_size_s) pairs by frequency, whole sample:")
+    for (n_min, T), count in pair_counts.most_common(3):
+        print(f"    n_min={n_min:g}, T={T:g}s -> lambda*={n_min/T:.3f}/s : "
+              f"{count}/{n_all} ({100*count/n_all:.0f}% of the FULL sample)")
+    print("  top 3 pairs among instances sitting AT the median:")
+    for (n_min, T), count in at_median_pair_counts.most_common(3):
+        print(f"    n_min={n_min:g}, T={T:g}s : {count}/{len(at_median)} "
+              f"({100*count/len(at_median):.0f}% of at-median instances)")
+
+    # Tail-placement check: is the lambda*=20 finding (T=5s, minimumNumberOfCalls
+    # defaulted to 100, found in 3 independent repos) an isolated outlier, or part of a
+    # broader cluster of similarly high-rate configs?
+    q3_all = all_vals_sorted[(3 * n_all) // 4]
+    lambda_20_percentile = 100 * sum(1 for v in all_vals_sorted if v < 20) / n_all
+    n_ge_10 = sum(1 for v in all_vals_sorted if v >= 10)
+    n_eq_20 = sum(1 for v in all_vals_sorted if v == 20)
+    print(f"\nTail placement of the lambda*=20 finding:")
+    print(f"  percentile rank of 20/s in the ALL distribution: {lambda_20_percentile:.1f}th "
+          f"percentile (Q3 of ALL = {q3_all:.3f}/s, i.e. {20/q3_all:.0f}x Q3)")
+    print(f"  instances with lambda* >= 10/s: {n_ge_10}/{n_all} ({100*n_ge_10/n_all:.1f}%), "
+          f"of which {n_eq_20} sit exactly at 20/s (the reported 3-repo case)")
+    if n_ge_10 <= n_eq_20 + 2:
+        print("  -> an isolated tail point, not the edge of a broader high-rate cluster.")
+    else:
+        print(f"  -> {n_ge_10 - n_eq_20} OTHER instances also sit at >=10/s -- part of a "
+              "broader high-rate cluster, not an isolated point.")
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     out_path = OUT_DIR / "report.json"

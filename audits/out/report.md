@@ -47,20 +47,36 @@ their name or path).
 
 ### λ* distribution by stratum (calls/sec needed to ever evaluate)
 
-| stratum | n | median | IQR | min | max |
-|---|---|---|---|---|---|
-| all | 447 | 0.500 | [0.150, 0.500] | 2e-05 | 20 |
-| tutorial-like | 49 | 0.500 | [0.167, 1.000] | 0.05 | 20 |
-| non-tutorial-like | 398 | 0.500 | [0.100, 0.500] | 2e-05 | 20 |
-| stars = 0 | 350 | 0.500 | [0.100, 0.500] | 5.787e-05 | 20 |
-| stars = 1–9 | 88 | 0.500 | [0.300, 1.000] | 2e-05 | 10 |
-| stars = 10–99 | 8 | 0.700 | [0.400, 1.000] | 0.06667 | 1 |
-| stars = 100+ | 1 | 0.050 | — | 0.05 | 0.05 |
+| stratum | n | min | Q1 | median | Q3 | max | >1/s | >10/s |
+|---|---|---|---|---|---|---|---|---|
+| all | 447 | 2e-05 | 0.150 | 0.500 | 0.500 | 20 | 47 (11%) | 9 (2%) |
+| tutorial-like | 49 | 0.05 | 0.167 | 0.500 | 1.000 | 20 | 10 (20%) | 7 (14%) |
+| non-tutorial-like | 398 | 2e-05 | 0.100 | 0.500 | 0.500 | 20 | 37 (9%) | 2 (1%) |
+| stars = 0 | 350 | 5.787e-05 | 0.100 | 0.500 | 0.500 | 20 | 34 (10%) | 9 (3%) |
+| stars = 1–9 | 88 | 2e-05 | 0.300 | 0.500 | 1.000 | 10 | 13 (15%) | 0 (0%) |
+| stars = 10–99 | 8 | 0.06667 | 0.400 | 0.700 | 1.000 | 1 | 0 (0%) | 0 (0%) |
+| stars = 100+ | 1 | 0.05 | 0.050 | 0.050 | 0.050 | 0.05 | 0 (0%) | 0 (0%) |
 
 **Median TIME_BASED config in this sample needs a sustained ≥0.5 calls/sec to ever evaluate**,
 consistent across the tutorial/non-tutorial split and across star buckets — not obviously a
 "toy config" artifact, since the tutorial-like subset isn't systematically lower than the
-non-tutorial one.
+non-tutorial one. Kept split by tutorial-vs-not and by star bucket throughout — never pooled
+into one number, since a single copy-pasted starter config (see next paragraph) could otherwise
+masquerade as independent convergence.
+
+**The median is substantially driven by one duplicated config, not independent diversity.**
+140/447 (31%) of all instances sit at exactly the sample median (0.500/s); of those, 101
+(72% of the at-median group, 23% of the *entire* 447-instance sample) share one single
+`(minimumNumberOfCalls=5, slidingWindowSize=10s)` pair — almost certainly one widely-copied
+tutorial/starter snippet, not 101 independent authors converging on the same rate by chance.
+A second pair, `(minimumNumberOfCalls=15, slidingWindowSize=30s)` — also λ*=0.5 — accounts for
+another 36 (26% of at-median). Together these two pairs alone are 137 of the 140 at-median
+instances. **The 0.5/s figure is a real central tendency, not an artifact of the search picking
+up duplicate/forked files** (the underlying finding — TIME_BASED breakers commonly need
+sub-1/s sustained traffic just to ever evaluate — still holds, since even the non-duplicated
+majority of the sample sits in the same Q1–Q3 band), but the *median specifically* should be
+read as "what one popular starter config plus everything near it looks like," not as evidence
+of 447 independently-reasoned deployments landing on 0.5/s by coincidence.
 
 ### The extremes, checked by hand (not parser artifacts — both spot-verified against source)
 
@@ -75,7 +91,13 @@ non-tutorial one.
   evaluate unless the protected call site sustains ≥20 req/s. Found in **3 distinct
   repositories** (`sag128/MSDemo`, `Seonooo/kp-tickets`, `victorrentea/resilience` — 9 file
   hits total, but 6 of those are repeated config-server profile files within one repo, so 3
-  independent authors is the honest count, not 9).
+  independent authors is the honest count, not 9). **Tail placement, checked rather than
+  assumed:** λ*=20 sits at the **98th percentile** of the full 447-instance distribution — 40×
+  the ALL stratum's own Q3 (0.5/s) — clearly the tail, not the body. It is not a perfectly
+  isolated point, though: 16/447 instances (3.6%) sit at λ*≥10/s, of which the 9 file hits
+  above account for 9 and **7 other instances**, from different (n_min, T) pairs, also clear
+  ≥10/s — a small cluster of similarly under-provisioned fast-window configs, not one freak
+  outlier.
 
 ## Limitations, stated plainly
 

@@ -443,6 +443,7 @@ pipeline smoke tests and its output must never be written to this file.
 | `analysis/leak_audit.py` | `out/leak_audit.json`, `out/leak_audit_rows.csv` — contamination prevalence per dataset |
 | `analysis/quarantine.py --apply` | populates `excluded_reason`; `out/quarantine.json` |
 | `analysis/tau_sweep.py` | `out/tau_sweep.json`, `out/tau_sweep.csv`, `figures/fig7_tau_sweep.{png,pdf}` — H4 |
+| `analysis/occupancy_asymmetry_figure.py` | `out/occupancy_asymmetry.json`, `figures/fig8_occupancy_asymmetry.{png,pdf}` — H2b (D18), reads `occupancy_dataset.csv` via `DATASETS["d7_occupancy_ratio"]` |
 | `analysis/canary_readout.py` | `out/canary_readout.json`, `figures/fig4*.{png,pdf}` — H1, H2, $\phi$, and the Day-2 gate |
 | `experiments/canary_matrix.py` | `data/canary_matrix.csv` — the Day-2 run list with seeded order |
 

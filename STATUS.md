@@ -272,6 +272,7 @@ pending re-collection.
 | 4 | Merge #43 and #47 (#47 waits for FANOUT) | minutes | #1 for #47 |
 | 5 | Conditional — **only if an ML result enters the paper**: drop `throughput_loss` from `ml/preprocessing.py::IF_NUMERIC_FEATURES` and re-fit, per D20's carried item. The Isolation Forest currently inherits the confound | ~min | — |
 | 6 | **Start writing Paper B** | — | #1 |
+| 7 | ~~T1: Verify the novelty claim~~ ✅ **closed 2026-09-20** — literature search (D26), no prior work found that treats `COUNT_BASED` vs `TIME_BASED` window type as an IV in a live-instrumented study at the app-library layer; novelty sentence reframed as "first systematic characterization" in README.md, evidence in `docs/paper/related-work.md` | — | — |
 
 **Optional, no longer required:** re-running the `matched_horizon` arm against the regenerated
 design to make H1 testable (~1.5 h). Paper B doesn't need H1; per D-004 a positive result would

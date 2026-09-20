@@ -1,6 +1,6 @@
 # Related work — novelty verification (T1)
 
-**Status:** search closed 2026-09-20. See [decision-log D26](decision-log.md) for the verdict
+**Status:** search closed 2026-09-20. See [decision-log D27](decision-log.md) for the verdict
 and how it changes the novelty sentence. This file is the evidence base; the decision log is
 the record of what was decided from it.
 

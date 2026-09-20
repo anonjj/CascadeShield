@@ -1897,7 +1897,7 @@ that shape before it becomes a silent leak again.
 
 ---
 
-## D26 · Novelty claim checked against the literature — reframed as systematic characterization, not first observation
+## D27 · Novelty claim checked against the literature — reframed as systematic characterization, not first observation
 
 **Date:** 2026-09-20 · **Decided by:** Jay, closing task T1 ("Verify the novelty claim") ·
 **Status:** final — search evidence is [`docs/paper/related-work.md`](related-work.md)

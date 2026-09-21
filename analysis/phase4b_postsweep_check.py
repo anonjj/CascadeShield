@@ -52,6 +52,65 @@ N_EXPECTED_REPLICATES = 3
 N_EXPECTED_RUNS = N_EXPECTED_CONFIGS * N_EXPECTED_REPLICATES
 
 
+# ------------------------------------------------- DEVIATION 01 corrected horizon
+# See docs/paper/deviation-01-verification-horizon.md, committed 2026-09-21 BEFORE
+# any verification count under this rule was computed.
+#
+#   end = min( fault_cleared_at + (time_to_recover | §5.1 fallback) + 5 s ,
+#              run_timestamp )
+#
+# The §5 horizon over-covers past the run's own end by an amount proportional to
+# time_to_recover -- the dependent variable -- so it reaches into the NEXT run's
+# update_containers() window, where the gateway JVM is down on purpose. That made
+# the gate differentially strict between arms.
+#
+# This lives here, NOT in gateway_poll_verify.py: that module is the implementation
+# of the PRE-REGISTERED rule and is deliberately left byte-identical to the version
+# the live poller ran during collection.
+
+def corrected_horizon(rec, row):
+    """DEVIATION 01 horizon. Returns (lo, hi) or (None, None) if undefined.
+
+    Falls back to the §5 horizon when `run_timestamp` is missing or unparseable --
+    the stricter of the two, so a damaged row cannot buy itself a shorter window.
+    Returns (None, None) if the run's own end precedes fault injection, which would
+    be a degenerate window rather than a short one.
+    """
+    lo, hi = gpv.horizon_for(rec.get("fault_injected_at"), rec.get("fault_cleared_at"),
+                             row.get("time_to_recover"),
+                             wait_duration=row.get("wait_duration"))
+    if lo is None:
+        return None, None
+    rt = parse_ts(row.get("run_timestamp"))
+    if rt is None:
+        return lo, hi
+    if rt < lo:
+        return None, None
+    return lo, min(hi, rt)
+
+
+def sensitivity_verdict(ticks, lo, hi, sidecar_trips):
+    """View (c): the coverage requirement removed, nothing else.
+
+    A run is clean iff its sidecar shows no gateway CLOSED_TO_OPEN AND every
+    NON-ERROR tick inside the horizon reports the gateway CLOSED. Error ticks are
+    ignored entirely and there is no completeness requirement -- so (a) vs (c)
+    isolates exactly how much of the difference is the coverage rule rather than
+    any gateway behaviour.
+
+    Uses the PRE-REGISTERED §5 horizon (the wider of the two), so it inspects at
+    least as many ticks as (a) does.
+    """
+    if sidecar_trips:
+        return "FAILED", []
+    win = [t for t in ticks if lo <= t["t"] <= hi and not t.get("errors")]
+    bad = [(t.get("iso"), b, s) for t in win
+           for b, s in (t.get("states") or {}).items() if s and s != "CLOSED"]
+    if bad:
+        return "FAILED", bad
+    return "CLEAN", []
+
+
 class Report:
     def __init__(self):
         self.rows = []
@@ -222,7 +281,9 @@ def check_6_gateway(rep, in_scope):
             "\n".join(f"{e} rep={p}: {n} trip(s)" for e, p, n in bad))
 
 
-def check_7_poller(rep, rows, in_scope, poll_path):
+def check_7_poller(rep, rows, in_scope, poll_path, use_corrected=False):
+    """Gate 7. ALWAYS computes and prints all three views; `use_corrected` only
+    selects which one decides PASS/FAIL. The pre-registered rule is the default."""
     if not poll_path or not os.path.exists(poll_path):
         rep.add(False, "7. poller coverage per run",
                 f"poll log not found: {poll_path!r} -- coverage is UNVERIFIED, which "
@@ -231,37 +292,76 @@ def check_7_poller(rep, rows, in_scope, poll_path):
     ticks, pstart, pstop = gpv.load_poll(poll_path)
     # wait_duration rides along so a null time_to_recover falls back to the
     # pre-registered 3*wait+60 horizon rather than collapsing to +0s.
-    ttr = {(r.get("experiment_id"), str(r.get("replicate"))):
-           (r.get("time_to_recover", ""), r.get("wait_duration", ""))
-           for r in rows}
-    counts, lines = {}, [f"poll ticks={len(ticks)}"]
+    rowmap = {(r.get("experiment_id"), str(r.get("replicate"))): r for r in rows}
+
+    # All three views are computed for every run, always. `use_corrected` only
+    # decides which one gates.
+    lit, cor, sen = {}, {}, {}
+    lines = [f"poll ticks={len(ticks)}"]
     n_fallback = 0
+    rows_out = []
     for rec in in_scope:
         key = (rec.get("experiment_id"), str(rec.get("replicate")))
-        r_ttr, r_wait = ttr.get(key, ("", ""))
-        if r_ttr in (None, ""):
+        row = rowmap.get(key, {})
+        if (row.get("time_to_recover") or "") == "":
             n_fallback += 1
+        trips = gateway_trips(rec)
+
+        # (a) literal pre-registered rule -- gateway_poll_verify, untouched
         lo, hi = gpv.horizon_for(rec.get("fault_injected_at"), rec.get("fault_cleared_at"),
-                                 r_ttr, wait_duration=r_wait)
+                                 row.get("time_to_recover"),
+                                 wait_duration=row.get("wait_duration"))
         if lo is None:
-            counts["NOT_VERIFIED"] = counts.get("NOT_VERIFIED", 0) + 1
-            lines.append(f"{key[0]} rep={key[1]}: NOT_VERIFIED (horizon undefined -- "
-                         "unusable timestamps, or a null time_to_recover with no "
-                         "wait_duration to fall back on)")
-            continue
-        res = gpv.check_run(ticks, pstart, pstop, lo, hi, gateway_trips(rec))
-        counts[res["verdict"]] = counts.get(res["verdict"], 0) + 1
-        lines.append(f"{key[0]:26s} rep={key[1]:>2s} {res['verdict']:<15} "
-                     f"ticks={res['ticks']:>4d} uncovered={res['uncovered_s']:>3d} "
-                     f"issues={','.join(res['issues']) or '-'}")
+            v_lit, unc_l, iss_l = "NOT_VERIFIED", 0, ["HORIZON_UNDEFINED"]
+        else:
+            r_ = gpv.check_run(ticks, pstart, pstop, lo, hi, trips)
+            v_lit, unc_l, iss_l = r_["verdict"], r_["uncovered_s"], r_["issues"]
+
+        # (b) DEVIATION 01 corrected horizon
+        clo, chi = corrected_horizon(rec, row)
+        if clo is None:
+            v_cor, unc_c, iss_c = "NOT_VERIFIED", 0, ["HORIZON_UNDEFINED"]
+        else:
+            r_ = gpv.check_run(ticks, pstart, pstop, clo, chi, trips)
+            v_cor, unc_c, iss_c = r_["verdict"], r_["uncovered_s"], r_["issues"]
+
+        # (c) sensitivity -- coverage requirement removed, §5 horizon
+        if lo is None:
+            v_sen = "NOT_VERIFIED"
+        else:
+            v_sen, _bad = sensitivity_verdict(ticks, lo, hi, trips)
+
+        lit[v_lit] = lit.get(v_lit, 0) + 1
+        cor[v_cor] = cor.get(v_cor, 0) + 1
+        sen[v_sen] = sen.get(v_sen, 0) + 1
+        rows_out.append((key, v_lit, unc_l, iss_l, v_cor, unc_c, iss_c, v_sen))
+
+    lines.append("")
+    lines.append(f"{'experiment_id':26s} rep  {'(a) literal':<16s}{'(b) DEVIATION 01':<18s}(c) sens")
+    for key, vl, ul, il, vc, uc, ic, vs in rows_out:
+        lines.append(f"{key[0]:26s} {key[1]:>3s}  {vl:<16s}{vc:<18s}{vs}"
+                     + (f"   [a: unc={ul} {','.join(il)}]" if vl != "VERIFIED_CLEAN" else "")
+                     + (f"   [b: unc={uc} {','.join(ic)}]" if vc != "VERIFIED_CLEAN" else ""))
     if n_fallback:
         lines.append(f"!! {n_fallback} run(s) had a null time_to_recover; their horizon "
                      "used the pre-registered 3*wait+60 fallback")
-    lines.append(f"totals: {counts}")
-    rep.add(counts.get("VERIFIED_CLEAN", 0) == N_EXPECTED_RUNS,
-            f"7. all {N_EXPECTED_RUNS} runs VERIFIED_CLEAN under the pre-registered "
-            "horizon + coverage rule", "\n".join(lines))
-    return counts
+    lines.append("")
+    lines.append(f"(a) literal pre-registered  : {lit}")
+    lines.append(f"(b) DEVIATION 01 corrected  : {cor}")
+    lines.append(f"(c) sensitivity, no coverage: {sen}")
+
+    sel = cor if use_corrected else lit
+    label = ("DEVIATION 01 corrected horizon" if use_corrected
+             else "pre-registered horizon + coverage rule")
+    if use_corrected:
+        lines.append("")
+        lines.append("GATE DECIDED BY **DEVIATION 01**, NOT THE PRE-REGISTERED RULE.")
+        lines.append("See docs/paper/deviation-01-verification-horizon.md. The literal")
+        lines.append("result above is the pre-registered one and must be reported with it.")
+    rep.add(sel.get("VERIFIED_CLEAN", 0) == N_EXPECTED_RUNS,
+            f"7. all {N_EXPECTED_RUNS} runs VERIFIED_CLEAN under the {label}",
+            "\n".join(lines))
+    return {"literal": lit, "corrected": cor, "sensitivity": sen, "per_run": rows_out}
 
 
 def _docker(args):
@@ -393,6 +493,106 @@ def self_test():
     expect("null ttr and no wait_duration -> horizon undefined",
            gpv.horizon_for(INJ2, CLR2, "", wait_duration=""), (None, None))
 
+    # --- DEVIATION 01: corrected horizon, per note section 8 ----------------------
+    # Shared fixture. Fault 10:00:00 -> 10:00:40; the run ends (run_timestamp) at
+    # 10:01:00; the Section 5 horizon runs to 10:00:40 + 30 + 5 = 10:01:15, i.e.
+    # 15 s PAST the run's own end -- the defect in miniature.
+    D_INJ, D_CLR, D_RT = "2026-09-21T10:00:00Z", "2026-09-21T10:00:40Z", "2026-09-21T10:01:00Z"
+    d_rec = {"experiment_id": "E", "replicate": 1, "machine_id": "soham-local",
+             "mode": "full", "fault_injected_at": D_INJ, "fault_cleared_at": D_CLR,
+             "transitions": []}
+    d_row = {"experiment_id": "E", "replicate": "1", "time_to_recover": "30",
+             "wait_duration": "5", "run_timestamp": D_RT}
+    base = gpv.parse_ts(D_INJ)
+
+    def mk(lo_off, hi_off, state="CLOSED", err_from=None, drop=()):
+        """one tick per second over [lo_off, hi_off]; err_from onwards are errors."""
+        out = []
+        for i in range(lo_off, hi_off + 1):
+            if i in drop:
+                continue
+            e = err_from is not None and i >= err_from
+            out.append({"t": base + i,
+                        "iso": dt.datetime.utcfromtimestamp(base + i).strftime(
+                            "%Y-%m-%dT%H:%M:%SZ"),
+                        "ok": not e, "errors": (["boom"] if e else []),
+                        "states": {} if e else {b_: state for b_ in gpv.BREAKERS},
+                        "buffered": {}})
+        return out
+
+    l_lo, l_hi = gpv.horizon_for(D_INJ, D_CLR, "30", wait_duration="5")
+    c_lo, c_hi = corrected_horizon(d_rec, d_row)
+    expect("pre-registered horizon length = 40 + 30 + 5", round(l_hi - l_lo, 1), 75.0)
+    expect("corrected horizon is cut at run_timestamp (60 s)", round(c_hi - c_lo, 1), 60.0)
+
+    # (i) failing ticks ONLY after run_timestamp: clean corrected, NOT_VERIFIED literal
+    t_after = mk(-5, 80, err_from=61)
+    rl = gpv.check_run(t_after, base - 10, base + 90, l_lo, l_hi, [])
+    rc = gpv.check_run(t_after, base - 10, base + 90, c_lo, c_hi, [])
+    expect("errors only after run end -> literal NOT_VERIFIED", rl["verdict"], "NOT_VERIFIED")
+    expect("errors only after run end -> corrected VERIFIED_CLEAN", rc["verdict"],
+           "VERIFIED_CLEAN")
+
+    # (ii) a gap BEFORE the run's own end: NOT_VERIFIED under BOTH
+    t_gap = mk(-5, 80, drop=tuple(range(20, 32)))
+    rl = gpv.check_run(t_gap, base - 10, base + 90, l_lo, l_hi, [])
+    rc = gpv.check_run(t_gap, base - 10, base + 90, c_lo, c_hi, [])
+    expect("gap before run end -> literal NOT_VERIFIED", rl["verdict"], "NOT_VERIFIED")
+    expect("gap before run end -> corrected NOT_VERIFIED", rc["verdict"], "NOT_VERIFIED")
+    expect("gap before run end -> corrected MISSING_TICK", "MISSING_TICK" in rc["issues"], True)
+
+    # (iii) a non-CLOSED gateway observation before the run's end: FAILED under BOTH
+    t_open = mk(-5, 19) + [dict(x, states={b_: "OPEN" for b_ in gpv.BREAKERS})
+                           for x in mk(20, 20)] + mk(21, 80)
+    rl = gpv.check_run(t_open, base - 10, base + 90, l_lo, l_hi, [])
+    rc = gpv.check_run(t_open, base - 10, base + 90, c_lo, c_hi, [])
+    expect("non-CLOSED before run end -> literal FAILED", rl["verdict"], "FAILED")
+    expect("non-CLOSED before run end -> corrected FAILED", rc["verdict"], "FAILED")
+
+    # (iv) the section 5.1 null-time_to_recover fallback, under the corrected rule
+    d_row_null = dict(d_row, time_to_recover="", wait_duration="30")
+    n_lo, n_hi = corrected_horizon(d_rec, d_row_null)
+    expect("null ttr: section 5.1 gives 40 + (3*30+60) + 5 = 195 s, min() cuts to 60",
+           round(n_hi - n_lo, 1), 60.0)
+    d_row_null_late = dict(d_row_null, run_timestamp="2026-09-21T10:05:00Z")
+    n2_lo, n2_hi = corrected_horizon(d_rec, d_row_null_late)
+    expect("null ttr with a late run end: the 5.1 fallback binds, not run_timestamp",
+           round(n2_hi - n2_lo, 1), 195.0)
+    expect("null ttr + no wait_duration -> corrected horizon undefined",
+           corrected_horizon(d_rec, dict(d_row, time_to_recover="", wait_duration="")),
+           (None, None))
+
+    # (v) min() picks the section 5 bound when the section 5 horizon ends FIRST
+    d_row_early = dict(d_row, time_to_recover="3")   # 40 + 3 + 5 = 48 s < 60 s
+    e_lo, e_hi = corrected_horizon(d_rec, d_row_early)
+    expect("section 5 horizon ends first -> min() keeps it", round(e_hi - e_lo, 1), 48.0)
+    expect("corrected never EXTENDS the pre-registered horizon",
+           e_hi <= gpv.horizon_for(D_INJ, D_CLR, "3", wait_duration="5")[1], True)
+
+    # degenerate: run_timestamp before fault injection
+    expect("run end before fault injection -> undefined, not a negative window",
+           corrected_horizon(d_rec, dict(d_row, run_timestamp="2026-09-21T09:59:00Z")),
+           (None, None))
+    # missing run_timestamp falls back to the stricter pre-registered horizon
+    f_lo, f_hi = corrected_horizon(d_rec, dict(d_row, run_timestamp=""))
+    expect("missing run_timestamp -> falls back to the section 5 horizon",
+           round(f_hi - f_lo, 1), 75.0)
+
+    # --- DEVIATION 01 view (c): sensitivity ---------------------------------------
+    expect("sensitivity: all non-error ticks CLOSED -> CLEAN",
+           sensitivity_verdict(t_after, l_lo, l_hi, [])[0], "CLEAN")
+    expect("sensitivity: a gap alone does NOT fail it (coverage ignored)",
+           sensitivity_verdict(t_gap, l_lo, l_hi, [])[0], "CLEAN")
+    expect("sensitivity: a non-CLOSED tick DOES fail it",
+           sensitivity_verdict(t_open, l_lo, l_hi, [])[0], "FAILED")
+    expect("sensitivity: a sidecar gateway trip fails it",
+           sensitivity_verdict(t_after, l_lo, l_hi,
+                               [{"state_transition": "CLOSED_TO_OPEN"}])[0], "FAILED")
+    only_err = mk(-5, 80, err_from=-5)
+    expect("sensitivity: a window of nothing but error ticks is CLEAN (no evidence "
+           "is not contrary evidence -- this is why it is the WEAKEST view)",
+           sensitivity_verdict(only_err, l_lo, l_hi, [])[0], "CLEAN")
+
     print("\nself-test:", "PASS" if ok else "FAIL")
     return ok
 
@@ -404,6 +604,13 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--manifest")
     ap.add_argument("--skip-docker", action="store_true")
+    ap.add_argument("--corrected-horizon", action="store_true",
+                    help="gate 7 is decided by the DEVIATION 01 corrected horizon "
+                         "(end = min(section 5 horizon, run_timestamp)) instead of the "
+                         "pre-registered one. All three views are printed either way; "
+                         "this only selects which one PASSes or FAILs. Default: the "
+                         "pre-registered rule. See "
+                         "docs/paper/deviation-01-verification-horizon.md")
     ap.add_argument("--self-test", action="store_true")
     a = ap.parse_args()
     if a.self_test:
@@ -437,7 +644,14 @@ def main():
     check_4b_attempts(rep, rows, prior)
     check_5_precondition(rep, rows)
     check_6_gateway(rep, in_scope)
-    check_7_poller(rep, rows, in_scope, m.get("poll_path"))
+    if a.corrected_horizon:
+        print()
+        print("*** gate 7 will be decided by the DEVIATION 01 corrected horizon.     ***")
+        print("*** The pre-registered result is printed alongside and is the one     ***")
+        print("*** the analysis plan specifies. See                                  ***")
+        print("*** docs/paper/deviation-01-verification-horizon.md                   ***")
+    check_7_poller(rep, rows, in_scope, m.get("poll_path"),
+                   use_corrected=a.corrected_horizon)
     check_8_image(rep, m, skip=a.skip_docker)
     return 0 if rep.print() else 1
 

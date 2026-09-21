@@ -264,10 +264,25 @@ happened to the sidecar, and the baseline for the sweep is no longer established
 
 ## 3. The 72-run sweep — launch commands (NOT LAUNCHED)
 
-**Nothing below has been run.** These are the exact commands, to be issued from your own
-interactive Git Bash window, at the repo root, with the mesh already up (§6 step 4). The
-smoke run left the mesh up and the start state clean (§10), so steps 0-2 are the only
-preconditions still to re-confirm.
+**Nothing below has been run.**
+
+**The launch path is `docs/paper/phase4b_launch.sh` (tracked), not these commands by hand.**
+It runs assertions **a-j** (§3.7) and starts nothing unless every one passes. From your own
+Git Bash window, at the repo root:
+
+```bash
+bash docs/paper/phase4b_launch.sh --check-only   # assertions only; starts nothing
+bash docs/paper/phase4b_launch.sh                # assertions, then launch
+```
+
+`--check-only` writes nothing at all — no manifest, no timestamp, no log — and starts and
+stops no service. The full run writes the manifest, then starts the poller, then the memory
+logger, then the sweep, in that order, and records the real Windows `python.exe` PIDs in
+`data/audit/phase4b_pids.txt`.
+
+§3.0-§3.4 below describe the same actions the script performs, kept for review so the script
+can be read against an independent statement of what it is supposed to do. §3.5 is the
+first-run check, which is **not** part of the script — it is done by hand after launch.
 
 ### 3.0 Re-confirm the start state (read-only, 10 seconds)
 
@@ -313,6 +328,10 @@ Re-read `gateway_image_id` from `docker image inspect` rather than pasting it, i
 image has been rebuilt since.
 
 ### 3.3 Start the poller — FIRST, and leave it running for the whole sweep
+
+*(The script does this, with the liveness check of §3.3 built in: it starts the poller, waits
+5 s, confirms a real `python.exe` PID exists, confirms the log is non-empty, waits 3 s more
+and confirms the line count is still increasing — alive **and** logging, not merely alive.)*
 
 Pre-registration §11 requires **one continuous session** across all 72 runs. Start it before
 the sweep, stop it after the last run, and do not restart it in between.
@@ -430,6 +449,51 @@ for more than ~10 minutes.
 Do not touch `data/phase4b_postd25.csv`, `data/cb_transitions.jsonl` or the poll log. Do not
 start a second runner. Do not run `phase4b_reconcile.py --apply` — it will refuse anyway while
 `run_status.json` reads `phase=running`.
+
+### 3.7 What the launch script asserts (a-j)
+
+All ten run **before anything is started**. The first failure aborts with a message naming
+what was expected and what was found, and the script states that nothing was started, no
+manifest was written and no file was changed.
+
+| | assertion | abort condition |
+|---|---|---|
+| **a** | HEAD full SHA printed; `git status --porcelain` empty | any dirty path |
+| **b** | `3e4ad1e5d0596883bbd35604828d0d2db39a9eb2` exists, **is an ancestor of HEAD** (`git merge-base --is-ancestor`), **and** `git diff --quiet 3e4ad1e… HEAD -- docs/paper/h3-postd25-analysis-plan.md` | the commit is missing, not an ancestor, or the plan file has changed since it |
+| **c** | sidecar sha256 `ffad69d6…bee0e`, exactly 73 lines | either differs |
+| **d** | `data/phase4b_postd25.csv` and `data/audit/phase4b_poll.jsonl` **absent** | either exists — the poller appends, so an old log would be silently merged |
+| **e** | sha256 of `docs/paper/phase4b_only_ids.txt` == `6d6e5745…a0f12` (hard-coded), 24 unique IDs, replicates 3, expected_runs 72, and `data/phase4b_only_ids.txt` byte-identical | any mismatch, or the `data/` copy missing |
+| **f** | `docker image inspect infra-gateway-service .Id` == `docker inspect gateway-service .Image`; image `.Created` **later than** the newest commit touching its source paths | IDs differ, or `.Created` is **older** than that commit. A missing commit label is **not** an abort |
+| **g** | gateway `GET /api/v1/linear` == 200; Toxiproxy admin `/proxies` lists exactly the 5 expected, all `enabled`, `toxics` empty | non-200, wrong proxy set, any disabled proxy, any attached toxic |
+| **h** | `prometheus` and `grafana` **not running**; the six application services plus `postgres` and `dynamodb-local` running and `healthy` | either observability container running, or any required container not running/healthy |
+| **i** | free physical RAM ≥ 1500 MB (**median of 5 samples**), free disk ≥ 15 GB, power not positively "on battery" | median below the floor, disk below the floor, or `Win32_Battery.BatteryStatus == 1` |
+| **j** | no `gateway_poll_verify`, `phase4b_mem_log` or `experiments/runner.py` **`python.exe`** process already running | any match |
+
+Three of these need their scope stated precisely rather than assumed:
+
+* **f — provenance is evidence, not proof.** Docker images carry no commit label here:
+  `services/gateway-service/Dockerfile` sets no `LABEL org.opencontainers.image.revision` and
+  the runner emits no `git_commit` column, and Dockerfile/compose edits are not permitted. So
+  the script checks the only thing available — that the image was built *after* the newest
+  commit touching everything it is built from. The `COPY` lines of that Dockerfile are
+  `cascadeshield-parent/pom.xml`, `services/gateway-service/pom.xml` and
+  `services/gateway-service/src`, so the paths checked are **`services/gateway-service`** (which
+  also covers the Dockerfile itself) and **`cascadeshield-parent/pom.xml`**. Both timestamps are
+  printed and the result is labelled *best available evidence, not proof*. A missing label never
+  aborts; an image older than its source does.
+* **g — what each check actually tests.** `GET /api/v1/linear` == 200 tests that *the gateway
+  process answers its LINEAR route*. It does not test any downstream breaker state and does not
+  test Toxiproxy. The `/proxies` check tests *the Toxiproxy admin API's view of proxy
+  configuration* — the five expected names, each enabled, each with an empty `toxics` array. It
+  does not send traffic through a proxy and does not prove a downstream service is reachable. No
+  other URL is invented.
+* **i — why the RAM gate is a median.** A single instantaneous reading is not usable on this
+  host: six readings 10 s apart during preparation ranged **1334.3 – 1944.6 MB**, so one sample
+  could pass or fail at random. The gate is the **median of five** samples taken 2 s apart; the
+  **min and max are always printed** so the volatility stays visible, and a minimum below the
+  floor is reported as a note rather than silently swallowed. If you would rather gate on the
+  minimum, that is a one-word change in `analysis/phase4b_mem_log.py` — say so and it becomes a
+  recorded deviation.
 
 ## 4. Resume procedure
 
@@ -846,3 +910,183 @@ marker was written**. `check_run()` handles that — it falls back to the last t
 foreground-in-its-own-window form in §11 so Ctrl-C produces a clean marker.
 
 ---
+
+---
+
+## 11. Stop commands
+
+The launch script writes the real Windows `python.exe` PIDs to `data/audit/phase4b_pids.txt`:
+
+```
+# Phase 4B real Windows python.exe PIDs, launched 2026-...
+poller=<pid>
+mem_logger=<pid>
+sweep=<pid>
+```
+
+Stop **by PID read from that file**. No `pkill`, no killing by name — this repo has three
+python processes running at once and a name match would take the wrong one.
+
+```bash
+cd /c/Users/Lenovo/OneDrive/Desktop/CascadeShield
+cat data/audit/phase4b_pids.txt
+
+# stop the SWEEP
+PID=$(grep '^sweep='      data/audit/phase4b_pids.txt | cut -d= -f2)
+powershell -NoProfile -Command "Stop-Process -Id $PID -Force"
+
+# stop the POLLER
+PID=$(grep '^poller='     data/audit/phase4b_pids.txt | cut -d= -f2)
+powershell -NoProfile -Command "Stop-Process -Id $PID -Force"
+
+# stop the MEMORY LOGGER
+PID=$(grep '^mem_logger=' data/audit/phase4b_pids.txt | cut -d= -f2)
+powershell -NoProfile -Command "Stop-Process -Id $PID -Force"
+
+# confirm each one is gone
+powershell -NoProfile -Command "Get-Process -Id $PID -ErrorAction SilentlyContinue"
+#   prints nothing when the process is gone
+```
+
+**Mechanism verified 2026-09-21** on a throwaway `python.exe` started and killed for the
+purpose — never on a real job. The process reported `os.getpid()` = 6824, the
+`Get-CimInstance Win32_Process` lookup returned the same 6824 (so the discovered PID is the
+Python process, not a Git Bash wrapper), `Stop-Process -Id 6824 -Force` succeeded, and
+`Get-Process -Id 6824` then returned nothing.
+
+`Stop-Process -Force` is the only thing that works here: during the smoke run `kill -INT`
+against the shell job PID did not reach the Python process, and `taskkill /PID <pid>` without
+`/F` was refused with *"can only be terminated forcefully"* (§10).
+
+### What a killed runner leaves behind
+
+| artifact | state after a forced kill |
+|---|---|
+| `data/phase4b_postd25.csv` | every **completed** run's row is present and intact — `append_row()` does `flush()` + `fsync()` per row, so at most the row being written is lost |
+| `data/cb_transitions.jsonl` | one record per completed run. A run killed mid-flight leaves **no** record, because `observer.log()` is reached only at the end of a completed run |
+| the in-flight run | may leave a CSV row with **no** sidecar record (an `ORPHAN_ROW`), or no row at all |
+| `data/run_status.json` | frozen at `phase=running` — it is never updated to "stopped". `phase4b_reconcile.py --apply` refuses while it reads `running` and is less than 15 minutes old; after that it says so and offers `--ignore-stale-status` |
+| Toxiproxy | a toxic may still be attached if the kill landed inside the fault window. Assertion **g** catches this on the next launch (zero toxics required) |
+| `infra/.env` | left at the killed run's config. The runner rewrites it per run, so this is not a launch precondition |
+| containers | left running as they were; the runner recreates the six application services at the start of each run anyway |
+
+**A killed poller or memory logger leaves no experimental artifact at all.** The poller's log
+simply ends without a `poller_stop` marker, which `check_run()` handles by falling back to the
+last tick.
+
+### Resuming after a stop
+
+Unchanged, per §4 and pre-registration §10: **stop the runner and confirm it is dead → run
+`phase4b_reconcile.py` dry-run and read the orphan list → `--apply` to quarantine → resume
+with the same `--seed 20260920` and the same `--only-ids`**. The same seed keeps the remaining
+cells in the order the original shuffle assigned. Report how many keys were re-collected, by
+class; the §10.1 cap of 2 re-attempts per key applies.
+
+---
+
+## 12. Observability plane: prometheus and grafana are STOPPED for this sweep
+
+### Dependency check (read-only, 2026-09-21) — clean
+
+Performed **before** stopping anything, because the smoke run passing is not evidence that
+nothing depends on them.
+
+| what was searched | result |
+|---|---|
+| `experiments/` and `analysis/gateway_poll_verify.py` for `prometheus`/`grafana`/`:9090`/`:3000` | only `analysis/gateway_poll_verify.py:80` and `:92` |
+| `infra/docker-compose.yml` — every `depends_on` | only `grafana` → `prometheus` (line 88). **No application service depends on either.** `gateway-service`, `order-service`, `inventory-service`, `payment-service`, `notification-service` and `shared-db-service` depend only on `toxiproxy`, `postgres`, `dynamodb-local` and `shared-db-service` |
+| healthchecks referencing them | none — neither `prometheus` nor `grafana` even defines a healthcheck |
+| environment variables referencing them | none |
+| repo-wide for port `9090` / `3000` | `infra/docker-compose.yml:71` (the port mapping) and `infra/grafana/provisioning/datasources/datasource.yml:7` (`http://prometheus:9090`, Grafana pointing at Prometheus — both stopped together) |
+
+**`analysis/gateway_poll_verify.py:80` is not a dependency on the Prometheus server.** It does
+`_get(base + "/actuator/prometheus")` where `base` defaults to `http://localhost:8080`
+(`gateway_poll_verify.py:355`) — that is the **gateway JVM's own** Spring Boot actuator
+endpoint, exposed by `services/gateway-service/.../application.yml:94`
+(`include: health,prometheus,circuitbreakers,...`). Verified live with both containers stopped:
+`GET http://localhost:8080/actuator/prometheus` returns `HTTP/1.1 200` and resilience4j
+metrics. Port 8080 is `gateway-service`; the Prometheus server is 9090 and nothing in the
+harness touches it. CLAUDE.md states the same: the dataset comes from `runner.py` polling each
+service's `/actuator/metrics` directly and never touches Prometheus.
+
+Every actuator URL in the harness targets `http://localhost:{8080..8085}` — the six Spring
+Boot services (`runner.py:412`, `:760`, `:775`, `:873`; `breaker_observer.py:45`).
+
+### The stop
+
+```
+docker compose -f infra/docker-compose.yml stop prometheus grafana
+```
+
+Stop only — no `rm`, no recreate. Executed **2026-09-21T04:54:16Z** (`2026-09-21T10:24:16+05:30`).
+Both containers went to `Exited (0)`; the other nine were untouched and stayed `Up ... (healthy)`.
+
+### What it actually changed — measured, not assumed
+
+| | |
+|---|---|
+| Windows free physical RAM, before | **1967.1 MB** at `2026-09-21T10:24:06+05:30` |
+| Windows free physical RAM, after | **1610.7 MB** at `2026-09-21T10:24:43+05:30` |
+| naive delta | **−356.4 MB** |
+
+**The Windows-visible figure went down, and that delta is not attributable to the stop.** Six
+readings taken 10 s apart immediately afterwards ranged **1334.3 – 1944.6 MB** — a ~610 MB
+swing with nothing changing — so a single before/after pair on this counter measures noise.
+The reason is structural: Docker Desktop runs the containers inside a WSL2 VM
+(`vmmemWSL`, 2472 MB working set), and WSL2 does not promptly return freed guest pages to
+Windows.
+
+Where the stop **did** help is inside that VM, which is where the six JVMs live:
+
+```
+docker info MemTotal            6848 MB visible to the Docker engine
+remaining 9 containers          ~3411 MB total  (gateway 531, inventory 534,
+                                 notification 526, order 514, payment 511,
+                                 shared-db 519, dynamodb 232, postgres 31, toxiproxy 14)
+headroom inside the VM          ~3.4 GB
+```
+
+So: **the honest claim is that ~2 containers' worth of VM memory was returned to the Docker
+engine's budget, not that Windows gained free RAM.** The Windows-side gate (assertion **i**)
+is satisfied on its own terms and is measured as a median of five samples for the reason above.
+
+### The difference this creates between artifacts — recorded, not hidden
+
+> **The Phase 1 canary (2026-09-20) and the smoke run (2026-09-20) were collected WITH
+> prometheus and grafana running. This sweep is collected WITHOUT them.**
+>
+> Within this sweep the condition is **identical for all 72 runs** — both containers are
+> stopped before the first run and stay stopped through the last — so it is a constant of the
+> experiment and **cannot differ between the COUNT and TIME arms**. It is not a confound for
+> the H3 comparison.
+>
+> It *is* a difference between this sweep and the earlier artifacts, and any comparison across
+> them must state it. Assertion **h** re-checks it at launch, and the post-sweep check's
+> manifest carries it in the `observability` field.
+
+---
+
+## 13. Memory logger (diagnostic only)
+
+`analysis/phase4b_mem_log.py log --out logs/phase4b_mem.log --interval 30`, started by the
+launch script after the poller and before the sweep. One line every 30 s:
+
+```
+2026-09-21T10:28:06+05:30 free_mb=1969.5
+```
+
+`logs/` is gitignored (`git check-ignore -v logs/phase4b_mem.log` → `.gitignore:64:logs/`), so
+it cannot make the tree dirty. The sampler reads `GlobalMemoryStatusEx` via `ctypes` — the same
+counter `Win32_OperatingSystem.FreePhysicalMemory` reports — with no dependency and no
+subprocess per sample. It writes one header comment line beginning `#` recording the interval,
+total RAM and its own PID; every other line is a sample in the format above.
+
+> **It is not an exclusion rule and it changes no pre-registered rule.** Nothing it records may
+> remove a run from the analysis, reweight one, or move any threshold in
+> `docs/paper/h3-postd25-analysis-plan.md` (frozen at `3e4ad1e`). If it shows memory pressure
+> during the sweep, that is **reported as a limitation** alongside the results, in the same way
+> §8 already reports the database-state and single-machine limitations. It is evidence about
+> the host, not about the breakers.
+
+The launch script's RAM assertion (**i**) calls the same module's `sample` subcommand, so the
+gate reading and the logged reading come from one implementation and cannot drift apart.

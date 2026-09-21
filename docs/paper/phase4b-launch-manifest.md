@@ -1179,3 +1179,209 @@ Residual, and deliberately so: whether a process comes up at all, and whether th
 | `docs/paper/phase4b_launch.sh`, **fixed** | **`af6b9155e13c6f7c2bdccb368bd69455deb2a8cd814eab15fcb83abefdbc9ded`** |
 
 `bash -n` clean; `--check-only` re-run ends with `READY` and exits 0.
+
+---
+
+## 15. First launch attempt — ABORTED 2026-09-21, all output discarded
+
+| | |
+|---|---|
+| Launched | **2026-09-21T06:08:08Z** (`sweep_window.start` in that run's manifest) |
+| Stopped by the operator | **2026-09-21T06:10:39Z** — the last `run_status.json` update before the kill |
+| Runs completed | **1 of 72** |
+| Reason | **The laptop had to be closed.** Not a harness fault, not a gate failure — every assertion a-k had passed and the launch itself worked as designed |
+| Stopped how | `Stop-Process -Force` by PID from `data/audit/phase4b_pids.txt` (§11): sweep 20948, poller 15884, memory logger 28264. All three confirmed gone |
+
+### What was discarded
+
+**All partial output was discarded, regardless of its content.** One completed run is not a
+usable fraction of a 72-run design, and keeping it would mean carrying a row collected under a
+different wall-clock window, a different container generation and a truncated poller session
+into a dataset whose whole point is that every row was collected identically.
+
+**No timing value, recovery time or outcome column was inspected** — not by the operator and
+not in the state report that preceded the quarantine. The row count and the sidecar line count
+were read; the sweep log tail was read with every measurement-bearing line withheld rather than
+displayed. The decision to discard was taken on the run count alone, before and independently
+of anything the data might say. That ordering matters: had the partial data been looked at
+first, "discard" and "keep" would both have become choices informed by the result.
+
+**No pre-registered rule changed.** `docs/paper/h3-postd25-analysis-plan.md` is untouched and
+remains frozen at `3e4ad1e5d0596883bbd35604828d0d2db39a9eb2`. This abort is not a deviation
+from the analysis plan — nothing was analysed. It is a collection attempt that did not produce
+a dataset, and the next attempt starts from the same baseline as this one did.
+
+### Where it went — `data/audit/aborted_launch_20260921T061403Z/`
+
+Moved, not deleted. The sidecar copy is the 74-record file as it stood at the abort (73
+baseline + the one completed run); the live sidecar was then restored from
+`data/audit/sidecar_baseline_73.jsonl`.
+
+| file | sha256 |
+|---|---|
+| `cb_transitions_at_abort_74.jsonl` | `3bc418ee98144c50cde939c3d4be251ff488a861da64b739e6c98f0910155ec0` |
+| `phase4b_manifest.json` | `a1112cf1197c0d731cd728026ba55d4d25bfa895d6d353bab5b3307697827fe2` |
+| `phase4b_mem.log` | `b6132804ce89211f86637234d486e0fa64c4abbba30a8af2102790860fb6ecb9` |
+| `phase4b_pids.txt` | `71894ddf1bd76c6e74679520c901459c5c896ea103e8c424d30584905ebcfb6a` |
+| `phase4b_poll.jsonl` | `83e5e26ecbd06b2a257c1572a0ac98f51871f23e9f686fcefdf835895522ca6b` |
+| `phase4b_poller.log` | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
+| `phase4b_postd25.csv` | `cf64bca2a48560c8b82b471005d34169a66c9345e0f6400d6f1238e9b5aaa42f` |
+| `phase4b_sweep.log` | `744dffe116f5f8e8fd02f7443964666c532b918cd0cd3c06e6851448d99cf26c` |
+| `run_status_at_abort.json` | `0daaf78c3500032376584b6065deb6e2499e028434a10d0af3e02a55fbcc1ffc` |
+
+`phase4b_poller.log` is empty (`e3b0c442…b855` is the SHA-256 of zero bytes) — the poller
+writes its output to the JSONL path, not to stdout, so that is expected.
+
+### State restored
+
+| | |
+|---|---|
+| `data/cb_transitions.jsonl` | restored by copying the baseline back: **`ffad69d6755c8a33e5d2b064a56354981a4fda82c742d642c0097abbf0dbee0e`, 73 lines** — byte-identical |
+| `data/phase4b_postd25.csv` | absent |
+| `data/audit/phase4b_poll.jsonl` | absent |
+| `data/audit/phase4b_manifest.json` | absent |
+| `data/audit/phase4b_pids.txt` | absent |
+| processes | none alive |
+
+Nothing was hand-edited at any point.
+
+### One piece of residual state the abort left behind
+
+The kill landed inside the second run's fault window, so **a `latency` toxic was still
+attached to `inventory-service-proxy`** when the mesh was stopped. This is exactly what §11's
+"what a killed runner leaves behind" table predicts, and exactly what assertion **g** exists to
+catch: it requires all five proxies enabled with **zero** toxics, so a relaunch on this state
+would abort rather than collect a run under a fault that no config asked for. The bring-up
+sequence (§16) re-runs `experiments/fault_injector.py`, which resets every proxy and clears
+every toxic, before `--check-only` is run.
+
+---
+
+## 16. Bring-up sequence after a cold stop
+
+Use this after the mesh has been stopped (`docker compose ... stop`) and the machine has been
+closed or restarted. Every step is to be run by the operator from Git Bash at the repo root.
+**Nothing in this section has been run.**
+
+Two things it must preserve, both of which a careless `up` would break:
+
+* **the gateway image must stay `sha256:ce110c0a0bfb…cbabfc`** — so **no `--build`**. A rebuild
+  can mint a new image ID, and the provenance recorded in §10 would no longer describe what is
+  running.
+* **prometheus and grafana must stay stopped** (§12) — so the nine services are named
+  explicitly rather than starting everything. Neither is a dependency of any application
+  service (verified in §12), so naming the nine cannot drag them in.
+
+### 1. Start the nine containers
+
+```bash
+cd /c/Users/Lenovo/OneDrive/Desktop/CascadeShield
+
+docker compose -f infra/docker-compose.yml up -d   toxiproxy postgres dynamodb-local shared-db-service   gateway-service order-service inventory-service payment-service notification-service
+```
+
+`up -d` (not `start`) so `depends_on: condition: service_healthy` is honoured; **no `--build`**.
+Recreation is expected and harmless — `infra/.env` still holds the last run's config and the
+runner rewrites it per run anyway.
+
+```bash
+docker ps -a --format '{{.Names}}	{{.Status}}' | sort
+#   expect 9 x "Up ... (healthy)", and prometheus + grafana still "Exited"
+```
+
+### 2. Recreate the Toxiproxy proxies — this is also what clears the leftover toxic
+
+```bash
+python experiments/fault_injector.py
+#   expect all 5 proxies created/enabled and every toxic cleared
+```
+
+**Do not skip this.** The aborted launch left a `latency` toxic attached to
+`inventory-service-proxy` (§15). Assertion **g** would abort on it, and running without
+clearing it would collect under a fault no config asked for.
+
+### 3. Wait ~60 s, then confirm the gateway answers
+
+```bash
+sleep 60
+curl -s -o /dev/null -w '%{http_code}
+' http://localhost:8080/api/v1/linear    # expect 200
+curl -s -o /dev/null -w '%{http_code}
+' http://localhost:8474/proxies          # expect 200
+```
+
+### 4. Gateway readback — the D25 pin, on whatever image is now running
+
+```bash
+curl -s http://localhost:8080/actuator/circuitbreakers | python -c "
+import json,sys
+cb=json.load(sys.stdin); cb=cb.get('circuitBreakers',cb)
+for k in sorted(cb):
+    v=cb[k]
+    print(f'{k:22s} state={v[\"state\"]} fail={v[\"failureRateThreshold\"]} slow={v[\"slowCallRateThreshold\"]}')"
+#   expect all three CLOSED at 100.0% / 100.0%
+
+docker inspect gateway-service --format '{{range .Config.Env}}{{println .}}{{end}}' | grep '^CB_'
+#   expect swept values present (e.g. CB_FAILURE_RATE_THRESHOLD=<n>) -- the point is that
+#   the gateway reads 100.0 WHILE the env carries a swept value, i.e. the pin is winning
+
+curl -s http://localhost:8081/actuator/circuitbreakers | python -c "
+import json,sys
+cb=json.load(sys.stdin); cb=cb.get('circuitBreakers',cb)
+for k in sorted(cb): print(f'{k:22s} fail={cb[k][\"failureRateThreshold\"]}')"
+#   the control: order-service must show the SWEPT value, not 100.0
+```
+
+### 5. Image ID check
+
+```bash
+docker image inspect infra-gateway-service --format '{{.Id}}'
+docker inspect gateway-service --format '{{.Image}}'
+#   must be equal, and should still be sha256:ce110c0a0bfbc290e735fe810f4bb5a60b2ef84ad5e63c0b627a0b90cecbabfc
+```
+
+If it is **not** `ce110c0a…`, the image was rebuilt at some point. That is not fatal, but the
+recorded provenance in §10 no longer describes what is running: re-record the new ID and
+re-check `.Created` against the newest commit touching `services/gateway-service` and
+`cascadeshield-parent/pom.xml` before launching.
+
+### 6. RAM check, with the mesh up
+
+```bash
+python analysis/phase4b_mem_log.py sample -n 5 --gap 2 --min-free-mb 1500
+```
+
+The same code assertion **i** uses. Below 1500 MB median, close browsers before continuing —
+Opera/Chrome/Edge/Discord held ~8 GB on the first attempt.
+
+### 7. Inputs still in place
+
+```bash
+ls -l data/phase4b_only_ids.txt
+sha256sum docs/paper/phase4b_only_ids.txt data/phase4b_only_ids.txt
+#   both 6d6e57452ba56e814cb525d1a0f48c7b6c198830f7d8296a6bf856f2e36a0f12
+#   if data/ copy is missing:  cp docs/paper/phase4b_only_ids.txt data/phase4b_only_ids.txt
+```
+
+### 8. Then, and only then
+
+```bash
+bash docs/paper/phase4b_launch.sh --check-only     # must end with READY and exit 0
+```
+
+and when that is clean:
+
+```bash
+bash docs/paper/phase4b_launch.sh                  # the launch
+```
+
+The script re-checks all of the above as assertions **a-k** and starts nothing unless every one
+passes — steps 1-7 exist so that a failure is diagnosed while nothing is running, not so that
+`--check-only` can be skipped.
+
+> **`data/run_status.json` still reads `phase=running`** from the aborted attempt, with an
+> `updated_at` of `2026-09-21T06:10:39Z`. Nothing in the launch path gates on it and the runner
+> overwrites it at launch, so it needs no action. It only matters if
+> `phase4b_reconcile.py --apply` is ever run before the next launch, which would refuse on a
+> stale `running` and tell you to pass `--ignore-stale-status`. Reconciliation is **not** needed
+> here — the aborted attempt's output was discarded, not resumed.

@@ -1,0 +1,209 @@
+% CascadeShield -- verified bibliography (T2).
+%
+% Every entry below was checked against its own landing page / publisher record (DOI
+% resolver, IEEE Xplore, ACM DL, Wiley, dblp, or the GitHub API for the three tracker
+% threads) on 2026-09-21 -- none are typed from memory or carried over unverified. No
+% draft .tex with \bibitem entries existed anywhere in this repository to migrate from
+% (checked: no .tex/.bib file anywhere in the repo, and STATUS.md confirms no manuscript
+% draft exists yet) -- this file is new, not a correction of an existing one.
+%
+% Section 1: the near-miss corpus from docs/paper/related-work.md (T1's novelty-claim
+%            literature search, 2026-09-20) -- the works closest to this paper's own
+%            COUNT_BASED/TIME_BASED characterization claim.
+% Section 2: broader microservice-resilience / circuit-breaker context citations, added
+%            because nine references is thin for a 9-page IEEE paper.
+% Section 3: the three Resilience4j GitHub tracker threads, cited as @misc with the
+%            access date and the thread's own creation date (verified via the GitHub API,
+%            not guessed).
+
+%% ------------------------------------------------------------------ Section 1: near-miss corpus
+
+@article{aderaldo2025declarative,
+  author  = {Aderaldo, Carlos M. and Costa, Thiago M. and Vasconcelos, Danilo M. and
+             Mendon{\c{c}}a, Nabor C. and C{\^a}mara, Javier and Garlan, David},
+  title   = {A Declarative Approach and Benchmark Tool for Controlled Evaluation of
+             Microservice Resiliency Patterns},
+  journal = {Software: Practice and Experience},
+  volume  = {54},
+  number  = {1},
+  pages   = {170--192},
+  year    = {2025},
+  doi     = {10.1002/spe.3368},
+}
+
+@inproceedings{sedghpour2023breaking,
+  author    = {Sedghpour, Mohammad Reza Saleh and Garlan, David and Schmerl, Bradley R. and
+               Klein, Cristian and Tordsson, Johan},
+  title     = {Breaking the Vicious Circle: Self-Adaptive Microservice Circuit Breaking and Retry},
+  booktitle = {2023 IEEE International Conference on Cloud Engineering (IC2E)},
+  pages     = {32--42},
+  year      = {2023},
+  address   = {Boston, MA, USA},
+  doi       = {10.1109/IC2E59103.2023.00012},
+}
+
+@inproceedings{mendonca2020modelbased,
+  author    = {Mendon{\c{c}}a, Nabor C. and Aderaldo, Carlos M. and C{\^a}mara, Javier and
+               Garlan, David},
+  title     = {Model-Based Analysis of Microservice Resiliency Patterns},
+  booktitle = {2020 IEEE International Conference on Software Architecture (ICSA)},
+  pages     = {114--124},
+  year      = {2020},
+  address   = {Salvador, Brazil},
+  doi       = {10.1109/ICSA47634.2020.00019},
+}
+
+@inproceedings{elmalki2022impact,
+  author    = {El Malki, Amine and Zdun, Uwe and Pautasso, Cesare},
+  title     = {Impact of {API} Rate Limit on Reliability of Microservices-Based Architectures},
+  booktitle = {2022 IEEE International Conference on Service-Oriented System Engineering (SOSE)},
+  pages     = {19--28},
+  year      = {2022},
+  address   = {San Francisco, CA, USA},
+  doi       = {10.1109/SOSE55356.2022.00009},
+  note      = {related-work.md's near-miss table previously attributed this as
+               ``Zdun et al.''; the verified author order is El Malki, Zdun, Pautasso.},
+}
+
+@article{bansal2025testing,
+  author  = {Bansal, Aditya and Sharma, Parag and Dasani, Nibedita},
+  title   = {Testing Resilience of Envoy Service Proxy with Microservices: A Fault-Oriented,
+             Evidence-Driven Methodology},
+  journal = {Innovative Journal of Applied Science},
+  volume  = {2},
+  number  = {5},
+  pages   = {39},
+  year    = {2025},
+  doi     = {10.70844/ijas.2025.2.39},
+  note    = {Journal indexed in Google Scholar, Crossref, SCILIT, OpenAlex, ROAD --
+             not a top-tier venue; cited for its methodology (live, fault-oriented
+             evidence at the service-mesh layer), not for venue prestige.},
+}
+
+@article{pashko2026improvements,
+  author  = {Pashko, A. O. and others},
+  title   = {Improvements to the Circuit Breaker Prediction Model for Increasing the Fault
+             Tolerance of Microservices},
+  journal = {Bulletin of Taras Shevchenko National University of Kyiv. Series: Physics and
+             Mathematics},
+  year    = {2026},
+  note    = {Volume, page range, and DOI could not be found as of 2026-09-21 despite
+             repeated searches (journal site, Crossref, dblp, ResearchGate) -- left
+             unfilled rather than fabricated. Full author list beyond the first author
+             was not independently confirmed either; re-verify before this enters the
+             manuscript's final bibliography.},
+}
+
+@inproceedings{falahah2021circuit,
+  author    = {Falahah and Surendro, K. and Sunindyo, W. D.},
+  title     = {Circuit Breaker in Microservices: State of the Art and Future Prospects},
+  booktitle = {IOP Conference Series: Materials Science and Engineering},
+  volume    = {1077},
+  number    = {1},
+  pages     = {012065},
+  year      = {2021},
+  doi       = {10.1088/1757-899X/1077/1/012065},
+}
+
+@inproceedings{sivakumar2024selfadaptive,
+  author    = {Sivakumar, K. and Sebastian, Jeenu and Thilagam, P. Santhi},
+  title     = {Self-Adaptive Circuit Breaker Open-State Interval for Enhancing Resiliency
+               of Microservices},
+  booktitle = {2024 OITS International Conference on Information Technology (OCIT)},
+  pages     = {754--759},
+  year      = {2024},
+  address   = {Vijayawada, India},
+  doi       = {10.1109/OCIT65031.2024.00136},
+}
+
+@article{yu2025systematic,
+  author  = {Yu, Senyao and Wu, Hao and Niu, Xin and Nie, Changhai},
+  title   = {A Systematic Literature Review on Fault Injection Testing of Microservice Systems},
+  journal = {IEEE Transactions on Services Computing},
+  year    = {2025},
+  doi     = {10.1109/TSC.2025.3621564},
+}
+
+%% ------------------------------------------------------------- Section 2: broader context
+
+@incollection{dragoni2017microservices,
+  author    = {Dragoni, Nicola and Giallorenzo, Saverio and Lluch Lafuente, Alberto and
+               Mazzara, Manuel and Montesi, Fabrizio and Mustafin, Ruslan and Safina, Larisa},
+  title     = {Microservices: Yesterday, Today, and Tomorrow},
+  booktitle = {Present and Ulterior Software Engineering},
+  pages     = {195--216},
+  year      = {2017},
+  publisher = {Springer},
+  doi       = {10.1007/978-3-319-67425-4_12},
+}
+
+@article{zhang2024failure,
+  author  = {Zhang, Shenglin and Xia, Sibo and Fan, Wenzhao and Shi, Binpeng and
+             Xiong, Xiao and Zhong, Zhenyu and Ma, Minghua and Sun, Yongqian and Pei, Dan},
+  title   = {Failure Diagnosis in Microservice Systems: A Comprehensive Survey and Analysis},
+  journal = {ACM Transactions on Software Engineering and Methodology},
+  volume  = {35},
+  number  = {1},
+  year    = {2024},
+  doi     = {10.1145/3715005},
+}
+
+@article{chen2024microfi,
+  author  = {Chen, Hongyang and Chen, Pengfei and Yu, Guangba and Li, Xiaoyun and He, Zilong},
+  title   = {{MicroFI}: Non-Intrusive and Prioritized Request-Level Fault Injection for
+             Microservice Applications},
+  journal = {IEEE Transactions on Dependable and Secure Computing},
+  volume  = {21},
+  number  = {5},
+  pages   = {4921--4938},
+  year    = {2024},
+  doi     = {10.1109/TDSC.2024.3363902},
+}
+
+@misc{lewis2014microservices,
+  author       = {Lewis, James and Fowler, Martin},
+  title        = {Microservices},
+  howpublished = {\url{https://martinfowler.com/articles/microservices.html}},
+  year         = {2014},
+  note         = {Accessed 2026-09-21},
+}
+
+@book{nygard2018releaseit,
+  author    = {Nygard, Michael T.},
+  title     = {Release It!: Design and Deploy Production-Ready Software},
+  edition   = {2nd},
+  publisher = {Pragmatic Bookshelf},
+  year      = {2018},
+  isbn      = {978-1-68050-239-8},
+  note      = {Canonical origin of the Circuit Breaker pattern this paper studies.},
+}
+
+%% --------------------------------------------------- Section 3: Resilience4j tracker threads
+
+@misc{resilience4j_issue1731,
+  author       = {{Resilience4j maintainers and community}},
+  title        = {Proposition regarding the {COUNT\_BASED} sliding window algorithm for
+                   {CircuitBreaker}},
+  howpublished = {GitHub Issue \#1731, resilience4j/resilience4j},
+  year         = {2022},
+  note         = {Opened 2022-07-21. \url{https://github.com/resilience4j/resilience4j/issues/1731}.
+                  Accessed 2026-09-20.},
+}
+
+@misc{resilience4j_discussion1815,
+  author       = {{Resilience4j maintainers and community}},
+  title        = {Circuit breaker {TIME\_BASED} use case scenario},
+  howpublished = {GitHub Discussion \#1815, resilience4j/resilience4j},
+  year         = {2022},
+  note         = {Opened 2022-11-18. \url{https://github.com/resilience4j/resilience4j/discussions/1815}.
+                  Accessed 2026-09-20.},
+}
+
+@misc{resilience4j_issue1349,
+  author       = {{Resilience4j maintainers and community}},
+  title        = {Issue with minimum number of calls},
+  howpublished = {GitHub Issue \#1349, resilience4j/resilience4j},
+  year         = {2021},
+  note         = {Opened 2021-02-23. \url{https://github.com/resilience4j/resilience4j/issues/1349}.
+                  Accessed 2026-09-20.},
+}

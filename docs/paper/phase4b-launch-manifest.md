@@ -10,6 +10,15 @@ including where the pre-launch figures in §1 were superseded by the values meas
 
 ---
 
+> **DEVIATION 01 (2026-09-21, during collection).** The §5 observation horizon makes the TIME
+> arm unverifiable: its over-coverage extends past each run's own end into the next run's
+> `update_containers()` recreate, so every TIME run fails §6's coverage requirement and §4
+> rule 3 excludes it. Falsifies §11's claim that recreate gaps cannot cause `NOT_VERIFIED`.
+> The pre-registration is **not** edited. Recorded in
+> **[`deviation-01-verification-horizon.md`](deviation-01-verification-horizon.md)**, committed
+> before any verification count under the corrected horizon was computed. All three analyses —
+> literal, corrected, and coverage-ignoring — are reported side by side.
+
 ## 0. Frozen artifacts
 
 | artifact | value |

@@ -267,7 +267,7 @@ happened to the sidecar, and the baseline for the sweep is no longer established
 **Nothing below has been run.**
 
 **The launch path is `docs/paper/phase4b_launch.sh` (tracked), not these commands by hand.**
-It runs assertions **a-j** (§3.7) and starts nothing unless every one passes. From your own
+It runs assertions **a-k** (§3.7) and starts nothing unless every one passes. From your own
 Git Bash window, at the repo root:
 
 ```bash
@@ -450,7 +450,7 @@ Do not touch `data/phase4b_postd25.csv`, `data/cb_transitions.jsonl` or the poll
 start a second runner. Do not run `phase4b_reconcile.py --apply` — it will refuse anyway while
 `run_status.json` reads `phase=running`.
 
-### 3.7 What the launch script asserts (a-j)
+### 3.7 What the launch script asserts (a-k)
 
 All ten run **before anything is started**. The first failure aborts with a message naming
 what was expected and what was found, and the script states that nothing was started, no
@@ -468,8 +468,13 @@ manifest was written and no file was changed.
 | **h** | `prometheus` and `grafana` **not running**; the six application services plus `postgres` and `dynamodb-local` running and `healthy` | either observability container running, or any required container not running/healthy |
 | **i** | free physical RAM ≥ 1500 MB (**median of 5 samples**), free disk ≥ 15 GB, power not positively "on battery" | median below the floor, disk below the floor, or `Win32_Battery.BatteryStatus == 1` |
 | **j** | no `gateway_poll_verify`, `phase4b_mem_log` or `experiments/runner.py` **`python.exe`** process already running | any match |
+| **k** | the three scripts the full run starts all exist; `data/audit` and `logs` exist and are **writable** (proved with a probe file); every output path (`$MANIFEST`, `$PIDFILE`, `$POLL_LOG`, `$MEM_LOG`, `$SWEEP_LOG`, `$POLLER_LOG`) is in a writable directory; `python -c "import json"` works | any missing script, any unwritable path |
 
-Three of these need their scope stated precisely rather than assumed:
+**k was added on 2026-09-21** to satisfy the order rule — *anything that can fail must fail
+before the poller starts*. Without it, a launch could reach "sweep running" and then die
+because `data/audit` was not writable, stranding three live processes.
+
+Four of these need their scope stated precisely rather than assumed:
 
 * **f — provenance is evidence, not proof.** Docker images carry no commit label here:
   `services/gateway-service/Dockerfile` sets no `LABEL org.opencontainers.image.revision` and
@@ -1090,3 +1095,87 @@ total RAM and its own PID; every other line is a sample in the format above.
 
 The launch script's RAM assertion (**i**) calls the same module's `sample` subcommand, so the
 gate reading and the logged reading come from one implementation and cannot drift apart.
+
+---
+
+## 14. Defect found and fixed in `phase4b_launch.sh` — 2026-09-21
+
+The first `--check-only` run printed `READY` and then:
+
+```
+docs/paper/phase4b_launch.sh: line 320: printf: --: invalid option
+```
+
+### Cause
+
+`printf '----------------------------------------------------------------\n'` — bash's
+`printf` **builtin** parses a leading `-` in its first argument as an option flag. The
+separator was read as the option `--` followed by garbage, so `printf` returned 2.
+
+**It was not cosmetic.** Under `set -e` a builtin returning non-zero aborts the script, so
+the two lines after it — including `exit 0` — never ran:
+
+```
+$ bash repro.sh
+ READY
+repro.sh: line 3: printf: --: invalid option
+printf: usage: printf [-v var] format [arguments]
+EXIT=2
+```
+
+`--check-only` therefore **exited 2 while printing READY**. Anything checking the exit
+status would have read a passing check as a failure, and the "nothing was started, nothing
+was written" line never printed.
+
+### All three occurrences, not just the reported one
+
+| line | where | consequence if left |
+|---|---|---|
+| 320 | `--check-only` block, right after `READY` | the reported one: exit 2 instead of 0 |
+| 329 | full run, immediately after the launch timestamp | **the full run would have aborted here every time** — before the manifest, before the poller. The launch path had never actually worked |
+| 434 | full run, after the PID file is written | **the dangerous one**: poller, memory logger and sweep all running, PID file written, then abort with a printf error and exit 2. The operator sees a failure and cannot tell that the sweep is in fact running |
+
+### Fix
+
+One helper, used for every separator:
+
+```bash
+RULE="----------------------------------------------------------------"
+rule() { printf '%s\n' "$RULE"; }
+```
+
+`printf '%s\n' "$RULE"` passes the dashes as an *argument*, which is never option-parsed.
+The same treatment was applied to the two other places a `-`-leading string reached a
+`printf`/`echo` first argument, and to `echo`-style usages generally: the script now has no
+`printf`/`echo` whose first argument begins with `-`. A comment at the top of the file
+records why, so it does not come back.
+
+Verified: `grep -nE "^[[:space:]]*(printf|echo)[[:space:]]+('|\")-"` returns nothing.
+
+### Full-run path review — other ways it could fail *after* something had started
+
+Found and fixed in the same pass:
+
+| risk | fix |
+|---|---|
+| `POLLER_PID="$(pypids X \| head -1)"` — `head` closes the pipe early; under `set -o pipefail` a SIGPIPE upstream makes the assignment non-zero and `set -e` aborts. Would have fired *after* a process was started | `pypids` no longer feeds a pipeline. New `capture_pid` reads the whole output into a variable and takes the first line with parameter expansion |
+| `head -1` silently picked one PID if two matched, so the PID file could record a process this script did not start | `capture_pid` **dies on 0 or 2+ matches** and names them, rather than guessing |
+| `$PIDFILE` write failing after all three processes were live | new assertion **k** proves every output directory writable before anything starts; the write also has an explicit `\|\| die` |
+| `die` printed *"Nothing was started. No manifest written. No file changed."* even when the poller and memory logger were already running — a false statement at the worst moment | `die` now tracks what this invocation started (`STARTED`), **rolls it back in reverse order**, and prints what it stopped. It only claims "nothing was started" when that is true. Rollback touches only PIDs this script recorded — never a pre-existing process, never a container |
+| the manifest heredoc was **unquoted**, so every captured value was shell-expanded into Python source. A quote or backslash in `$BATT` or `$IMG_CREATED` would have produced a syntax error — or worse, valid but wrong Python | values now pass through the **environment** into a **quoted** (`<<'PYEOF'`) heredoc; no shell expansion occurs inside the program at all |
+| `FREE_MB_NOW` empty would have made the manifest `"free_mb_at_launch": ,` — a syntax error | validated against `^[0-9]+\.[0-9]+$` before use, with `\|\| die` |
+| `iso_epoch` returning empty on an unparseable date silently became `0` in `[[ -lt ]]`, so a bad timestamp looked like "image older than source" — right answer, wrong reason | `iso_epoch` now returns non-zero on failure and assertion **f** dies with the unparseable value quoted |
+| `$MANIFEST` already existing would have been silently overwritten, losing the previous launch's record | added to assertion **d** alongside the dataset and poll log |
+
+Residual, and deliberately so: whether a process comes up at all, and whether the poller is
+*logging* and not merely alive, can only be known after starting it. Those two cases are why
+`die` rolls back instead of pretending nothing happened.
+
+### Hashes
+
+| | sha256 |
+|---|---|
+| `docs/paper/phase4b_launch.sh`, **defective** (commit `d6bd6f5`) | `c897d4f5701904bbc0780d68d85253c258e45c01cd38c622883ce25f7f5d4a8e` |
+| `docs/paper/phase4b_launch.sh`, **fixed** | **`af6b9155e13c6f7c2bdccb368bd69455deb2a8cd814eab15fcb83abefdbc9ded`** |
+
+`bash -n` clean; `--check-only` re-run ends with `READY` and exits 0.

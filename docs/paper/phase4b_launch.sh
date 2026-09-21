@@ -2,21 +2,32 @@
 #
 # Phase 4B sweep launcher.  Run from the repo root in Git Bash.
 #
-#   bash docs/paper/phase4b_launch.sh --check-only   # assertions a-j, then stop
-#   bash docs/paper/phase4b_launch.sh                # assertions a-j, then launch
+#   bash docs/paper/phase4b_launch.sh --check-only   # assertions a-k, then stop
+#   bash docs/paper/phase4b_launch.sh                # assertions a-k, then launch
 #
 # --check-only runs the assertions and NOTHING else: it starts and stops no service,
 # no poller, no memory logger and no runner; it writes no manifest, no sweep output,
 # no sidecar change and no timestamp of any kind.  The only thing it writes is its own
 # stdout.
 #
-# The poller, the memory logger and the sweep are started only after EVERY assertion
-# has passed, in that order.  The first failing assertion aborts with a message naming
-# what was expected and what was found.
+# ORDER RULE: anything that can fail must fail BEFORE the poller starts.  Assertions
+# a-k cover everything checkable up front, including that every output path is
+# writable (k) -- so a launch cannot get as far as a running sweep and then die
+# because it could not create a PID file.  For the residual cases that are only
+# knowable after a process is started (it did not come up, it came up but is not
+# logging), `die` ROLLS BACK: it stops whatever this invocation started, in reverse
+# order, and says so.  It never claims "nothing was started" when something was.
 #
 # This script never starts, stops or restarts a container.  Bringing the mesh up, and
 # stopping prometheus/grafana, are separate operator actions asserted here (h), not
 # performed here.
+#
+# NOTE ON printf: every separator is printed with `rule`, which uses
+# `printf '%s\n' "$RULE"`.  A bare `printf '-----\n'` is a latent abort -- bash's
+# printf builtin parses a leading '-' as an option flag, returns 2, and under
+# `set -e` kills the script.  That bug shipped once (2026-09-21) and made
+# --check-only exit 2 straight after printing READY.  Keep separators going through
+# `rule`.
 #
 set -euo pipefail
 
@@ -65,39 +76,96 @@ STOPPED_SERVICES=(prometheus grafana)
 MIN_FREE_MB=1500
 MIN_FREE_GB=15
 
+RULE="----------------------------------------------------------------"
+
 CHECK_ONLY=0
 [[ "${1:-}" == "--check-only" ]] && CHECK_ONLY=1
 if [[ -n "${1:-}" && "$1" != "--check-only" ]]; then
-  echo "usage: bash docs/paper/phase4b_launch.sh [--check-only]" >&2; exit 2
+  printf '%s\n' "usage: bash docs/paper/phase4b_launch.sh [--check-only]" >&2; exit 2
 fi
 
 # ------------------------------------------------------------------------ helpers
 PASS=0
+# Processes THIS invocation started, newest last, as "label:pid".  Used by die() to
+# roll back, and only ever populated after a successful start.
+STARTED=()
+
+rule() { printf '%s\n' "$RULE"; }
 ok()   { PASS=$((PASS+1)); printf '  [PASS] %s\n' "$*"; }
 info() { printf '         %s\n' "$*"; }
-die()  { printf '\n  [ABORT] %s\n' "$*" >&2
-         printf '  Nothing was started. No manifest written. No file changed.\n' >&2
-         exit 1; }
 hdr()  { printf '\n%s\n' "$*"; }
 
-# ISO-8601 (with or without fractional seconds, Z or +hh:mm) -> epoch seconds.
-iso_epoch() {
-  local s="$1"
-  if [[ "$s" == *.* ]]; then s="${s%%.*}Z"; fi          # drop fractional seconds
-  date -u -d "$s" +%s 2>/dev/null || date -d "$s" +%s
+# Stop everything this invocation started, in reverse order.  Only ever touches PIDs
+# this script recorded itself -- never a pre-existing process, never a container.
+rollback() {
+  local i entry label pid
+  for (( i=${#STARTED[@]}-1; i>=0; i-- )); do
+    entry="${STARTED[$i]}"; label="${entry%%:*}"; pid="${entry##*:}"
+    printf '  [ROLLBACK] stopping %s (PID %s)\n' "$label" "$pid" >&2
+    powershell -NoProfile -NonInteractive -Command "Stop-Process -Id $pid -Force" \
+      >/dev/null 2>&1 || printf '  [ROLLBACK] could not stop PID %s -- stop it by hand\n' "$pid" >&2
+  done
 }
 
-# Windows PIDs of python.exe processes whose command line matches $1.  Never matches
-# the Git Bash wrapper: the Name filter restricts it to python.exe.
+die() {
+  printf '\n  [ABORT] %s\n' "$*" >&2
+  if [[ ${#STARTED[@]} -eq 0 ]]; then
+    printf '  Nothing was started. No manifest written. No file changed.\n' >&2
+  else
+    printf '  %d process(es) had already been started by this run; rolling back.\n' \
+      "${#STARTED[@]}" >&2
+    rollback
+    printf '  Rollback complete. Check data/audit/ and logs/ for anything left behind\n' >&2
+    printf '  before re-launching; %s may exist and must be removed.\n' "$MANIFEST" >&2
+  fi
+  exit 1
+}
+
+# ISO-8601 (with or without fractional seconds, Z or +hh:mm) -> epoch seconds.
+# Prints nothing and returns non-zero if it cannot parse, so callers can detect it
+# rather than silently receiving 0.
+iso_epoch() {
+  local s="$1" e
+  [[ -n "$s" ]] || return 1
+  if [[ "$s" == *.* ]]; then s="${s%%.*}Z"; fi          # drop fractional seconds
+  e="$(date -u -d "$s" +%s 2>/dev/null || date -d "$s" +%s 2>/dev/null || true)"
+  [[ "$e" =~ ^[0-9]+$ ]] || return 1
+  printf '%s' "$e"
+}
+
+# Windows PIDs of python.exe processes whose command line matches $1, one per line.
+# Never matches the Git Bash wrapper: the Name filter restricts it to python.exe.
+# No pipeline here on purpose -- `| head -1` under `set -o pipefail` can abort the
+# script on SIGPIPE, which would be a failure AFTER a process had been started.
 pypids() {
   powershell -NoProfile -NonInteractive -Command \
     "Get-CimInstance Win32_Process | Where-Object { \$_.Name -like 'python*' -and \$_.CommandLine -like '*$1*' } | Select-Object -ExpandProperty ProcessId" \
     2>/dev/null | tr -d '\r' | grep -E '^[0-9]+$' || true
 }
 
-printf '================================================================\n'
-printf ' Phase 4B launch  --  %s\n' "$([[ $CHECK_ONLY -eq 1 ]] && echo 'CHECK ONLY (nothing will be started)' || echo 'FULL RUN')"
-printf '================================================================\n'
+# Exactly-one-PID capture.  Sets REPLY_PID.  Fails loudly on 0 or 2+ matches rather
+# than silently taking the first, so a stray second process can never be recorded in
+# the PID file as if it were the one we started.
+capture_pid() {
+  local pat="$1" label="$2" all count
+  all="$(pypids "$pat")"
+  count="$(printf '%s' "$all" | grep -c . || true)"
+  if [[ "$count" -eq 0 ]]; then
+    REPLY_PID=""; return 1
+  fi
+  if [[ "$count" -gt 1 ]]; then
+    die "$label: expected exactly one python.exe matching '$pat', found $count:
+     $(printf '%s' "$all" | tr '\n' ' ')
+     Refusing to guess which one to record. Stop the strays and re-launch."
+  fi
+  REPLY_PID="${all%%$'\n'*}"
+  return 0
+}
+
+rule
+printf ' Phase 4B launch  --  %s\n' \
+  "$([[ $CHECK_ONLY -eq 1 ]] && printf 'CHECK ONLY (nothing will be started)' || printf 'FULL RUN')"
+rule
 
 # ------------------------------------------------------------------- a. repo state
 hdr "a. Repo state"
@@ -145,8 +213,11 @@ hdr "d. Sweep outputs absent"
      in place. Reconcile and move it aside before launching (manifest section 4)."
 [[ ! -e "$POLL_LOG" ]] || die "d: $POLL_LOG already exists. The poller appends, so an old
      log would be silently merged with this sweep's. Move it aside."
+[[ ! -e "$MANIFEST" ]] || die "d: $MANIFEST already exists. It would be overwritten and the
+     previous launch's record lost. Move it aside."
 ok "$DATASET absent"
 ok "$POLL_LOG absent"
+ok "$MANIFEST absent"
 
 # ---------------------------------------------------------------------- e. ID list
 hdr "e. --only-ids list"
@@ -192,7 +263,9 @@ info "docker inspect .Image     : $CNT_ID"
 ok "image .Id == container .Image"
 
 IMG_CREATED="$(docker image inspect "$GW_IMAGE" --format '{{.Created}}')"
-IMG_EPOCH="$(iso_epoch "$IMG_CREATED")"
+IMG_EPOCH="$(iso_epoch "$IMG_CREATED")" \
+  || die "f: could not parse the image .Created timestamp '$IMG_CREATED'.
+     Refusing to treat an unparseable date as satisfying the provenance check."
 info "image .Created            : $IMG_CREATED"
 info "source paths checked (from services/gateway-service/Dockerfile COPY lines):"
 NEWEST_EPOCH=0; NEWEST_DESC=""
@@ -200,10 +273,12 @@ for p in "${GW_SOURCE_PATHS[@]}"; do
   C_ISO="$(git log -1 --format='%cI' -- "$p")"
   C_SHA="$(git log -1 --format='%h' -- "$p")"
   info "  $p"
+  [[ -n "$C_ISO" ]] || die "f: no commit in history touches '$p'. Check the path."
   info "      last commit $C_SHA  $C_ISO"
-  if [[ -n "$C_ISO" ]]; then
-    E="$(iso_epoch "$C_ISO")"
-    if [[ "$E" -gt "$NEWEST_EPOCH" ]]; then NEWEST_EPOCH="$E"; NEWEST_DESC="$C_SHA ($p) $C_ISO"; fi
+  E="$(iso_epoch "$C_ISO")" \
+    || die "f: could not parse the commit timestamp '$C_ISO' for path '$p'."
+  if [[ "$E" -gt "$NEWEST_EPOCH" ]]; then
+    NEWEST_EPOCH="$E"; NEWEST_DESC="$C_SHA ($p) $C_ISO"
   fi
 done
 info "newest source commit      : $NEWEST_DESC"
@@ -223,14 +298,14 @@ info "BEST AVAILABLE EVIDENCE, NOT PROOF, that the image contains the D25 pin."
 hdr "g. Endpoints"
 # Tests: the gateway process answers its LINEAR route with 200. It does not test any
 # downstream breaker state, and it does not test Toxiproxy.
-HTTP="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://localhost:8080/api/v1/linear || echo 000)"
+HTTP="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://localhost:8080/api/v1/linear || printf '000')"
 info "GET http://localhost:8080/api/v1/linear -> $HTTP"
 [[ "$HTTP" == "200" ]] || die "g: the gateway's LINEAR route returned $HTTP, expected 200"
 ok "gateway LINEAR route returns 200 (tests: the gateway answers; nothing else)"
 
 # Tests: the Toxiproxy ADMIN API lists exactly the 5 expected proxies, each enabled,
 # each with an empty toxics array. It does not send traffic through them.
-PROXY_JSON="$(curl -s --max-time 10 http://localhost:8474/proxies || echo '')"
+PROXY_JSON="$(curl -s --max-time 10 http://localhost:8474/proxies || printf '')"
 [[ -n "$PROXY_JSON" ]] || die "g: Toxiproxy admin API at :8474 returned nothing"
 PROXY_REPORT="$(printf '%s' "$PROXY_JSON" | python -c '
 import json,sys
@@ -258,7 +333,7 @@ info " through a proxy and does not prove a downstream service is reachable.)"
 # --------------------------------------------------------------- h. container state
 hdr "h. Container state"
 for s in "${STOPPED_SERVICES[@]}"; do
-  ST="$(docker inspect "$s" --format '{{.State.Status}}' 2>/dev/null || echo 'absent')"
+  ST="$(docker inspect "$s" --format '{{.State.Status}}' 2>/dev/null || printf 'absent')"
   info "$s : $ST"
   [[ "$ST" != "running" ]] \
     || die "h: $s is running. The manifest records that the sweep runs WITHOUT
@@ -266,8 +341,8 @@ for s in "${STOPPED_SERVICES[@]}"; do
 done
 ok "prometheus and grafana are not running (matches the manifest)"
 for s in "${APP_SERVICES[@]}"; do
-  ST="$(docker inspect "$s" --format '{{.State.Status}}' 2>/dev/null || echo 'absent')"
-  HL="$(docker inspect "$s" --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' 2>/dev/null || echo 'none')"
+  ST="$(docker inspect "$s" --format '{{.State.Status}}' 2>/dev/null || printf 'absent')"
+  HL="$(docker inspect "$s" --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' 2>/dev/null || printf 'none')"
   info "$(printf '%-22s %-9s health=%s' "$s" "$ST" "$HL")"
   [[ "$ST" == "running" ]] || die "h: $s is '$ST', expected running"
   [[ "$HL" == "healthy" || "$HL" == "none" ]] || die "h: $s health is '$HL', expected healthy"
@@ -308,17 +383,45 @@ for pat in gateway_poll_verify phase4b_mem_log experiments/runner.py; do
   info "$(printf '%-24s %s' "$pat" "${FOUND:-none}")"
   [[ -z "$FOUND" ]] \
     || die "j: a python process matching '$pat' is already running (PID $FOUND).
-     Stop it before launching -- see manifest section 5."
+     Stop it before launching -- see manifest section 11."
 done
 ok "no poller, memory logger or runner process is running"
 
-printf '\n----------------------------------------------------------------\n'
+# -------------------------------------------------------------- k. output paths OK
+# Added 2026-09-21. Every path the full run writes is proved writable HERE, before any
+# process is started, so a launch can never reach "sweep running" and then die because
+# it could not create a PID file or a log.
+hdr "k. Output paths writable"
+for f in analysis/gateway_poll_verify.py analysis/phase4b_mem_log.py experiments/runner.py; do
+  [[ -f "$f" ]] || die "k: $f is missing -- the full run would start a process that
+     cannot exist. Check the working directory."
+done
+ok "poller, memory logger and runner scripts all present"
+for d in data/audit logs; do
+  mkdir -p "$d" || die "k: cannot create directory $d"
+  probe="$d/.phase4b_write_probe.$$"
+  ( : > "$probe" ) 2>/dev/null || die "k: $d is not writable"
+  rm -f "$probe"
+  info "$(printf '%-12s writable' "$d")"
+done
+for f in "$MANIFEST" "$PIDFILE" "$POLL_LOG" "$MEM_LOG" "$SWEEP_LOG" "$POLLER_LOG"; do
+  d="$(dirname "$f")"
+  probe="$d/.phase4b_write_probe.$$"
+  ( : > "$probe" ) 2>/dev/null || die "k: cannot write into $d (needed for $f)"
+  rm -f "$probe"
+done
+ok "every output path the full run writes is writable"
+python -c "import json,sys" 2>/dev/null || die "k: python cannot import json"
+ok "python usable for the manifest write"
+
+printf '\n'
+rule
 printf ' %d assertion groups passed.\n' "$PASS"
 
 if [[ $CHECK_ONLY -eq 1 ]]; then
   printf ' READY\n'
-  printf '----------------------------------------------------------------\n'
-  printf ' --check-only: nothing was started, nothing was written.\n'
+  rule
+  printf ' %s\n' "--check-only: nothing was started, nothing was written."
   exit 0
 fi
 
@@ -326,71 +429,95 @@ fi
 LAUNCH_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 printf ' LAUNCH TIMESTAMP (sweep_window.start) : %s\n' "$LAUNCH_TS"
 printf ' MANIFEST                              : %s\n' "$MANIFEST"
-printf '----------------------------------------------------------------\n'
-
-mkdir -p data/audit logs
+rule
 
 # 1. manifest -------------------------------------------------------------------
+# Written BEFORE anything is started. Values go through the environment and a QUOTED
+# heredoc, so no shell expansion happens inside the Python source -- a quote, a
+# percent sign or a backslash in any captured value cannot corrupt the program.
 FREE_MB_NOW="$(python -c "import sys;sys.path.insert(0,'analysis');from phase4b_mem_log import free_mb;print('%.1f'%free_mb())")"
-python - "$MANIFEST" <<PYEOF
-import json, sys
+[[ "$FREE_MB_NOW" =~ ^[0-9]+\.[0-9]+$ ]] \
+  || die "could not read free memory for the manifest (got '$FREE_MB_NOW')"
+
+P4B_MANIFEST="$MANIFEST" P4B_HEAD="$HEAD_SHA" P4B_PREREG="$PREREG_SHA" \
+P4B_CHAIN="$PREREG_SUPERSEDED" P4B_PLAN="$PLAN_FILE" P4B_MACHINE="$MACHINE_ID" \
+P4B_REPLICATES="$REPLICATES" P4B_SEED="$SEED" P4B_RUNS="$EXPECTED_RUNS" \
+P4B_DATASET="$DATASET" P4B_SIDECAR="$SIDECAR" P4B_POLL="$POLL_LOG" \
+P4B_MEMLOG="$MEM_LOG" P4B_IDS_SRC="$IDS_SRC" P4B_IDS_SHA="$IDS_SHA" \
+P4B_IDS_COUNT="$EXPECTED_IDS" P4B_SIDECAR_LINES="$SIDECAR_LINES" \
+P4B_SIDECAR_SHA="$SIDECAR_SHA" P4B_GW_IMAGE="$GW_IMAGE" P4B_GW_CONTAINER="$GW_CONTAINER" \
+P4B_IMG_ID="$IMG_ID" P4B_IMG_CREATED="$IMG_CREATED" P4B_LAUNCH_TS="$LAUNCH_TS" \
+P4B_FREE_MB="$FREE_MB_NOW" P4B_FREE_GB="$FREE_GB" P4B_BATT="$BATT" \
+python - <<'PYEOF' || die "manifest write failed -- nothing was started"
+import json, os
+E = os.environ
+ids = [l.split("#", 1)[0].strip()
+       for l in open(E["P4B_IDS_SRC"], encoding="utf-8")
+       if l.split("#", 1)[0].strip()]
+n = int(E["P4B_IDS_COUNT"])
+assert len(ids) == n, f"expected {n} ids, parsed {len(ids)}: {ids}"
+runs = int(E["P4B_RUNS"])
 m = {
-  "git_head": "$HEAD_SHA",
-  "preregistration_sha": "$PREREG_SHA",
-  "preregistration_superseded": ["8f1623b", "34bfda7"],
-  "preregistration_chain": "$PREREG_SUPERSEDED",
-  "plan_file": "$PLAN_FILE",
-  "machine_id": "$MACHINE_ID",
-  "mode": "full", "fault": "latency", "topology": "linear",
-  "replicates": $REPLICATES, "seed": $SEED, "expected_runs": $EXPECTED_RUNS,
-  "dataset_path": "$DATASET",
-  "transitions_path": "$SIDECAR",
-  "poll_path": "$POLL_LOG",
-  "audit_dir": "data/audit",
-  "mem_log": "$MEM_LOG",
-  "only_ids_file": "$IDS_SRC",
-  "only_ids_sha256": "$IDS_SHA",
-  "only_ids_count": $EXPECTED_IDS,
-  "only_ids": [l.split("#",1)[0].strip()
-               for l in open("$IDS_SRC", encoding="utf-8")
-               if l.split("#",1)[0].strip()],
-  "sidecar_baseline": {"path": "data/audit/sidecar_baseline_73.jsonl",
-                       "lines": $SIDECAR_LINES, "sha256": "$SIDECAR_SHA"},
-  "gateway_image_repo": "$GW_IMAGE",
-  "gateway_container": "$GW_CONTAINER",
-  "gateway_image_id": "$IMG_ID",
-  "gateway_image_created": "$IMG_CREATED",
-  "gateway_source_paths": ["services/gateway-service", "cascadeshield-parent/pom.xml"],
-  "sweep_window": {"start": "$LAUNCH_TS", "end": None},
-  "host": {"free_mb_at_launch": $FREE_MB_NOW, "free_disk_gb_at_launch": $FREE_GB,
-           "power": "$BATT"},
-  "observability": ("prometheus and grafana were STOPPED for this sweep and stay stopped "
-                    "for all $EXPECTED_RUNS runs. The Phase 1 canary and the 2026-09-20 "
-                    "smoke run were collected WITH them running. This differs between "
-                    "those artifacts and this sweep, and is identical across all "
-                    "$EXPECTED_RUNS runs here, so it cannot differ between arms."),
-  "onedrive_sync": "off for the duration of the run",
+    "git_head": E["P4B_HEAD"],
+    "preregistration_sha": E["P4B_PREREG"],
+    "preregistration_superseded": ["8f1623b", "34bfda7"],
+    "preregistration_chain": E["P4B_CHAIN"],
+    "plan_file": E["P4B_PLAN"],
+    "machine_id": E["P4B_MACHINE"],
+    "mode": "full", "fault": "latency", "topology": "linear",
+    "replicates": int(E["P4B_REPLICATES"]), "seed": int(E["P4B_SEED"]),
+    "expected_runs": runs,
+    "dataset_path": E["P4B_DATASET"],
+    "transitions_path": E["P4B_SIDECAR"],
+    "poll_path": E["P4B_POLL"],
+    "audit_dir": "data/audit",
+    "mem_log": E["P4B_MEMLOG"],
+    "only_ids_file": E["P4B_IDS_SRC"],
+    "only_ids_sha256": E["P4B_IDS_SHA"],
+    "only_ids_count": n,
+    "only_ids": ids,
+    "sidecar_baseline": {"path": "data/audit/sidecar_baseline_73.jsonl",
+                         "lines": int(E["P4B_SIDECAR_LINES"]),
+                         "sha256": E["P4B_SIDECAR_SHA"]},
+    "gateway_image_repo": E["P4B_GW_IMAGE"],
+    "gateway_container": E["P4B_GW_CONTAINER"],
+    "gateway_image_id": E["P4B_IMG_ID"],
+    "gateway_image_created": E["P4B_IMG_CREATED"],
+    "gateway_source_paths": ["services/gateway-service", "cascadeshield-parent/pom.xml"],
+    "sweep_window": {"start": E["P4B_LAUNCH_TS"], "end": None},
+    "host": {"free_mb_at_launch": float(E["P4B_FREE_MB"]),
+             "free_disk_gb_at_launch": int(E["P4B_FREE_GB"]),
+             "power": E["P4B_BATT"]},
+    "observability": (
+        f"prometheus and grafana were STOPPED for this sweep and stay stopped for all "
+        f"{runs} runs. The Phase 1 canary and the 2026-09-20 smoke run were collected "
+        f"WITH them running. That differs between those artifacts and this sweep, and "
+        f"is identical across all {runs} runs here, so it cannot differ between arms."),
+    "onedrive_sync": "off for the duration of the run",
 }
-assert len(m["only_ids"]) == $EXPECTED_IDS, m["only_ids"]
-json.dump(m, open(sys.argv[1], "w", encoding="utf-8"), indent=2)
-print(f"  manifest written: {sys.argv[1]}  ({len(m['only_ids'])} ids)")
+with open(E["P4B_MANIFEST"], "w", encoding="utf-8") as f:
+    json.dump(m, f, indent=2)
+print(f"  manifest written: {E['P4B_MANIFEST']}  ({len(ids)} ids)")
 PYEOF
 
 # 2. poller ---------------------------------------------------------------------
+# From here on, a failure means something IS running -- die() rolls back.
 printf '\n  starting poller...\n'
 nohup python -u analysis/gateway_poll_verify.py poll \
   --base http://localhost:8080 --out "$POLL_LOG" --interval 1.0 --label phase4b \
   > "$POLLER_LOG" 2>&1 &
 disown || true
 sleep 5
-POLLER_PID="$(pypids gateway_poll_verify | head -1)"
-[[ -n "$POLLER_PID" ]] || die "poller did not start -- see $POLLER_LOG"
-[[ -s "$POLL_LOG" ]]   || die "poller is running (PID $POLLER_PID) but $POLL_LOG is empty"
+capture_pid gateway_poll_verify "poller" \
+  || die "poller did not start -- see $POLLER_LOG"
+POLLER_PID="$REPLY_PID"
+STARTED+=("poller:$POLLER_PID")
+[[ -s "$POLL_LOG" ]] || die "poller is running (PID $POLLER_PID) but $POLL_LOG is empty"
 N1="$(wc -l < "$POLL_LOG" | tr -d ' ')"
 sleep 3
 N2="$(wc -l < "$POLL_LOG" | tr -d ' ')"
 [[ "$N2" -gt "$N1" ]] || die "poller PID $POLLER_PID is alive but not logging
-     ($POLL_LOG stuck at $N1 lines). Stop it and investigate before launching."
+     ($POLL_LOG stuck at $N1 lines)."
 printf '  poller alive AND logging: PID %s, %s -> %s lines\n' "$POLLER_PID" "$N1" "$N2"
 
 # 3. memory logger --------------------------------------------------------------
@@ -399,8 +526,9 @@ nohup python -u analysis/phase4b_mem_log.py log --out "$MEM_LOG" --interval 30 \
   > /dev/null 2>&1 &
 disown || true
 sleep 2
-MEM_PID="$(pypids phase4b_mem_log | head -1)"
-[[ -n "$MEM_PID" ]] || die "memory logger did not start"
+capture_pid phase4b_mem_log "memory logger" || die "memory logger did not start"
+MEM_PID="$REPLY_PID"
+STARTED+=("mem_logger:$MEM_PID")
 printf '  memory logger: PID %s -> %s\n' "$MEM_PID" "$MEM_LOG"
 
 # 4. sweep ----------------------------------------------------------------------
@@ -413,24 +541,28 @@ nohup python -u experiments/runner.py \
   > "$SWEEP_LOG" 2>&1 &
 disown || true
 sleep 5
-SWEEP_PID="$(pypids 'experiments/runner.py' | head -1)"
-[[ -n "$SWEEP_PID" ]] || die "sweep did not start -- see $SWEEP_LOG"
+capture_pid 'experiments/runner.py' "sweep" || die "sweep did not start -- see $SWEEP_LOG"
+SWEEP_PID="$REPLY_PID"
+STARTED+=("sweep:$SWEEP_PID")
 
 # 5. PIDs -----------------------------------------------------------------------
+# k proved this path writable before anything started, so this cannot be the step
+# that strands three running processes.
 {
   printf '# Phase 4B real Windows python.exe PIDs, launched %s\n' "$LAUNCH_TS"
   printf 'poller=%s\n' "$POLLER_PID"
   printf 'mem_logger=%s\n' "$MEM_PID"
   printf 'sweep=%s\n' "$SWEEP_PID"
-} > "$PIDFILE"
+} > "$PIDFILE" || die "could not write $PIDFILE"
 
-printf '\n----------------------------------------------------------------\n'
+printf '\n'
+rule
 printf ' LAUNCHED  %s\n' "$LAUNCH_TS"
 printf '   poller       PID %-8s -> %s\n' "$POLLER_PID" "$POLL_LOG"
 printf '   mem logger   PID %-8s -> %s\n' "$MEM_PID"    "$MEM_LOG"
 printf '   sweep        PID %-8s -> %s\n' "$SWEEP_PID"  "$SWEEP_LOG"
 printf '   PIDs saved   %s\n' "$PIDFILE"
 printf '   manifest     %s\n' "$MANIFEST"
-printf '----------------------------------------------------------------\n'
-printf ' These are real Windows python.exe PIDs, not shell job numbers.\n'
-printf ' Stop commands: manifest section 5.\n'
+rule
+printf ' %s\n' "These are real Windows python.exe PIDs, not shell job numbers."
+printf ' %s\n' "Stop commands: manifest section 11."

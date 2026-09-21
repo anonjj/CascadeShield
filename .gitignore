@@ -71,3 +71,15 @@ analysis/out/selftest_*
 
 # Day-2 canary run list is a design artifact, not collected data -- track it despite data/*.
 !data/canary_matrix.csv
+
+# GitHub code-search audit cache (T8/lambda* ECDF), entirely local-only. GitHub's push
+# protection caught real leaked secrets (an API key, OAuth credentials) inside the raw
+# scraped YAML on the first attempt to commit it -- content/*.yml is third-party code, not
+# ours to republish. hits.jsonl/repos.jsonl were committed briefly in the same PR before this
+# rule existed; they carry repo names, paths and direct GitHub links to the exact flagged
+# files, which is its own exposure independent of the raw content, so the whole tree is
+# ignored, not just content/. analysis/lambda_star_ecdf.py never writes repo_full_name, path,
+# sha, or stargazers_count to its committed output (analysis/out/lambda_star_instances.csv) --
+# see that script's module docstring -- and falls back to that already-anonymized CSV when
+# this directory is absent, so the figure/JSON remain reproducible from a fresh checkout.
+audits/.cache/

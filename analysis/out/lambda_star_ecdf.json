@@ -1,0 +1,115 @@
+{
+  "primary_grouping": "instance_level",
+  "primary_grouping_rationale": "The claim is about hazard reachability -- 'X% of configs can't open below Y req/s' -- so a configuration deployed in N places is N real exposures, not one. Instance-level is therefore the primary curve; config-level dedup is reported alongside as the robustness check, not averaged into or replacing it.",
+  "estimand": "Distribution over configuration INSTANCES: every scraped occurrence of a live slidingWindowType: TIME_BASED block, one row per occurrence -- including repos that copy the same file or the same repo declaring several near-identical instances. NOT distinct configurations (see config_level_deduplicated_by_parameter_pair for that alternative). lambda* = minimumNumberOfCalls / slidingWindowSize on stated parameters, with Resilience4j library defaults (minimumNumberOfCalls=100, slidingWindowSize=100) applied where a field is absent. baseConfig/extends inheritance is not resolved -- a block must state slidingWindowType: TIME_BASED itself to be counted.",
+  "estimand_sensitivity_warning": "The grouping choice is not cosmetic: median ranges 0.4-0.55 across the 4 groupings computed here (instance-level: 0.4, config-level dedup: 0.55). State the grouping explicitly wherever this number is quoted in the paper.",
+  "corpus": {
+    "description": "Described by what this scrape actually contains, not by any earlier/unverified count. GitHub code search for `slidingWindowType TIME_BASED` and `sliding-window-type TIME_BASED`, extension:yaml|yml. Raw configuration content was not retained or published because the corpus contained credentials; only structured parameter extractions were kept -- no repository is named or linked anywhere in this project's committed output, the figure, or the paper.",
+    "n_repos_in_repos_jsonl": 740,
+    "n_hits_jsonl_rows": 1141,
+    "n_unique_content_files_cached": 991,
+    "n_files_with_at_least_one_live_time_based_block": 455,
+    "n_instance_level_rows": 821,
+    "n_distinct_config_level_rows": 48
+  },
+  "extraction_skips": {
+    "content_file_missing": 0,
+    "read_error": 0,
+    "yaml_parse_error": 48,
+    "not_a_mapping": 4,
+    "no_live_time_based_block": 563,
+    "uncoercible_field": 0
+  },
+  "grouping_sensitivity": {
+    "instance_level": {
+      "n": 821,
+      "q1": 0.4,
+      "median": 0.4,
+      "q3": 0.5,
+      "min": 0.0033333333333333335,
+      "max": 20.0,
+      "share_below_1": 0.7637028014616322,
+      "share_below_10": 0.953714981729598
+    },
+    "config_level_deduplicated_by_parameter_pair": {
+      "n": 48,
+      "q1": 0.125,
+      "median": 0.55,
+      "q3": 1.3541666666666667,
+      "min": 0.0033333333333333335,
+      "max": 20.0,
+      "share_below_1": 0.6041666666666666,
+      "share_below_10": 0.9583333333333334
+    },
+    "file_level_one_row_per_scraped_file": {
+      "n": 455,
+      "q1": 0.4,
+      "median": 0.4,
+      "q3": 1.0,
+      "min": 0.0033333333333333335,
+      "max": 20.0,
+      "share_below_1": 0.7098901098901099,
+      "share_below_10": 0.9362637362637363
+    },
+    "repo_level_one_row_per_repo": {
+      "n": 310,
+      "q1": 0.4,
+      "median": 0.4,
+      "q3": 1.0,
+      "min": 0.0033333333333333335,
+      "max": 20.0,
+      "share_below_1": 0.7032258064516129,
+      "share_below_10": 0.9548387096774194
+    }
+  },
+  "instance_level": {
+    "n": 821,
+    "q1": 0.4,
+    "median": 0.4,
+    "q3": 0.5,
+    "min": 0.0033333333333333335,
+    "max": 20.0,
+    "share_below_1": 0.7637028014616322,
+    "share_below_10": 0.953714981729598
+  },
+  "config_level_deduplicated": {
+    "n": 48,
+    "q1": 0.125,
+    "median": 0.55,
+    "q3": 1.3541666666666667,
+    "min": 0.0033333333333333335,
+    "max": 20.0,
+    "share_below_1": 0.6041666666666666,
+    "share_below_10": 0.9583333333333334
+  },
+  "top_case": {
+    "lambda_star": 20.0,
+    "minimum_number_of_calls": 100,
+    "sliding_window_size": 5,
+    "shape_label": "5 s window, minimumNumberOfCalls unset -> library default of 100"
+  },
+  "tutorial_stratification_variant": {
+    "note": "Heuristic classification only (repo/path keyword match on tutorial/demo/example/etc.) -- not the main figure, kept available for a reviewer question per the task brief.",
+    "tutorial": {
+      "n": 81,
+      "q1": 0.3333333333333333,
+      "median": 0.5,
+      "q3": 1.6666666666666667,
+      "min": 0.01,
+      "max": 20.0,
+      "share_below_1": 0.5679012345679012,
+      "share_below_10": 0.9135802469135802
+    },
+    "non_tutorial": {
+      "n": 740,
+      "q1": 0.4,
+      "median": 0.4,
+      "q3": 0.5,
+      "min": 0.0033333333333333335,
+      "max": 20.0,
+      "share_below_1": 0.7851351351351351,
+      "share_below_10": 0.9581081081081081
+    }
+  },
+  "figure": "figures/fig9_lambda_star_ecdf.png"
+}

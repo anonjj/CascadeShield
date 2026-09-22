@@ -1,0 +1,75 @@
+{
+  "git_head": "cec915564b0d0e50591bfddeb9da26918daa6665",
+  "preregistration_sha": "3e4ad1e5d0596883bbd35604828d0d2db39a9eb2",
+  "preregistration_superseded": [
+    "8f1623b",
+    "34bfda7"
+  ],
+  "preregistration_chain": "8f1623b -> 34bfda7 -> 3e4ad1e",
+  "plan_file": "docs/paper/h3-postd25-analysis-plan.md",
+  "machine_id": "soham-local",
+  "mode": "full",
+  "fault": "latency",
+  "topology": "linear",
+  "replicates": 3,
+  "seed": 20260920,
+  "expected_runs": 72,
+  "dataset_path": "data/phase4b_postd25.csv",
+  "transitions_path": "data/cb_transitions.jsonl",
+  "poll_path": "data/audit/phase4b_poll.jsonl",
+  "audit_dir": "data/audit",
+  "mem_log": "logs/phase4b_mem.log",
+  "only_ids_file": "docs/paper/phase4b_only_ids.txt",
+  "only_ids_sha256": "6d6e57452ba56e814cb525d1a0f48c7b6c198830f7d8296a6bf856f2e36a0f12",
+  "only_ids_count": 24,
+  "only_ids": [
+    "LIN-LAT-CNT-T50-W5-D5",
+    "LIN-LAT-TIM-T50-W5-D5",
+    "LIN-LAT-CNT-T50-W10-D5",
+    "LIN-LAT-TIM-T50-W10-D5",
+    "LIN-LAT-CNT-T50-W20-D5",
+    "LIN-LAT-TIM-T50-W20-D5",
+    "LIN-LAT-CNT-T70-W10-D5",
+    "LIN-LAT-TIM-T70-W10-D5",
+    "LIN-LAT-CNT-T50-W5-D15",
+    "LIN-LAT-TIM-T50-W5-D15",
+    "LIN-LAT-CNT-T50-W10-D15",
+    "LIN-LAT-TIM-T50-W10-D15",
+    "LIN-LAT-CNT-T50-W20-D15",
+    "LIN-LAT-TIM-T50-W20-D15",
+    "LIN-LAT-CNT-T70-W10-D15",
+    "LIN-LAT-TIM-T70-W10-D15",
+    "LIN-LAT-CNT-T50-W5-D30",
+    "LIN-LAT-TIM-T50-W5-D30",
+    "LIN-LAT-CNT-T50-W10-D30",
+    "LIN-LAT-TIM-T50-W10-D30",
+    "LIN-LAT-CNT-T50-W20-D30",
+    "LIN-LAT-TIM-T50-W20-D30",
+    "LIN-LAT-CNT-T70-W10-D30",
+    "LIN-LAT-TIM-T70-W10-D30"
+  ],
+  "sidecar_baseline": {
+    "path": "data/audit/sidecar_baseline_73.jsonl",
+    "lines": 73,
+    "sha256": "ffad69d6755c8a33e5d2b064a56354981a4fda82c742d642c0097abbf0dbee0e"
+  },
+  "gateway_image_repo": "infra-gateway-service",
+  "gateway_container": "gateway-service",
+  "gateway_image_id": "sha256:ce110c0a0bfbc290e735fe810f4bb5a60b2ef84ad5e63c0b627a0b90cecbabfc",
+  "gateway_image_created": "2026-09-19T22:14:43.12549436Z",
+  "gateway_source_paths": [
+    "services/gateway-service",
+    "cascadeshield-parent/pom.xml"
+  ],
+  "sweep_window": {
+    "start": "2026-09-21T17:07:49Z",
+    "end": null
+  },
+  "host": {
+    "free_mb_at_launch": 1731.6,
+    "free_disk_gb_at_launch": 25,
+    "power": "status=2 charge=92%"
+  },
+  "observability": "prometheus and grafana were STOPPED for this sweep and stay stopped for all 72 runs. The Phase 1 canary and the 2026-09-20 smoke run were collected WITH them running. That differs between those artifacts and this sweep, and is identical across all 72 runs here, so it cannot differ between arms.",
+  "onedrive_sync": "off for the duration of the run"
+}

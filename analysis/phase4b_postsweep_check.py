@@ -89,6 +89,69 @@ def corrected_horizon(rec, row):
     return lo, min(hi, rt)
 
 
+# ------------------------------------------------ DEVIATION 02 simplified horizon
+# See docs/paper/deviation-02-horizon-simplification.md.
+#
+#   start = fault_injected_at        (sidecar)
+#   end   = run_timestamp           (CSV)
+#
+# On the Phase 4B dataset the DEVIATION 01 min() clips to run_timestamp on ALL 72
+# runs -- the section 5 term is larger every time (slack -56.3s .. -3.8s) -- so the
+# first term never has any effect and can simply be dropped.
+#
+# The point is not brevity. Both the section 5 horizon and DEVIATION 01's carry
+# time_to_recover, the primary outcome, inside the verification rule. This one uses
+# NO measurement column at all: fault_injected_at and run_timestamp are pure
+# scheduling timestamps, written by the harness regardless of what was measured. So
+# it needs no argument about which way a circularity points -- there is none.
+#
+# A consequence worth stating: section 5.1's null-time_to_recover fallback becomes
+# irrelevant here, because the rule never reads time_to_recover.
+
+def simplified_horizon(rec, row):
+    """DEVIATION 02 horizon. (lo, hi), or (None, None) if either stamp is unusable
+    or the run's end precedes fault injection."""
+    lo = parse_ts(rec.get("fault_injected_at"))
+    hi = parse_ts(row.get("run_timestamp"))
+    if lo is None or hi is None or hi < lo:
+        return None, None
+    return lo, hi
+
+
+HORIZONS = {
+    "literal": lambda rec, row: gpv.horizon_for(
+        rec.get("fault_injected_at"), rec.get("fault_cleared_at"),
+        row.get("time_to_recover"), wait_duration=row.get("wait_duration")),
+    "dev01": corrected_horizon,
+    "dev02": simplified_horizon,
+}
+
+
+def verdicts_by_horizon(rows, records, ticks, pstart, pstop, which):
+    """{(experiment_id, replicate): verdict} for one horizon rule. Pure lookup, no I/O."""
+    by = {(r.get("experiment_id"), str(r.get("replicate"))): r for r in records}
+    fn = HORIZONS[which]
+    out = {}
+    for row in rows:
+        key = (row.get("experiment_id"), str(row.get("replicate")))
+        rec = by.get(key)
+        if rec is None:
+            out[key] = "NO_RECORD"
+            continue
+        lo, hi = fn(rec, row)
+        if lo is None:
+            out[key] = "NOT_VERIFIED"
+            continue
+        out[key] = gpv.check_run(ticks, pstart, pstop, lo, hi, gateway_trips(rec))["verdict"]
+    return out
+
+
+def verdict_diff(a, b):
+    """Keys where two verdict maps disagree -> {key: (a_verdict, b_verdict)}."""
+    keys = set(a) | set(b)
+    return {k: (a.get(k), b.get(k)) for k in sorted(keys) if a.get(k) != b.get(k)}
+
+
 def sensitivity_verdict(ticks, lo, hi, sidecar_trips):
     """View (c): the coverage requirement removed, nothing else.
 
@@ -281,7 +344,7 @@ def check_6_gateway(rep, in_scope):
             "\n".join(f"{e} rep={p}: {n} trip(s)" for e, p, n in bad))
 
 
-def check_7_poller(rep, rows, in_scope, poll_path, use_corrected=False):
+def check_7_poller(rep, rows, in_scope, poll_path, use_corrected=False, use_v2=False):
     """Gate 7. ALWAYS computes and prints all three views; `use_corrected` only
     selects which one decides PASS/FAIL. The pre-registered rule is the default."""
     if not poll_path or not os.path.exists(poll_path):
@@ -296,7 +359,8 @@ def check_7_poller(rep, rows, in_scope, poll_path, use_corrected=False):
 
     # All three views are computed for every run, always. `use_corrected` only
     # decides which one gates.
-    lit, cor, sen = {}, {}, {}
+    lit, cor, v2c, sen = {}, {}, {}, {}
+    dev_disagree = []
     lines = [f"poll ticks={len(ticks)}"]
     n_fallback = 0
     rows_out = []
@@ -325,6 +389,11 @@ def check_7_poller(rep, rows, in_scope, poll_path, use_corrected=False):
             r_ = gpv.check_run(ticks, pstart, pstop, clo, chi, trips)
             v_cor, unc_c, iss_c = r_["verdict"], r_["uncovered_s"], r_["issues"]
 
+        # (b2) DEVIATION 02 simplified horizon -- no measurement column at all
+        vlo, vhi = simplified_horizon(rec, row)
+        v_v2 = ("NOT_VERIFIED" if vlo is None else
+                gpv.check_run(ticks, pstart, pstop, vlo, vhi, trips)["verdict"])
+
         # (c) sensitivity -- coverage requirement removed, §5 horizon
         if lo is None:
             v_sen = "NOT_VERIFIED"
@@ -333,13 +402,17 @@ def check_7_poller(rep, rows, in_scope, poll_path, use_corrected=False):
 
         lit[v_lit] = lit.get(v_lit, 0) + 1
         cor[v_cor] = cor.get(v_cor, 0) + 1
+        v2c[v_v2] = v2c.get(v_v2, 0) + 1
         sen[v_sen] = sen.get(v_sen, 0) + 1
-        rows_out.append((key, v_lit, unc_l, iss_l, v_cor, unc_c, iss_c, v_sen))
+        if v_cor != v_v2:
+            dev_disagree.append((key, v_cor, v_v2))
+        rows_out.append((key, v_lit, unc_l, iss_l, v_cor, unc_c, iss_c, v_sen, v_v2))
 
     lines.append("")
-    lines.append(f"{'experiment_id':26s} rep  {'(a) literal':<16s}{'(b) DEVIATION 01':<18s}(c) sens")
-    for key, vl, ul, il, vc, uc, ic, vs in rows_out:
-        lines.append(f"{key[0]:26s} {key[1]:>3s}  {vl:<16s}{vc:<18s}{vs}"
+    lines.append(f"{'experiment_id':26s} rep  {'(a) literal':<16s}{'(b) DEV 01':<14s}"
+                 f"{'(b2) DEV 02':<14s}(c) sens")
+    for key, vl, ul, il, vc, uc, ic, vs, v2 in rows_out:
+        lines.append(f"{key[0]:26s} {key[1]:>3s}  {vl:<16s}{vc:<14s}{v2:<14s}{vs}"
                      + (f"   [a: unc={ul} {','.join(il)}]" if vl != "VERIFIED_CLEAN" else "")
                      + (f"   [b: unc={uc} {','.join(ic)}]" if vc != "VERIFIED_CLEAN" else ""))
     if n_fallback:
@@ -348,20 +421,26 @@ def check_7_poller(rep, rows, in_scope, poll_path, use_corrected=False):
     lines.append("")
     lines.append(f"(a) literal pre-registered  : {lit}")
     lines.append(f"(b) DEVIATION 01 corrected  : {cor}")
+    lines.append(f"(b2) DEVIATION 02 simplified: {v2c}")
     lines.append(f"(c) sensitivity, no coverage: {sen}")
+    lines.append(f"DEV01 vs DEV02 verdict diff : {len(dev_disagree)} disagreement(s)"
+                 + ("" if not dev_disagree else " -> " + repr(dev_disagree[:5])))
 
-    sel = cor if use_corrected else lit
-    label = ("DEVIATION 01 corrected horizon" if use_corrected
-             else "pre-registered horizon + coverage rule")
-    if use_corrected:
+    sel = v2c if use_v2 else (cor if use_corrected else lit)
+    label = ("DEVIATION 02 simplified horizon" if use_v2 else
+             "DEVIATION 01 corrected horizon" if use_corrected else
+             "pre-registered horizon + coverage rule")
+    if use_corrected or use_v2:
         lines.append("")
-        lines.append("GATE DECIDED BY **DEVIATION 01**, NOT THE PRE-REGISTERED RULE.")
+        lines.append(f"GATE DECIDED BY **{'DEVIATION 02' if use_v2 else 'DEVIATION 01'}**, "
+                     "NOT THE PRE-REGISTERED RULE.")
         lines.append("See docs/paper/deviation-01-verification-horizon.md. The literal")
         lines.append("result above is the pre-registered one and must be reported with it.")
     rep.add(sel.get("VERIFIED_CLEAN", 0) == N_EXPECTED_RUNS,
             f"7. all {N_EXPECTED_RUNS} runs VERIFIED_CLEAN under the {label}",
             "\n".join(lines))
-    return {"literal": lit, "corrected": cor, "sensitivity": sen, "per_run": rows_out}
+    return {"literal": lit, "corrected": cor, "simplified": v2c, "sensitivity": sen,
+            "dev_disagree": dev_disagree, "per_run": rows_out}
 
 
 def _docker(args):
@@ -593,6 +672,62 @@ def self_test():
            "is not contrary evidence -- this is why it is the WEAKEST view)",
            sensitivity_verdict(only_err, l_lo, l_hi, [])[0], "CLEAN")
 
+    # --- DEVIATION 02: simplified horizon ----------------------------------------
+    # start = fault_injected_at, end = run_timestamp. No measurement column.
+    s_lo, s_hi = simplified_horizon(d_rec, d_row)
+    expect("DEV02 horizon = fault_injected_at .. run_timestamp (60 s)",
+           round(s_hi - s_lo, 1), 60.0)
+    expect("DEV02 == DEV01 whenever DEV01's min() clips to run_timestamp",
+           (s_lo, s_hi), (c_lo, c_hi))
+
+    # The property that makes DEVIATION 02 worth having: the horizon does not move
+    # when the OUTCOME moves. DEV01's does.
+    for ttr_probe in ("0.001", "3", "30", "600", "", "not-a-number"):
+        probe = dict(d_row, time_to_recover=ttr_probe)
+        p_lo, p_hi = simplified_horizon(d_rec, probe)
+        expect(f"DEV02 unchanged when time_to_recover={ttr_probe!r}",
+               (p_lo, p_hi), (s_lo, s_hi))
+    moved = {corrected_horizon(d_rec, dict(d_row, time_to_recover=t))[1]
+             for t in ("0.001", "3", "30")}
+    expect("DEV01, by contrast, DOES move with time_to_recover", len(moved) > 1, True)
+    expect("DEV02 ignores wait_duration too",
+           simplified_horizon(d_rec, dict(d_row, time_to_recover="", wait_duration="")),
+           (s_lo, s_hi))
+    expect("DEV02 undefined when run_timestamp is missing",
+           simplified_horizon(d_rec, dict(d_row, run_timestamp="")), (None, None))
+    expect("DEV02 undefined when the run's end precedes fault injection",
+           simplified_horizon(d_rec, dict(d_row, run_timestamp="2026-09-21T09:59:00Z")),
+           (None, None))
+
+    # DEV01 and DEV02 are NOT the same rule -- they coincide only when the min()
+    # clips. Construct the case where the section 5 term is smaller and they differ.
+    early = dict(d_row, time_to_recover="3")          # section 5 end = cleared+3+5 < run end
+    expect("where the section 5 term is smaller, DEV01 and DEV02 DIVERGE",
+           corrected_horizon(d_rec, early)[1] != simplified_horizon(d_rec, early)[1], True)
+
+    print("\nDEVIATION 02 equivalence on the REAL Phase 4B dataset")
+    ds, tr, pl = ("data/phase4b_postd25.csv", "data/cb_transitions.jsonl",
+                  "data/audit/phase4b_poll.jsonl")
+    if all(os.path.exists(x) for x in (ds, tr, pl)):
+        import csv as _csv
+        _rows = list(_csv.DictReader(open(ds, newline="", encoding="utf-8-sig")))
+        _recs = [json.loads(l) for l in open(tr, encoding="utf-8") if l.strip()][73:]
+        _t, _ps, _pe = gpv.load_poll(pl)
+        v1 = verdicts_by_horizon(_rows, _recs, _t, _ps, _pe, "dev01")
+        v2 = verdicts_by_horizon(_rows, _recs, _t, _ps, _pe, "dev02")
+        vl = verdicts_by_horizon(_rows, _recs, _t, _ps, _pe, "literal")
+        d = verdict_diff(v1, v2)
+        expect("all 72 runs present", len(v2), N_EXPECTED_RUNS)
+        expect("DEV01 vs DEV02 verdict diff is EMPTY", d, {})
+        expect("DEV01 and DEV02 verdict maps are identical", v1 == v2, True)
+        expect("every DEV02 verdict is VERIFIED_CLEAN",
+               set(v2.values()), {"VERIFIED_CLEAN"})
+        expect("the literal rule really does differ (35 runs)",
+               len(verdict_diff(vl, v2)), 35)
+    else:
+        print("  [skip] dataset not present; equivalence is checked only when it is")
+        print("         (this is a data-backed assertion, not a synthetic one)")
+
     print("\nself-test:", "PASS" if ok else "FAIL")
     return ok
 
@@ -604,6 +739,12 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--manifest")
     ap.add_argument("--skip-docker", action="store_true")
+    ap.add_argument("--horizon-v2", action="store_true",
+                    help="gate 7 is decided by the DEVIATION 02 simplified horizon "
+                         "(start=fault_injected_at, end=run_timestamp -- no measurement "
+                         "column at all). This is the horizon the primary analysis uses. "
+                         "All views are printed either way. See "
+                         "docs/paper/deviation-02-horizon-simplification.md")
     ap.add_argument("--corrected-horizon", action="store_true",
                     help="gate 7 is decided by the DEVIATION 01 corrected horizon "
                          "(end = min(section 5 horizon, run_timestamp)) instead of the "
@@ -644,14 +785,16 @@ def main():
     check_4b_attempts(rep, rows, prior)
     check_5_precondition(rep, rows)
     check_6_gateway(rep, in_scope)
-    if a.corrected_horizon:
+    if a.horizon_v2 and a.corrected_horizon:
+        ap.error("--horizon-v2 and --corrected-horizon are mutually exclusive")
+    if a.horizon_v2 or a.corrected_horizon:
         print()
-        print("*** gate 7 will be decided by the DEVIATION 01 corrected horizon.     ***")
-        print("*** The pre-registered result is printed alongside and is the one     ***")
-        print("*** the analysis plan specifies. See                                  ***")
-        print("*** docs/paper/deviation-01-verification-horizon.md                   ***")
+        _n = ("02 (simplified)", "deviation-02-horizon-simplification.md")             if a.horizon_v2 else ("01 (corrected)", "deviation-01-verification-horizon.md")
+        print(f"*** gate 7 will be decided by DEVIATION {_n[0]}, NOT the pre-registered rule.")
+        print("*** The pre-registered result is printed alongside and is the one the")
+        print(f"*** analysis plan specifies. See docs/paper/{_n[1]}")
     check_7_poller(rep, rows, in_scope, m.get("poll_path"),
-                   use_corrected=a.corrected_horizon)
+                   use_corrected=a.corrected_horizon, use_v2=a.horizon_v2)
     check_8_image(rep, m, skip=a.skip_docker)
     return 0 if rep.print() else 1
 

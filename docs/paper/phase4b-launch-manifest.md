@@ -10,6 +10,13 @@ including where the pre-launch figures in §1 were superseded by the values meas
 
 ---
 
+> **DEVIATION 02 (2026-09-22).** DEVIATION 01's `min()` clips to `run_timestamp` on all
+> 72 runs, so its outcome-dependent term never binds. The horizon is simplified to
+> `start = fault_injected_at, end = run_timestamp` -- no measurement column at all, so no
+> circularity to argue about. Verdicts are identical to DEVIATION 01 on all 72 runs
+> (verdict-set diff empty, asserted in the self-test). **This is the horizon the primary
+> analysis uses.** See **[`deviation-02-horizon-simplification.md`](deviation-02-horizon-simplification.md)**.
+
 > **DEVIATION 01 (2026-09-21, during collection).** The §5 observation horizon makes the TIME
 > arm unverifiable: its over-coverage extends past each run's own end into the next run's
 > `update_containers()` recreate, so every TIME run fails §6's coverage requirement and §4

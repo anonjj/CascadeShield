@@ -178,3 +178,72 @@ DEVIATION 01 and nothing is changed for DEVIATION 02.
 `analysis/gateway_poll_verify.py` is still **not** modified: it is the implementation of the
 pre-registered rule and remains byte-identical to the version the live poller ran during
 collection.
+
+---
+
+## Correction (2026-09-22) — the DEVIATION 02 horizon is not outcome-independent
+
+*Appended; the text above is unedited. Recorded in decision-log.md D26.*
+
+§2 above says `fault_injected_at` and `run_timestamp` "are pure scheduling timestamps: the
+harness writes them at fixed points in `run_experiment_run` regardless of what the run measured
+or whether it measured anything", and §4 calls the rule "outcome-independent by construction".
+**Both statements are wrong about `run_timestamp`.** The *code point* is fixed; the *wall-clock
+instant* at which it is reached is not.
+
+`run_timestamp` is stamped by `time.gmtime()` inside `log_results()`
+(`experiments/runner.py:1125`), when the CSV row is written. That happens after recovery
+polling, and the recovery poll exits the moment recovery is detected. So a run that recovers
+later writes its row later, and its DEVIATION 02 horizon `fault_injected_at .. run_timestamp`
+is longer. Measured on all 72 Phase 4B runs:
+
+| | value |
+|---|---|
+| correlation, horizon length vs `time_to_recover` | **r = 0.994** |
+| OLS slope | +1.073 s of horizon per 1 s of `time_to_recover` |
+| COUNT horizon length | median 25.0 s, range 15.0–41.0 s |
+| TIME horizon length | median 48.0 s, range 31.0–82.0 s |
+
+The rule reads no outcome **column**. It is still outcome-**dependent**, through the timing of
+the row write.
+
+**Why this does not undermine the fix.**
+
+1. **It removes the defect DEVIATION 01 identified.** The horizon ends at the row write, and
+   `update_containers()` for the next run is called only after the current run has returned,
+   so the verification window structurally cannot fall inside the next run's recreate window.
+   The differential exclusion of the TIME arm cannot recur.
+2. **The dependence runs toward strictness, not leniency.** A longer horizon demands complete
+   poller coverage and an all-`CLOSED` gateway over more seconds. Slow recoveries therefore
+   face a *harder* verification test than fast ones. Had that excluded anything, it would have
+   removed slow — predominantly TIME — runs, which shrinks a TIME-slower gap. That is the
+   opposite of a bias that could manufacture the observed effect. In this dataset it excluded
+   nothing: 72/72 are VERIFIED_CLEAN.
+3. **The zero-trip evidence does not depend on any horizon.** The sidecar records zero gateway
+   transitions across the 72 runs, and the poller observed no non-CLOSED gateway state among
+   all 59,292 state observations in the session.
+
+What changes is only the justification: DEVIATION 02 should be defended on points 1–3, not on a
+claim that it is independent of the outcome.
+
+**Where r = 0.994 was computed.** In the 2026-09-22 verification of the D26 draft, by an ad hoc
+script that is not committed. It reproduces from committed files alone:
+
+```bash
+python - <<'PY'
+import csv, json, datetime as dt, statistics as st
+ts = lambda s: dt.datetime.fromisoformat(s.replace('Z', '+00:00')).timestamp()
+rows = list(csv.DictReader(open('data/phase4b_postd25.csv', encoding='utf-8-sig')))
+sc = {(r['experiment_id'], str(r['replicate'])): r
+      for r in (json.loads(l) for l in open('data/cb_transitions.jsonl', encoding='utf-8') if l.strip())
+      if r.get('machine_id') == 'soham-local' and r.get('fault_injected_at', '') >= '2026-09-21T17'}
+H = [ts(r['run_timestamp']) - ts(sc[(r['experiment_id'], r['replicate'])]['fault_injected_at']) for r in rows]
+T = [float(r['time_to_recover']) for r in rows]
+mh, mt = st.mean(H), st.mean(T)
+r = sum((h - mh) * (t - mt) for h, t in zip(H, T)) / ((len(H) - 1) * st.stdev(H) * st.stdev(T))
+print(len(H), round(r, 4))   # -> 72 0.9937
+PY
+```
+
+The sidecar filter selects the 72 Phase 4B records (the file also holds the 73 historical
+records). Pearson is computed by hand so the snippet runs on the repo's Python 3.9.

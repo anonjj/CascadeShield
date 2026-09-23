@@ -1894,3 +1894,116 @@ decision, not made in this entry.
 **Revisit if:** a future config change reintroduces a named, non-`default` profile without an
 explicit `base-config` — `grep -rn "base-config" services/` is now the fast way to check for
 that shape before it becomes a silent leak again.
+
+---
+
+## D26 · H3 post-D25 re-collection: gateway-verified COUNT vs TIME recovery
+
+**Date:** 2026-09-22 · **Decided by:** Soham and Jay · **Status:** final for the numbers below;
+branch `h3-evidence-audit`, not yet merged to `main`
+
+**Context.** D23 found the gateway measurement-plane was not isolated for COUNT_BASED sweeps,
+contaminating 20 of 73 sidecar-recorded runs and invalidating the published H3 recovery table
+(2.04/9.83/14.99s COUNT progression, p=0.0005/0.0014). D25 fixed the gateway pin. This entry
+reports the re-collection and re-analysis on verified post-D25 data.
+
+**Audit (Phase 2, branch `h3-evidence-audit`).** Every existing dataset in the repo predates
+D25, and most lack sidecar coverage; zero rows in any existing dataset qualified as
+verified-clean post-fix (`docs/paper/phase2-contamination-audit.md`). No gateway
+circuit-breaker trip was observed within the verified observation horizon under either swept
+window type across the Phase 1 canary runs (n=4, LINEAR only, post-fix gateway image
+bdc2fff79e75).
+
+**Pre-registration.** `docs/paper/h3-postd25-analysis-plan.md` fixed the primary metric
+(`time_to_recover`), the test (`stratified_cluster_permutation_test`, configuration as unit,
+strata $D_w \in \{5,15,30\}$), the config-level value rule, the exclusion rules and the claim
+scope. It is frozen at `3e4ad1e`, the third commit of the chain `8f1623b` → `34bfda7` →
+`3e4ad1e`; all three predate the smoke run (2026-09-19T23:49:51Z) and every Phase 4B run, and
+the file is byte-identical to `3e4ad1e` in `HEAD`.
+
+**Collection (Phase 4B).** 72 runs (Option C: 4 configs × 2 arms × 3 strata × 3 replicates),
+LINEAR + LATENCY, `soham-local`, seed 20260920, 2026-09-21T17:10:12Z–19:46:49Z. Result:
+**72 unique keys, 0 aborted rows**. A first launch attempt (`cec9155`, 2026-09-21T06:08Z) was
+stopped after 1 of 72 runs when the laptop had to be closed; all of its output was quarantined
+to `data/audit/aborted_launch_20260921T061403Z/`, and the decision to discard was taken on the
+run count alone, before any outcome column was read. Gateway image provenance is evidence, not
+proof: the running container's image ID matched the built image
+(`sha256:ce110c0a…`, recorded in `data/audit/phase4b_manifest.json`), and the image was built
+after the newest commit touching the gateway's source paths. Docker images carry no commit
+label here, so this does not prove the image was built from a specific commit.
+
+**Verification.** The sidecar records **zero gateway transitions of any kind** across the 72
+runs. The independent poller (`analysis/gateway_poll_verify.py`) recorded **22,686 data ticks**
+(22,687 lines including the `poller_start` marker) from 2026-09-21T17:07:50Z to 23:47:31Z.
+**Among all 59,292 observed gateway states, none was non-CLOSED.** 2,926 ticks (12.9%)
+recorded no state — the gateway was down between runs for container recreate and readiness —
+and none of them falls inside any run's verification window. Neither fact depends on a horizon
+choice. The log carries no `poller_stop` marker; coverage is judged from the ticks.
+
+A defect was found in the pre-registered verification horizon mid-collection
+(`docs/paper/deviation-01-verification-horizon.md`, commit `78ea155`): the horizon's length
+scaled with `time_to_recover` itself, so it ran into the next run's container-recreate window
+and differentially excluded the TIME arm — 35 of 36 TIME runs are NOT_VERIFIED under the
+literal rule, against 0 of 36 COUNT runs. This was not contamination: the gateway showed zero
+anomalous activity throughout. The defect was diagnosed, and a corrected rule committed, before
+any count under it was computed.
+
+The rule was then simplified (`docs/paper/deviation-02-horizon-simplification.md`, commit
+`4987dee`) to `end = run_timestamp`, which reads no outcome column. **It is not
+outcome-independent.** `run_timestamp` is stamped when the row is written, after recovery
+detection, so horizon length correlates with `time_to_recover` at **r = 0.994** (correction
+note appended to DEVIATION 02, 2026-09-22). This does not undermine the fix: verification ends
+at the row write, which structurally cannot fall inside the next run's recreate window, and the
+correlation makes verification *stricter* for slow recoveries, not more lenient — the opposite
+of a bias that could manufacture a TIME-slower effect. No run was excluded under it. DEVIATION
+02 produces **identical verdict sets key by key** to DEVIATION 01 (72/72 VERIFIED_CLEAN), plus
+identical statistic, p-value, floor, per-stratum signs and config values
+(`h3_phase4b_analysis.py --self-test`). `h3-postd25-analysis-plan.md` itself was never edited.
+
+**Result** (`analysis/h3_phase4b_analysis.py`, commit `5f77cd2`). All 72 runs retained (0
+excluded by any rule), 0 censored replicates, 0 ties between config values. Complete
+separation between arms in all three strata (COUNT max < TIME min, every stratum). Effect
+direction consistent across all three strata, checked per §7 before pooling (per-stratum
+statistic −8.0 in each). Stratified permutation test: statistic −24.0 (the design's minimum),
+343,000 assignments, **p = 5.830903790087464e-06 (= 2/343,000, the exact design floor — the
+test is saturated, not merely significant)**. Per-stratum sensitivity
+(`cluster_permutation_rank_test`) agrees in direction in all three strata; each of its
+p-values, 0.0286, is that stratum's own exact 4v4 floor, so it is saturated too.
+
+KM medians (descriptive, uncensored): $D_w$=5 → COUNT 6.732s / TIME 23.613s (3.51×);
+$D_w$=15 → COUNT 16.332s / TIME 35.085s (2.15×); $D_w$=30 → COUNT 31.435s / TIME 65.165s
+(2.07×).
+
+**What this does to H3 (agreed 2026-09-22, Soham and Jay).** H3 is **falsified as a
+prediction**: window parameters do affect $t_{\text{rec}}$, which fails H3's own recovery-side
+negative control (`hypotheses.md` §4.1, "H3's negative control, stress-tested directly against
+window_type"; §3.1 requires both halves of the dissociation to hold). The finding this entry
+reports is **the recovery leak**, not a confirmation of H3. Older entries that read "H3
+confirmed" or "H3 closes" (D13's 2026-09-16 update, D22, and `STATUS.md`) describe the
+pre-D23 state and stay as written per the append-only convention; they are superseded here.
+
+**Supersedes:** the retracted D13/D24 figures above. Do not re-quote 2.04/9.83/14.99s,
+p=0.0005/0.0014, or 8.9×–14.3×.
+
+**Caveats, load-bearing:**
+1. COUNT recovery ≈ $D_w$ + 1.33–1.73s (KM medians). The SD of per-config mean recovery time
+   within the COUNT arm — across its four configurations, i.e. window sizes 5/10/20 at T50 and
+   the T70/W10 probe — is **0.023 / 0.063 / 0.053 s** at $D_w$=5/15/30. Window size and
+   threshold have almost no effect within the COUNT arm; its recovery is close to a
+   deterministic function of $D_w$ alone.
+2. The saturated p-value reflects the design's resolution ceiling (4v4 configs/stratum), not
+   effect strength — cite the KM ratios for effect size, not the p-value.
+3. `slidingWindowSize` is calls under COUNT_BASED and seconds under TIME_BASED — this is NOT
+   a claim of "COUNT beats TIME at matched window size." Arms are matched on threshold, $D_w$,
+   topology, fault type and load only.
+4. LINEAR + LATENCY only, one machine (`soham-local`), database state not reset between the 72
+   runs. Configuration coverage is threshold=50 at window sizes 5/10/20 plus one threshold=70
+   probe per stratum — the inference is mainly COUNT vs TIME across window sizes at T50.
+5. A secondary, descriptive pattern (TIME arm elevated at window_size=20 for $D_w$=5/15,
+   vanishing at $D_w$=30) is noted but not claimed as a window-size effect, per the design's
+   claim-scope restriction to one threshold-variation probe.
+
+**Provenance chain:** `3e4ad1e` (pre-registration, final amendment) → `78ea155` (DEVIATION 01:
+horizon defect diagnosed mid-collection, before any corrected count existed) → `4987dee`
+(DEVIATION 02: simplification, verified equivalent) → `5f77cd2` (H3 result) → DEVIATION 02
+correction note (2026-09-22). All on branch `h3-evidence-audit`, not yet merged to `main`.

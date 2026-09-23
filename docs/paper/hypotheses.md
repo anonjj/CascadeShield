@@ -64,7 +64,7 @@ whole design turns on the Day-2 canary.
 | **H1** | At matched horizon $H$, COUNT and TIME have indistinguishable **mean** $t_{\text{open}}$ but significantly different **variance** | Not yet tested. The existing contrast (TIME 9.43 ± 5.41 vs COUNT 5.22 ± 2.19) is at *nominal* window size — the comparison §2.1 argues is invalid | Day 2 canary |
 | **H2** | There exists a crossover $\lambda^*$ below which TIME_BASED cannot trip within the fault window | New. Nothing in the repo varies $\lambda$ | Day 2 canary |
 | **H2b** | Generalizing H2 with $\rho$ (§2.1): a breaker is inert (never opens) whenever the occupancy ratio $\rho = H/n_{\min}$ crosses below 1 — **regardless of window type** | New. D7 sweep, run independently of the Day-2 canary | **D7 sweep — see §3.2. Partially decided: confirmed for TIME_BASED, falsified for COUNT_BASED** |
-| **H3** | Window parameters drive $t_{\text{open}}$ and not $t_{\text{rec}}$; $D_w$ drives $t_{\text{rec}}$ and not $t_{\text{open}}$ (double dissociation) | Evidence in hand ($t_{\text{rec}}$ = 16.95 / 27.85 / 49.31 s across $D_w$ = 5/15/30, negative control on $t_{\text{open}}$ at 7.39 / 7.35 / 7.49). Leak audit clears it — see §4. Additionally stress-tested directly against window_type, see §4.1 (`analysis/out/window_type_recovery_leak.json`) | Day 3 analysis |
+| **H3** | Window parameters drive $t_{\text{open}}$ and not $t_{\text{rec}}$; $D_w$ drives $t_{\text{rec}}$ and not $t_{\text{open}}$ (double dissociation) | Evidence in hand ($t_{\text{rec}}$ = 16.95 / 27.85 / 49.31 s across $D_w$ = 5/15/30, negative control on $t_{\text{open}}$ at 7.39 / 7.35 / 7.49). Leak audit clears it — see §4. Additionally stress-tested directly against window_type, see §4.1 (`analysis/out/window_type_recovery_leak.json`). *(Superseded by decision-log.md D26, 2026-09-22: these $t_{\text{rec}}$ figures predate D23's gateway correction; see the 2026-09-22 update at the end of §4.1 for the gateway-verified recovery comparison.)* | Day 3 analysis |
 | **H4** | Competing containment definitions rank configurations differently ($\tau_{\text{Kendall}} < 1$, significantly) | **Supported on Day 1** from the persisted leg vectors, with no new runs — see §5 | ✅ Day 1 |
 | **H5** | Blast-radius resolution is topology-dependent: $\text{Var}(B) = 0$ on chain topologies, $> 0$ where parallel reachable subjects exist | **Tested and NOT supported (§5.5, 2026-09-06).** FAN_OUT+LATENCY shows $\text{Var}(B)=0$ too — identical to LINEAR, 162/162 rows each side, exactly one leg firing | ✅ Day 4 sweep (negative result) |
 | **H6** | A uniformly configured edge breaker suppresses interior breaker engagement (gateway shadowing) | Evidence exists in the archived 162-run data (gateway leg 0.70–1.00 in every row, interior legs 0.0000 in 154 of 162). The `measurement-plane` isolation block was believed to remove the condition entirely — **corrected 2026-09-17 (§7, decision-log D23): it only removes it for TIME_BASED; COUNT_BASED at higher `wait_duration` still trips gateway**, live-verified | Day 3, if time — testability verdict needs re-deciding, see §7 |
@@ -165,6 +165,8 @@ $D_w$ effect — they do not, by themselves, rule out window_type also contamina
 $t_{\text{rec}}$. `analysis/window_type_recovery_leak.py` runs that check directly ("D12" is
 this investigation's own working label, distinct from this section's `D-00X` decision-log
 numbering and from the unrelated "Day N" sprint-day shorthand used elsewhere in the repo).
+*(Superseded by decision-log.md D26, 2026-09-22: the 16.95/27.85/49.31 s figures predate D23's
+gateway correction. See the 2026-09-22 update at the end of this section.)*
 
 **Coarse check** (`time_to_recover` as currently collected — OPEN to left-OPEN, not OPEN to
 CLOSED; see the script's docstring for why): TIME's median $t_{\text{rec}}$ is 2.06–3.68x
@@ -193,6 +195,8 @@ median precise HALF_OPEN→CLOSED duration is **8.9x–14.3x** COUNT's at every 
 vs 19.03s at $D_w$=5; 2.16s vs 20.87s at $D_w$=15; 2.48s vs 35.35s at $D_w$=30) — monotonically
 increasing with $D_w$, the same shape as the coarse excess decomposition above, but on the
 metric that actually isolates the HALF_OPEN leg from the detection-anchor shift.
+*(Superseded by decision-log.md D26, 2026-09-22: the 8.9x–14.3x ratios were computed on data
+later found to be gateway-contaminated (D23) and are retracted. Do not re-quote them.)*
 
 **Caveat, stated plainly rather than oversold:** this is real signal, not yet a settled result —
 every one of those medians comes from **n=1 TIME_BASED row per $D_w$ bucket** (`n_count` is 1/3/3).
@@ -228,7 +232,33 @@ appended per this file's frozen/contract convention, not edited into the paragra
    the harness 2026-09-18). For current numbers on this comparison, see decision-log.md D13
    (KM/log-rank), D22 (bounce-count decomposition, gateway-cleaned and later per-episode-
    decomposed), D24 (gateway-stratified KM), and D19's 2026-09-19 update (this section's own
-   Mann-Whitney path, now cluster-aware).
+   Mann-Whitney path, now cluster-aware). *(Superseded by decision-log.md D26, 2026-09-22 —
+   the gateway-verified post-D25 re-collection; see the update immediately below.)*
+
+**Update (2026-09-22) — H3's recovery-side comparison, re-collected on gateway-verified post-D25
+data (decision-log.md D26; supersedes the D13/D24 figures).**
+
+**Status of H3: FALSIFIED as a prediction (agreed 2026-09-22, Soham and Jay). The finding is
+the recovery leak, not a confirmation of H3.** H3 (§3)
+is a double dissociation, and its recovery-side negative control says window parameters do
+*not* drive $t_{\text{rec}}$. This section tests that control against window type. On the
+Phase 4B re-collection, window type does drive $t_{\text{rec}}$: COUNT_BASED recovers faster
+than TIME_BASED at all three sampled `wait_duration` values (5s/15s/30s), with complete
+separation between arms in every stratum (p at the design's exact permutation floor, 5.83e-06;
+see D26 for the full statistical detail and caveats). By §3.1's own rule — an interaction
+claim needs both halves — H3 as a whole is therefore **not supported** as a double
+dissociation. The $t_{\text{open}}$ half was not re-tested in Phase 4B.
+
+Previous published figures (2.04/9.83/14.99s COUNT progression, 8.9×–14.3×, p=0.0005/0.0014)
+are RETRACTED — they were computed on data later found to be gateway-contaminated (D23).
+
+Current figures ($D_w$=5/15/30): COUNT medians 6.73s/16.33s/31.44s; TIME medians
+23.61s/35.09s/65.17s; ratios 3.51×/2.15×/2.07×. Do not quote a single ratio as "the" effect
+size — it varies by `wait_duration`, and the paper should show all three.
+
+Scope: LINEAR + LATENCY, one machine, T50 across window sizes 5/10/20 plus one T70 probe per
+stratum. Window size is not matched across arms (calls vs seconds). See D26 for the full
+claim-scope statement, which should be reproduced near any figure or table citing this result.
 
 ---
 

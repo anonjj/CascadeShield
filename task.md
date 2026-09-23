@@ -153,6 +153,8 @@
       fresh real sweep collected this session. Decomposing into anchor (`time_to_open`)
       vs. excess shows TIME's excess grows with `wait_duration` while COUNT's stays flat
       — not explainable by the anchor-timing shift alone.
+      *(Superseded by decision-log.md D26, 2026-09-22: the 2.04-3.90x ratios predate D23's
+      gateway correction. Do not quote them.)*
 
 - [x] **Precise HALF_OPEN->CLOSED metric computed for the first time (2026-08-27),
       after fixing two harness bugs that were silently suppressing it:**
@@ -171,6 +173,8 @@
       HALF_OPEN->CLOSED duration is 8.9x-14.3x COUNT's, growing with `wait_duration`
       (2.15s->19.03s at D_w=5; 2.16s->20.87s at D_w=15; 2.48s->35.35s at D_w=30).
       Written into `hypotheses.md` §4.1 and decision-log `D13`'s 2026-08-27 update.
+      *(Superseded by decision-log.md D26, 2026-09-22: the 8.9x-14.3x ratios were computed on
+      gateway-contaminated data (D23) and are retracted. Do not quote them.)*
 
 - [ ] **Not yet "final confirmed": every precise median above is n=1 TIME_BASED row per
       `wait_duration` bucket.** Real, directionally consistent, but too thin to close.

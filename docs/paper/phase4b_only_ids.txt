@@ -1,0 +1,33 @@
+# Phase 4B -- Option C --only-ids list. 24 configs x 3 replicates = 72 runs.
+# LINEAR topology, LATENCY fault, --mode full, machine soham-local, seed 20260920.
+# Tracked copy. data/ is gitignored, so the launch copies this file into
+# data/phase4b_only_ids.txt; the two must be byte-identical (SHA-256 in the manifest).
+# One ID per line. runner.py strips a trailing "# ..." comment from each line.
+#
+# --- D_w = 5 ---
+LIN-LAT-CNT-T50-W5-D5
+LIN-LAT-TIM-T50-W5-D5
+LIN-LAT-CNT-T50-W10-D5
+LIN-LAT-TIM-T50-W10-D5
+LIN-LAT-CNT-T50-W20-D5
+LIN-LAT-TIM-T50-W20-D5
+LIN-LAT-CNT-T70-W10-D5
+LIN-LAT-TIM-T70-W10-D5
+# --- D_w = 15 ---
+LIN-LAT-CNT-T50-W5-D15
+LIN-LAT-TIM-T50-W5-D15
+LIN-LAT-CNT-T50-W10-D15
+LIN-LAT-TIM-T50-W10-D15
+LIN-LAT-CNT-T50-W20-D15
+LIN-LAT-TIM-T50-W20-D15
+LIN-LAT-CNT-T70-W10-D15
+LIN-LAT-TIM-T70-W10-D15
+# --- D_w = 30 ---
+LIN-LAT-CNT-T50-W5-D30
+LIN-LAT-TIM-T50-W5-D30
+LIN-LAT-CNT-T50-W10-D30
+LIN-LAT-TIM-T50-W10-D30
+LIN-LAT-CNT-T50-W20-D30
+LIN-LAT-TIM-T50-W20-D30
+LIN-LAT-CNT-T70-W10-D30
+LIN-LAT-TIM-T70-W10-D30

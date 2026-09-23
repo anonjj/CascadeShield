@@ -43,6 +43,22 @@ data/occupancy_dataset.csv
 !data/cb_transitions.jsonl
 !data/master_dataset_calibration_*.csv
 !data/master_dataset.csv
+# Phase 4B (H3 post-D25 re-collection, 2026-09-21). The 72-row dataset, the
+# independent gateway poll log, the launch manifest and the PID file are the whole
+# product of a 2h39m collection and every verification view depends on all four.
+# Tracked for the same reason cb_transitions.jsonl above is: an untracked artifact
+# of a long run is one lost laptop away from being collected a third time.
+!data/phase4b_postd25.csv
+# data/audit is matched by `data/*` above, and git does not descend into an ignored
+# DIRECTORY -- so re-including files inside it needs the same two-step the note at the
+# top of this block describes: un-ignore the directory, re-ignore its contents, then
+# negate the specific files. Everything else under data/audit/ (canary evidence,
+# quarantine snapshots, the sidecar baseline, power-sim scratch) stays ignored.
+!data/audit/
+data/audit/*
+!data/audit/phase4b_poll.jsonl
+!data/audit/phase4b_manifest.json
+!data/audit/phase4b_pids.txt
 
 # Generated figure artifact (was previously covered by the now-removed bare *.csv)
 figures/summary_stats.csv

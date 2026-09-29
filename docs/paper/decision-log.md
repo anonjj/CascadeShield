@@ -1894,3 +1894,52 @@ decision, not made in this entry.
 **Revisit if:** a future config change reintroduces a named, non-`default` profile without an
 explicit `base-config` — `grep -rn "base-config" services/` is now the fast way to check for
 that shape before it becomes a silent leak again.
+
+---
+
+## D27 · Novelty claim checked against the literature — reframed as systematic characterization, not first observation
+
+**Date:** 2026-09-20 · **Decided by:** Jay, closing task T1 ("Verify the novelty claim") ·
+**Status:** final — search evidence is [`docs/paper/related-work.md`](related-work.md)
+
+**The claim had never been checked.** T1's brief paraphrase — "no prior work treats the
+count/time window distinction at the application library layer" — doesn't appear verbatim
+anywhere in the repo. The actual, live claim is `README.md:13`'s already-hedged "a dimension
+largely absent from existing Resilience4j empirical literature." No `docs/paper/related-work.md`,
+bibliography, or decision-log entry existed before this one; the claim was written from project
+notes and never checked against a source outside the repo.
+
+**Search run.** The five query terms from the task (`"sliding window" + circuit breaker`,
+`failure-rate estimation + microservice resilience`, `Resilience4j empirical`, `circuit breaker
+misconfiguration`, `"minimumNumberOfCalls"`) across Consensus, Firecrawl's arXiv-affiliated
+paper search, and targeted web search against the named venues (ICPE, ICSA, ISSRE, Middleware,
+SoCC, ASE, ICSE SEIP, IEEE Access, SPE, EMSE, arXiv), plus the Resilience4j GitHub issue/discussion
+tracker. Full near-miss table with URLs and differentiation notes: `related-work.md`.
+
+**Finding.** No prior work isolates `COUNT_BASED` vs `TIME_BASED` sliding-window type as the
+studied independent variable in a live-instrumented, controlled empirical study of an
+application-layer resilience library. The nearest work (Aderaldo et al.'s ResilienceBench
+family, *SPE* 2024/2025) is methodologically closest — controlled, live, real Resilience4j/Polly
+— but sweeps retry/workload parameters, never window type. Model-based work (Mendonça et al.,
+ICSA 2020) covers CB parameter tuning but isn't live-instrumented. One study at the adjacent
+infrastructure layer (Bansal et al. 2025, Envoy service mesh) does controlled live fault
+evidence for circuit thresholds — one layer down from where CascadeShield sits. The Resilience4j
+maintainer tracker (issues #1731, #1349, discussion #1815) shows the count/time distinction's
+behavioral quirks are known operationally to practitioners, but not characterized as a research
+question with controlled, replicated evidence.
+
+**Decision — the novelty sentence.** Reframe as **first systematic empirical characterization
+of the count/time window distinction, with live instrumented evidence** — not "first
+observation" (practitioners have observed pieces of this on the issue tracker) and not an
+unqualified "no prior work exists" claim (adjacent empirical and model-based work exists; none
+of it is this specific comparison at this layer with this rigor). `README.md:13` updated to
+this framing in the same commit as this entry.
+
+**Rejected:** leaving the claim as an unverified assertion until manuscript writing starts.
+T1 was rated blocking specifically because a wrong novelty claim is worse than a delayed one —
+closing it now, before H3/H4/H5 prose is drafted, means the paper's contribution paragraph can
+be written directly from `related-work.md` instead of from memory.
+
+**Revisit if:** the manuscript's actual Related Work section, once drafted, needs citations
+beyond this near-miss table (e.g., a reviewer names a specific paper this search missed) — add
+it to `related-work.md` as a new row, don't reopen this entry.

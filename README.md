@@ -10,7 +10,7 @@
 
 CascadeShield is a controlled experimental platform: a six-service Spring Boot mesh, a Toxiproxy fault-injection layer, a Prometheus/Grafana observability stack, and a Python sweep harness that together measure how circuit breaker parameter choices change the **blast radius** of a cascading failure. The harness's main sweep evaluates **54 circuit-breaker configurations × 2 fault classes × 3 replicates = 324 runs** per topology, alongside three purpose-built auxiliary sweeps (an occupancy-ratio grid, a crash-toxicity grid, and a λ/window-type hypothesis-gate matrix) — the full breakdown is in Appendix A. Every run logs to one of several CSVs under `data/` (schema documented in `data/DATA_DICTIONARY.md`) that feed the project's ML/analytical pipeline (`ml/`).
 
-The **primary novelty claim** is a systematic `COUNT_BASED` vs `TIME_BASED` sliding-window comparison under controlled fault conditions — a dimension largely absent from existing Resilience4j empirical literature.
+The **primary novelty claim** is the first systematic empirical characterization of the `COUNT_BASED` vs `TIME_BASED` sliding-window distinction, with live instrumented evidence, at the application resilience-library layer — not a first observation (Resilience4j's own issue tracker shows the distinction's behavioral quirks are known to practitioners) but a controlled, replicated characterization that no prior work performs. See `docs/paper/related-work.md` for the literature search this claim is checked against.
 
 ---
 

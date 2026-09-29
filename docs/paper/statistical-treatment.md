@@ -199,3 +199,27 @@ rest on the same number of configurations: the trip rate spans all **36** TIME_B
 while the conditional-timing CI spans the **26** that tripped at least once — the other 10 are
 entirely censored and correctly drop out of a conditional quantity. That is expected behaviour,
 not a defect, but it means "36 configs" should not be read as applying to both numbers.
+
+**Addendum, 2026-09-19: `window_type_recovery_leak.py` itself still tested each $D_w$
+separately — closed.** The fix above corrected the significance test `compare_censored_groups`
+runs *within* one $D_w$ bucket; `window_type_recovery_leak.py` still called it once per bucket
+and reported three independent p-values per DV, the exact per-cell design D24 replaced for H3
+(decision-log.md D19, 2026-09-19 second-pass update). `stratified_cluster_permutation_rank_test`
+(`analysis/exact_tests.py`) combines both corrections at once: $D_w$ held fixed as a blocking
+stratum (like `stratified_cluster_permutation_test`) *and* every raw replicate row preserved,
+never collapsed to a per-config mean (like `cluster_permutation_rank_test` above) — neither
+existing tool alone did both. A cluster-structure check run first (not assumed) found the
+$D_w$=15-shaped flooring problem this addendum set out to fix does **not** apply to the COARSE
+table (it pools the full threshold×window_size grid per $D_w$, 18 configs/arm, floor
+≈$1.1×10^{-10}$) — it lives entirely in the PRECISE `half_open_to_closed` table, which draws on
+the same per-episode transitions data H3's own fix corrected. Applied to every table this
+script produces (COARSE's three DVs, PRECISE's two), each against the pooled data and a new
+gateway-cleaned slice (D24's `TIME_BASED-kept / COUNT_BASED-kept-only-if-not-gateway_tripped`
+rule, ported into `window_type_recovery_leak.py` as `gateway_tripped_lookup`/
+`gateway_cleaned_slice`). Diffed against the pre-change committed output field-by-field: no
+verdict changed anywhere. The one new number worth stating directly: PRECISE
+`half_open_to_closed`'s joint stratified test (D_w=5 and D_w=15, D_w=30 excluded — empty COUNT
+arm) lands at **p=0.025 two-sided, exactly the permutation floor**, identical in both slices —
+stronger than either $D_w$ read alone (p=0.1 at $D_w$=5, p=0.5 at $D_w$=15, from this section's
+first fix above), because the stratified test recovers the power per-$D_w$ testing was
+discarding. Full account: `decision-log.md` D19, 2026-09-19 second-pass update.

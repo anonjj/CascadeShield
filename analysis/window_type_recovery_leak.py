@@ -51,12 +51,14 @@ Output:  analysis/out/window_type_recovery_leak[_<dataset>].json
 """
 
 import json
+import math
 import sys
 
 import numpy as np
 import pandas as pd
 
-from common import DATA_DIR, OUT_DIR, compare_censored_groups, load, write_json
+from common import DATA_DIR, OUT_DIR, compare_censored_groups, load, write_json, _config_value_lists
+from exact_tests import stratified_cluster_permutation_rank_test
 
 COL_WINDOW = "window_type"
 COL_WAIT = "wait_duration"
@@ -185,6 +187,52 @@ def _censored_ratio_table(df, value_col):
     }
 
 
+def _stratified_leak_test(df, value_col, group_col="experiment_id"):
+    """The single inferential claim for 'does window_type affect value_col,' holding
+    wait_duration fixed as a blocking stratum -- closes D19's 2026-09-19 'Revisit if'
+    (decision-log.md): window_type_recovery_leak.py previously tested each wait_duration
+    bucket as its own independent contrast, the same per-D_w design H3's own D24 fix
+    replaced. Every raw replicate row is preserved (stratified_cluster_permutation_rank_test,
+    exact_tests.py), never collapsed to a per-configuration mean -- D19 section 5.2 ruled
+    that out for this same underlying comparison (compare_censored_groups). The per-D_w
+    rows in by_wait_duration (_censored_ratio_table) stay in the output as description;
+    this is the inferential claim.
+
+    A wait_duration bucket with zero configurations on either arm carries no label
+    information and is excluded here, decided per-call (i.e. per DV and per slice, since
+    censoring/config availability differ across them) -- reported in excluded_strata
+    rather than silently dropped, mirroring D24's own exclusion of H3's D_w=30 (empty
+    COUNT arm)."""
+    strata = {}
+    excluded = []
+    for wd, g in df.groupby(COL_WAIT):
+        c = g[g[COL_WINDOW] == "COUNT"]
+        t = g[g[COL_WINDOW] == "TIME"]
+        configs_c = _config_value_lists(c, value_col, group_col)
+        configs_t = _config_value_lists(t, value_col, group_col)
+        if not configs_c or not configs_t:
+            excluded.append({"wait_duration": float(wd), "n1_clusters": len(configs_c),
+                              "n2_clusters": len(configs_t), "reason": "empty arm"})
+            continue
+        strata[str(wd)] = (configs_c, configs_t)
+
+    if not strata:
+        return {"statistic": None, "p": None, "p_one_sided": None,
+                "method": "undefined (no includable strata)", "total_assignments": None,
+                "p_floor_one_sided": None, "p_floor_two_sided": None,
+                "strata": [], "excluded_strata": excluded}
+
+    res = stratified_cluster_permutation_rank_test(strata)
+    return {
+        "statistic": res.statistic, "p": res.p_value, "p_one_sided": res.p_value_one_sided,
+        "method": res.method, "total_assignments": res.total_assignments, "note": res.note,
+        "p_floor_one_sided": res.p_floor_one_sided, "p_floor_two_sided": res.p_floor_two_sided,
+        "strata": [{"wait_duration": float(s.name), "n1_clusters": s.n1, "n2_clusters": s.n2,
+                    "n_assignments": s.n_assignments} for s in res.strata],
+        "excluded_strata": excluded,
+    }
+
+
 def _paired_view(df, value_col, match_keys):
     """Fully-matched paired view: same config on every listed key, only window_type
     differs. `match_keys` must already be filtered to columns that exist in `df`.
@@ -211,7 +259,7 @@ def _paired_view(df, value_col, match_keys):
 
 # ------------------------------------------------------------------------- (a) coarse
 
-def coarse_ratio_check(df):
+def coarse_ratio_check(df, gw_lookup=None):
     d = df.copy()
     d[COL_WINDOW] = d[COL_WINDOW].map(norm)
     d = d[d[COL_WINDOW].isin(["COUNT", "TIME"])].copy()
@@ -221,17 +269,30 @@ def coarse_ratio_check(df):
     missing_keys = [k for k in MATCH_KEYS_WANTED if k not in d.columns]
     piv = _paired_view(d, COL_RECOVERY, used_keys)
 
+    # gw_lookup is None when data/cb_transitions.jsonl is absent (real-runs-only,
+    # gitignored) -- the gateway-cleaned slice of the stratified test is then simply
+    # not reported, same "can't compute it, say so" posture the PRECISE path already
+    # takes for the whole sidecar-dependent metric.
+    d_cleaned = gateway_cleaned_slice(d, gw_lookup) if gw_lookup is not None else None
+
+    def dv_table(value_col):
+        table = _censored_ratio_table(d, value_col)
+        table["stratified_test"] = {"pooled": _stratified_leak_test(d, value_col)}
+        if d_cleaned is not None:
+            table["stratified_test"]["gateway_cleaned"] = _stratified_leak_test(d_cleaned, value_col)
+        return table
+
     return {
         "n_rows": int(len(d)),
         "n_count": int((d[COL_WINDOW] == "COUNT").sum()),
         "n_time": int((d[COL_WINDOW] == "TIME").sum()),
         "match_keys": {"requested": MATCH_KEYS_WANTED, "used": used_keys, "missing": missing_keys},
-        "time_to_recover": _censored_ratio_table(d, COL_RECOVERY),
+        "time_to_recover": dv_table(COL_RECOVERY),
         # Separates "TIME opens later" (a flat anchor shift, not a recovery-side leak)
         # from "TIME's post-open excess grows with wait_duration" (not explainable by a
         # constant shift -- the pattern actually found against the real archive).
-        "time_to_open_anchor": _censored_ratio_table(d, COL_OPEN),
-        "excess_over_wait_duration": _censored_ratio_table(d, "excess"),
+        "time_to_open_anchor": dv_table(COL_OPEN),
+        "excess_over_wait_duration": dv_table("excess"),
         "paired": {
             "n_pairs": int(len(piv)),
             "median_paired_ratio": float(piv["ratio"].median()) if len(piv) else None,
@@ -267,6 +328,40 @@ def load_transition_index(path):
                    rec.get("machine_id", ""))
             index[key] = rec
     return index
+
+
+def gateway_tripped_lookup(cb_transitions_path):
+    """{(experiment_id, replicate, mode, environment, machine_id): bool} -- did gateway's
+    own circuit breaker trip (CLOSED_TO_OPEN) anywhere in this run's transitions, independent
+    of BREAKER_WATCH scoping (order's own breakers only). D23/D24 (decision-log.md): a real
+    gateway trip confounds order's own COUNT_BASED recovery reading -- order waits on gateway
+    to let traffic back through, which reads as a long "recovery" that has nothing to do with
+    order's own breaker semantics. Reuses load_transition_index's join key so a caller can zip
+    this lookup against the same key it already builds for the PRECISE path. A key absent here
+    (no matching sidecar record) is the caller's problem, not this function's -- callers must
+    default a missing key to False (absence of transition evidence isn't evidence of a trip),
+    same permissive default D24 used."""
+    index = load_transition_index(cb_transitions_path)
+    return {
+        key: any(t.get("service") == "gateway" and t.get("state_transition") == "CLOSED_TO_OPEN"
+                 for t in rec.get("transitions", []))
+        for key, rec in index.items()
+    }
+
+
+def gateway_cleaned_slice(df, gw_lookup):
+    """D24's gateway-cleaning rule (decision-log.md), applied here to a COARSE-table
+    dataframe rather than half_open_survival.py's own KM observations: TIME_BASED rows are
+    kept regardless (the confound is COUNT-specific); COUNT_BASED rows are kept only if the
+    gateway did not trip during that row's run. Missing lookup keys default to
+    gateway_tripped=False, matching gateway_tripped_lookup's own contract."""
+    window = df[COL_WINDOW].map(norm)
+    machine = df["machine_id"] if "machine_id" in df.columns else pd.Series([""] * len(df), index=df.index)
+    keys = list(zip(df["experiment_id"], df["replicate"].astype(str), df["mode"], df["environment"],
+                     machine.fillna("")))
+    tripped = pd.Series([gw_lookup.get(k, False) for k in keys], index=df.index)
+    keep = (window == "TIME") | (~tripped)
+    return df[keep].copy()
 
 
 def _parse_java_ts(s):
@@ -370,7 +465,7 @@ def precise_row_for(row, index):
     return result
 
 
-def precise_recovery_from_transitions(cb_transitions_path, master_df):
+def precise_recovery_from_transitions(cb_transitions_path, master_df, gw_lookup=None):
     index = load_transition_index(cb_transitions_path)
     records = []
     for _, row in master_df.iterrows():
@@ -379,19 +474,33 @@ def precise_recovery_from_transitions(cb_transitions_path, master_df):
         r["replicate"] = row["replicate"]
         r[COL_WINDOW] = norm(row[COL_WINDOW])
         r[COL_WAIT] = row[COL_WAIT]
+        # Carried straight from master_df so gateway_cleaned_slice can join this
+        # table the same 5-key way load_transition_index/precise_row_for already do --
+        # not otherwise used by anything below.
+        r["mode"] = row["mode"]
+        r["environment"] = row["environment"]
+        r["machine_id"] = row.get("machine_id", "")
         records.append(r)
     pdf = pd.DataFrame(records)
 
     ok = pdf[pdf["status"] == "OK"]
     status_counts = {k: int(v) for k, v in pdf["status"].value_counts().items()}
+    ok_cleaned = gateway_cleaned_slice(ok, gw_lookup) if gw_lookup is not None else None
+
+    def precise_dv_table(value_col):
+        if value_col not in ok.columns:
+            return None
+        table = _censored_ratio_table(ok, value_col)
+        table["stratified_test"] = {"pooled": _stratified_leak_test(ok, value_col)}
+        if ok_cleaned is not None:
+            table["stratified_test"]["gateway_cleaned"] = _stratified_leak_test(ok_cleaned, value_col)
+        return table
 
     return {
         "status_counts": status_counts,
         "n_ok": int(len(ok)),
-        "half_open_to_closed": (_censored_ratio_table(ok, "precise_half_open_to_closed")
-                                 if "precise_half_open_to_closed" in ok.columns else None),
-        "open_to_half_open_sanity_check": (_censored_ratio_table(ok, "precise_open_to_half_open")
-                                            if "precise_open_to_half_open" in ok.columns else None),
+        "half_open_to_closed": precise_dv_table("precise_half_open_to_closed"),
+        "open_to_half_open_sanity_check": precise_dv_table("precise_open_to_half_open"),
         "rows": pdf.to_dict("records"),
     }
 
@@ -433,11 +542,15 @@ def _verdict(coarse, precise, precise_status):
 
 def main(dataset="current"):
     df = load(dataset)
-    coarse = coarse_ratio_check(df)
-
     sidecar_path = DATA_DIR / CB_TRANSITIONS_FILENAME
+    # gateway_tripped_lookup only needs the sidecar file itself, independent of whether
+    # PRECISE's per-row join succeeds below -- computed once, reused by both COARSE's and
+    # PRECISE's gateway-cleaned stratified test.
+    gw_lookup = gateway_tripped_lookup(sidecar_path) if sidecar_path.exists() else None
+    coarse = coarse_ratio_check(df, gw_lookup)
+
     if sidecar_path.exists():
-        precise = precise_recovery_from_transitions(sidecar_path, df)
+        precise = precise_recovery_from_transitions(sidecar_path, df, gw_lookup)
         precise_status = "COMPUTED"
         precise_note = None
     else:
@@ -768,11 +881,73 @@ def self_test_contradictory_ratios():
     print("self-test: contradictory-ratios-plus-censoring regression OK")
 
 
+def self_test_stratified():
+    """Regression test for _stratified_leak_test and gateway_cleaned_slice -- the wiring
+    that closes D19's 2026-09-19 'Revisit if' (decision-log.md). Reproduces the exact
+    cluster shape found against real data: D_w=5 has 3 configs/arm, D_w=15 has 1 COUNT
+    config vs 3 TIME configs (H3's own D24 floor=0.25 shape), D_w=30's COUNT arm is
+    empty and must be excluded rather than silently zeroed."""
+    def rows(wd, window_type, configs):
+        out = []
+        for cfg, values in configs.items():
+            for i, v in enumerate(values):
+                out.append({"experiment_id": cfg, "replicate": i + 1, COL_WAIT: wd,
+                             COL_WINDOW: window_type, "value": v})
+        return out
+
+    data = (
+        rows(5, "COUNT", {"c1": [2.0, 2.1], "c2": [2.2], "c3": [1.9]})
+        + rows(5, "TIME", {"t1": [19.0], "t2": [19.3], "t3": [28.7]})
+        + rows(15, "COUNT", {"c4": [2.5, 2.4]})
+        + rows(15, "TIME", {"t4": [20.9], "t5": [30.5], "t6": [39.6]})
+        + rows(30, "TIME", {"t7": [25.0], "t8": [26.0], "t9": [24.0]})
+        # D_w=30 has NO COUNT rows at all -- empty arm, must be excluded not zeroed.
+    )
+    df = pd.DataFrame(data)
+
+    result = _stratified_leak_test(df, "value")
+    assert result["method"] == "exact-enumeration", result["method"]
+    assert result["total_assignments"] == 20 * 4, result["total_assignments"]
+    strata_wds = {s["wait_duration"] for s in result["strata"]}
+    assert strata_wds == {5.0, 15.0}, strata_wds
+    excluded_wds = {e["wait_duration"] for e in result["excluded_strata"]}
+    assert excluded_wds == {30.0}, excluded_wds
+    assert result["excluded_strata"][0]["reason"] == "empty arm"
+    # Complete separation (every COUNT value < every TIME value in both strata) -> the
+    # observed assignment is the single most extreme of all 80. Unlike the mean-collapsed
+    # stratified test, this row-preserving statistic has no guaranteed symmetric null
+    # (block sizes vary, so there's no guaranteed "mirror" combo with negated statistic --
+    # see exact_tests.py's cluster_permutation_rank_test self-test, which already shows
+    # two-sided p == one-sided p == 1/3 for its own complete-separation case, same
+    # property, not new here). p lands at the ONE-sided floor, not the two-sided one.
+    assert math.isclose(result["p"], result["p_floor_one_sided"]), \
+        (result["p"], result["p_floor_one_sided"])
+    assert math.isclose(result["p"], result["p_one_sided"]), (result["p"], result["p_one_sided"])
+
+    # gateway_cleaned_slice: TIME rows kept regardless; COUNT rows kept only if not
+    # gateway_tripped. c1 is tripped -> both its replicate rows dropped; c2/c3/c4 untouched.
+    gw_lookup = {
+        ("c1", "1", "full", "LOCAL", ""): True,
+        ("c1", "2", "full", "LOCAL", ""): True,
+    }
+    df2 = df.assign(mode="full", environment="LOCAL", machine_id="")
+    cleaned = gateway_cleaned_slice(df2, gw_lookup)
+    assert set(cleaned[cleaned[COL_WINDOW] == "COUNT"]["experiment_id"]) == {"c2", "c3", "c4"}, \
+        "gateway-tripped COUNT config c1 must be dropped, others kept"
+    assert (set(cleaned[cleaned[COL_WINDOW] == "TIME"]["experiment_id"])
+            == set(df2[df2[COL_WINDOW] == "TIME"]["experiment_id"])), \
+        "TIME rows must be kept regardless of gateway_tripped"
+    assert "c4" in set(cleaned["experiment_id"]), "missing lookup key must default to not-tripped"
+
+    print("self-test: stratified leak test + gateway-cleaned slice OK")
+
+
 if __name__ == "__main__":
     if "--self-test" in sys.argv:
         self_test()
         self_test_censoring()
         self_test_contradictory_ratios()
+        self_test_stratified()
     else:
         arg = sys.argv[1] if len(sys.argv) > 1 else "current"
         main(arg)

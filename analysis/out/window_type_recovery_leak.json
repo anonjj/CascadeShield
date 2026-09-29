@@ -56,10 +56,15 @@
             "n_b": 60
           },
           "mann_whitney": {
-            "U": 0.0,
-            "p": 3.556014119241608e-21,
-            "n_a": 60,
-            "n_b": 60
+            "statistic": -9.447549859466605,
+            "p": 4.999750012499375e-05,
+            "p_one_sided": 4.999750012499375e-05,
+            "n1_clusters": 18,
+            "n2_clusters": 18,
+            "n1_rows": 60,
+            "n2_rows": 60,
+            "total_assignments": 9075135300,
+            "method": "monte-carlo"
           },
           "ci_count": {
             "n_rows": 60,
@@ -107,10 +112,15 @@
             "n_b": 60
           },
           "mann_whitney": {
-            "U": 0.0,
-            "p": 3.554344052013685e-21,
-            "n_a": 60,
-            "n_b": 60
+            "statistic": -9.447549859466605,
+            "p": 4.999750012499375e-05,
+            "p_one_sided": 4.999750012499375e-05,
+            "n1_clusters": 18,
+            "n2_clusters": 18,
+            "n1_rows": 60,
+            "n2_rows": 60,
+            "total_assignments": 9075135300,
+            "method": "monte-carlo"
           },
           "ci_count": {
             "n_rows": 60,
@@ -158,10 +168,15 @@
             "n_b": 60
           },
           "mann_whitney": {
-            "U": 0.0,
-            "p": 3.5549006577678414e-21,
-            "n_a": 60,
-            "n_b": 60
+            "statistic": -9.447549859466605,
+            "p": 4.999750012499375e-05,
+            "p_one_sided": 4.999750012499375e-05,
+            "n1_clusters": 18,
+            "n2_clusters": 18,
+            "n1_rows": 60,
+            "n2_rows": 60,
+            "total_assignments": 9075135300,
+            "method": "monte-carlo"
           },
           "ci_count": {
             "n_rows": 60,
@@ -224,10 +239,15 @@
             "n_b": 60
           },
           "mann_whitney": {
-            "U": 424.0,
-            "p": 5.214919067062051e-13,
-            "n_a": 60,
-            "n_b": 60
+            "statistic": -7.222127003681138,
+            "p": 4.999750012499375e-05,
+            "p_one_sided": 4.999750012499375e-05,
+            "n1_clusters": 18,
+            "n2_clusters": 18,
+            "n1_rows": 60,
+            "n2_rows": 60,
+            "total_assignments": 9075135300,
+            "method": "monte-carlo"
           },
           "ci_count": {
             "n_rows": 60,
@@ -275,10 +295,15 @@
             "n_b": 60
           },
           "mann_whitney": {
-            "U": 420.0,
-            "p": 4.4695981715321693e-13,
-            "n_a": 60,
-            "n_b": 60
+            "statistic": -7.243121558924397,
+            "p": 4.999750012499375e-05,
+            "p_one_sided": 4.999750012499375e-05,
+            "n1_clusters": 18,
+            "n2_clusters": 18,
+            "n1_rows": 60,
+            "n2_rows": 60,
+            "total_assignments": 9075135300,
+            "method": "monte-carlo"
           },
           "ci_count": {
             "n_rows": 60,
@@ -326,10 +351,15 @@
             "n_b": 60
           },
           "mann_whitney": {
-            "U": 412.5,
-            "p": 3.340052458256216e-13,
-            "n_a": 60,
-            "n_b": 60
+            "statistic": -7.282486350005508,
+            "p": 4.999750012499375e-05,
+            "p_one_sided": 4.999750012499375e-05,
+            "n1_clusters": 18,
+            "n2_clusters": 18,
+            "n1_rows": 60,
+            "n2_rows": 60,
+            "total_assignments": 9075135300,
+            "method": "monte-carlo"
           },
           "ci_count": {
             "n_rows": 60,
@@ -392,10 +422,15 @@
             "n_b": 60
           },
           "mann_whitney": {
-            "U": 0.0,
-            "p": 3.556014119241608e-21,
-            "n_a": 60,
-            "n_b": 60
+            "statistic": -9.447549859466605,
+            "p": 4.999750012499375e-05,
+            "p_one_sided": 4.999750012499375e-05,
+            "n1_clusters": 18,
+            "n2_clusters": 18,
+            "n1_rows": 60,
+            "n2_rows": 60,
+            "total_assignments": 9075135300,
+            "method": "monte-carlo"
           },
           "ci_count": {
             "n_rows": 60,
@@ -443,10 +478,15 @@
             "n_b": 60
           },
           "mann_whitney": {
-            "U": 0.0,
-            "p": 3.554344052013685e-21,
-            "n_a": 60,
-            "n_b": 60
+            "statistic": -9.447549859466605,
+            "p": 4.999750012499375e-05,
+            "p_one_sided": 4.999750012499375e-05,
+            "n1_clusters": 18,
+            "n2_clusters": 18,
+            "n1_rows": 60,
+            "n2_rows": 60,
+            "total_assignments": 9075135300,
+            "method": "monte-carlo"
           },
           "ci_count": {
             "n_rows": 60,
@@ -494,10 +534,15 @@
             "n_b": 60
           },
           "mann_whitney": {
-            "U": 0.0,
-            "p": 3.5549006577678414e-21,
-            "n_a": 60,
-            "n_b": 60
+            "statistic": -9.447549859466605,
+            "p": 4.999750012499375e-05,
+            "p_one_sided": 4.999750012499375e-05,
+            "n1_clusters": 18,
+            "n2_clusters": 18,
+            "n1_rows": 60,
+            "n2_rows": 60,
+            "total_assignments": 9075135300,
+            "method": "monte-carlo"
           },
           "ci_count": {
             "n_rows": 60,
@@ -1172,10 +1217,15 @@
               "n_b": 6
             },
             "mann_whitney": {
-              "U": 0.0,
-              "p": 0.0021645021645021645,
-              "n_a": 6,
-              "n_b": 6
+              "statistic": -2.8823067684915684,
+              "p": 0.1,
+              "p_one_sided": 0.05,
+              "n1_clusters": 3,
+              "n2_clusters": 3,
+              "n1_rows": 6,
+              "n2_rows": 6,
+              "total_assignments": 20,
+              "method": "exact-enumeration"
             },
             "ci_count": {
               "n_rows": 6,
@@ -1223,10 +1273,15 @@
               "n_b": 6
             },
             "mann_whitney": {
-              "U": 0.0,
-              "p": 0.07142857142857142,
-              "n_a": 2,
-              "n_b": 6
+              "statistic": -2.0,
+              "p": 0.5,
+              "p_one_sided": 0.25,
+              "n1_clusters": 1,
+              "n2_clusters": 3,
+              "n1_rows": 2,
+              "n2_rows": 6,
+              "total_assignments": 4,
+              "method": "exact-enumeration"
             },
             "ci_count": {
               "n_rows": 2,
@@ -1274,10 +1329,15 @@
               "n_b": 6
             },
             "mann_whitney": {
-              "U": null,
+              "statistic": null,
               "p": null,
-              "n_a": 0,
-              "n_b": 6
+              "p_one_sided": null,
+              "n1_clusters": 0,
+              "n2_clusters": 3,
+              "n1_rows": 0,
+              "n2_rows": 6,
+              "total_assignments": null,
+              "method": "undefined (an arm has zero observed configs)"
             },
             "ci_count": {
               "n_rows": 0,
@@ -1339,10 +1399,15 @@
               "n_b": 6
             },
             "mann_whitney": {
-              "U": 23.0,
-              "p": 0.48484848484848486,
-              "n_a": 6,
-              "n_b": 6
+              "statistic": 0.8006407690254357,
+              "p": 0.7,
+              "p_one_sided": 0.75,
+              "n1_clusters": 3,
+              "n2_clusters": 3,
+              "n1_rows": 6,
+              "n2_rows": 6,
+              "total_assignments": 20,
+              "method": "exact-enumeration"
             },
             "ci_count": {
               "n_rows": 6,
@@ -1390,10 +1455,15 @@
               "n_b": 6
             },
             "mann_whitney": {
-              "U": 24.0,
-              "p": 0.3939393939393939,
-              "n_a": 6,
-              "n_b": 6
+              "statistic": 0.9607689228305227,
+              "p": 0.5,
+              "p_one_sided": 0.85,
+              "n1_clusters": 3,
+              "n2_clusters": 3,
+              "n1_rows": 6,
+              "n2_rows": 6,
+              "total_assignments": 20,
+              "method": "exact-enumeration"
             },
             "ci_count": {
               "n_rows": 6,
@@ -1441,10 +1511,15 @@
               "n_b": 6
             },
             "mann_whitney": {
-              "U": 15.0,
-              "p": 0.6991341991341992,
-              "n_a": 6,
-              "n_b": 6
+              "statistic": -0.48038446141526137,
+              "p": 0.9,
+              "p_one_sided": 0.45,
+              "n1_clusters": 3,
+              "n2_clusters": 3,
+              "n1_rows": 6,
+              "n2_rows": 6,
+              "total_assignments": 20,
+              "method": "exact-enumeration"
             },
             "ci_count": {
               "n_rows": 6,

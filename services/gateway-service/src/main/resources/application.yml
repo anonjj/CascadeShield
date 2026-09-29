@@ -53,10 +53,31 @@ resilience4j:
       measurement-plane:
         register-health-indicator: true      # keep exporting CB metrics for diagnostics
         allow-health-indicator-to-fail: false
-        minimum-number-of-calls: 1000000     # evaluation window is never reached
-        failure-rate-threshold: 100          # would need 100% failures to trip
-        slow-call-rate-threshold: 100        # would need 100% slow calls to trip
-        slow-call-duration-threshold: 60s    # nothing in-test is this slow
+        # PINNED (D23 follow-up, D25): these fields used to be unset here and silently
+        # tracked configs.default's swept values instead (Resilience4j 2.2.0's own
+        # implicit-fallback behavior, live-confirmed -- see D25). Under COUNT_BASED that
+        # meant the real evaluation gate was min(1000000, slidingWindowSize) =
+        # slidingWindowSize itself (D18's ring-buffer-fill mechanism), not the intended
+        # unreachable 1,000,000 -- 20 real gateway trips in cb_transitions.jsonl (D23).
+        # TIME_BASED has no ring-buffer-fill bypass, so minimum-number-of-calls is honoured
+        # exactly and the 1,000,000 gate is genuinely unreachable. Pinned explicitly in both
+        # directions so this never again depends on inheritance, sweep state, or a
+        # version-specific Resilience4j fallback.
+        sliding-window-type: TIME_BASED
+        sliding-window-size: 600              # seconds; longer than any run
+        minimum-number-of-calls: 1000000      # unreachable under TIME_BASED
+        failure-rate-threshold: 100           # would need 100% failures to trip
+        slow-call-rate-threshold: 100         # would need 100% slow calls to trip
+        slow-call-duration-threshold: 60s     # nothing in-test is this slow
+        # PINNED: do not depend on inheriting these from configs.default either.
+        wait-duration-in-open-state: 60s
+        permitted-number-of-calls-in-half-open-state: 10
+        automatic-transition-from-open-to-half-open-enabled: false
+        event-consumer-buffer-size: ${CB_EVENT_BUFFER_SIZE:50}
+        record-exceptions:
+          - com.cascadeshield.gateway.exception.DownstreamUnavailableException
+        ignore-exceptions:
+          - com.cascadeshield.gateway.exception.DownstreamRejectedException
     instances:
       # All three gateway breakers use measurement-plane (never open) — see above.
       orderServiceCB:

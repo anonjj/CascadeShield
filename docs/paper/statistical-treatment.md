@@ -148,35 +148,51 @@ Cliff's delta itself (already computed there) does not need to change — it was
 project's rank-based effect size and is unaffected by which significance test runs alongside
 it.
 
-### 5.2 The conditional-timing significance test is not clustered, but its CIs are
+### 5.2 The conditional-timing significance test is not clustered, but its CIs are — FIXED 2026-09-19
 
 `censored_timing_summary` builds **both** its rate CI and its conditional-timing CI on
-`bootstrap_ci_grouped` — resampling whole configurations, per §2. But
-`compare_censored_groups`'s `conditional_timing_comparison` runs `compare_groups` on raw rows:
-
-```python
-"conditional_timing_comparison": compare_groups(
-    df_a[value_col].dropna(), df_b[value_col].dropna()),
-```
-
-With `N_REPLICATES = 3`, that treats 3 replicates of one `experiment_id` as 3 independent
+`bootstrap_ci_grouped` — resampling whole configurations, per §2. `compare_censored_groups`'s
+`conditional_timing_comparison` used to run `compare_groups` on raw rows instead — with
+`N_REPLICATES = 3`, that treated 3 replicates of one `experiment_id` as 3 independent
 observations when §2 says the effective sample size is the number of *configurations*. The
-consequence is one-directional: the effective n fed to Mann-Whitney is inflated, so **the
-p-value is smaller than the design earns**. The CI beside it, computed over the same data, is
-not — so a single call can currently return a correctly-clustered interval and an
+consequence was one-directional: the effective n fed to Mann-Whitney was inflated, so the
+p-value was smaller than the design earned, while the CI beside it (computed over the same
+data) was correctly clustered — one call returning a correctly-clustered interval and an
 insufficiently-clustered p-value.
 
-This is not asserted to be a bug in the finding of any existing result — no published number in
-this paper currently comes from `compare_censored_groups` — and there is precedent for
-row-level `cliffs_delta` elsewhere in the project (D16 compares n=159 vs n=18 rows). But it is
-an inconsistency inside the document that defines the standard, and it should be settled
-deliberately rather than found by a reviewer.
+**Why the obvious fix (aggregate each config to one mean/median before testing) was rejected
+in the 2026-09-14 version of this section, and why that objection no longer applies.**
+Aggregating to per-config means reduces n from rows to configs (e.g. 78 → 26 in the D18 arm
+below) and can flip whether a contrast reads as significant — changing a significance test's
+unit of analysis, exactly the class of decision §5.1 declines to make as a side effect. That
+objection is sound against a mean-collapsing fix. It is not an objection against a
+**block/cluster permutation** fix: `cluster_permutation_rank_test`
+(`analysis/exact_tests.py`) permutes which whole configurations are labeled group 1 vs group 2
+while ranking every raw row under each relabeling — no configuration is ever collapsed to a
+single value, so within-configuration variance is preserved rather than averaged away. The
+unit being *tested* is still the row; only the unit being *randomly assigned* is the
+configuration, which is what independence actually requires. `compare_censored_groups` now
+builds `{config_id: [values]}` from the `group_col` parameter it already carried (previously
+unused for the significance test) and calls this instead of `compare_groups`. `cliffs_delta`
+stays row-level, unchanged — §5.1's reasoning (effect size doesn't need to move with whichever
+significance test runs alongside it) applies here too.
 
-**Not fixed here, and why.** The obvious fix — aggregate each config to its own mean (or
-median) before testing — reduces n from rows to configs (e.g. 78 → 26 in the D18 arm above),
-which can change whether a contrast reads as significant. Changing a significance test's unit
-of analysis is exactly the class of decision §5.1 declines to make as a side effect, and the
-same reasoning applies to it. Pending review by this standard's author and Soham.
+**Verified by running both ways and diffing** (`analysis/window_type_recovery_leak.py`, the
+only caller of `compare_censored_groups`, re-run before/after against the `"current"`
+archive) rather than assumed correct: direction and significance survive everywhere except one
+cell, `PRECISE half_open_to_closed` at $D_w$=5, where p moves from 0.00216 (significant) to
+0.1 (not significant) once the true 3-vs-3 configuration count replaces the inflated 6-vs-6 row
+count — a real, reportable crossing, not a bug in the fix. No published number in this paper
+was ever cited from this function (confirmed by grep before and after), so nothing already in
+print changes. Full account, including the COARSE tables' Monte-Carlo-floor correction (18v18
+configs per bucket forced this function's first Monte Carlo fallback) and the one crossing:
+`decision-log.md` D19, 2026-09-19 update.
+
+**Methods point, worth stating directly for §IV-E's "centralized protocol" claim:**
+`compare_groups`, `mann_whitney`, and `compare_censored_groups` each had exactly **one caller**
+in this codebase when this was fixed. A three-function standard with a single consumer chain
+is *why* this defect was containable at all — one call site to audit and correct, not a dozen
+independent reimplementations to track down.
 
 **One clarification while this is open.** In §3's validation figures, the two halves do not
 rest on the same number of configurations: the trip rate spans all **36** TIME_BASED configs,

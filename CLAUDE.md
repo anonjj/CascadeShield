@@ -14,8 +14,8 @@ and Soham More. Most work here is **measurement**, so a wrong number is worse th
 |---|---|
 | How many columns is the dataset schema? | **36** — `DATASET_HEADERS` in `experiments/runner.py`. `data/DATA_DICTIONARY.md` has drifted and still describes a never-implemented 48-column D8 schema |
 | Which datasets exist, and how many rows should each have? | `analysis/common.py`'s `DATASETS` dict. Note `data/occupancy_dataset.csv` is **not** registered there |
-| Which file is the live dataset? | `data/master_dataset.csv` — currently **324 rows, LATENCY-only**. A stray `master_dataset.csv` at the **repo root** is *not* it |
-| Is an `analysis/out/*.json` number current? | Usually **no** — 7 of 8 predate the 2026-09-06 CRASH-strip. Re-run before quoting |
+| Which file is the live dataset? | `data/master_dataset.csv` — currently **360 rows, LATENCY-only** (324 post-CRASH-strip + 36 from the D13 top-up, 2026-09-15). A stray `master_dataset.csv` at the **repo root** is *not* it |
+| Is an `analysis/out/*.json` number current? | Check the file's own content/mtime — `tau_sweep.json`/`order_leg_containment.json` were re-run 2026-09-18 against the live 360-row file (D-001/D15 updates); most others still predate the 2026-09-06 CRASH-strip. Re-run before quoting anything not already verified current |
 | What's the current state of `main`? | `git fetch origin` and look. It moves faster than any session's memory of it |
 | Where is the backlog? | `STATUS.md`'s *Remaining work* table. "B" numbers in older commits (B5, B8) refer to a board that no longer exists and was never in the repo — historical record only, don't chase them |
 

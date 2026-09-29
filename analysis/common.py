@@ -142,6 +142,19 @@ DATASETS = {
                 "during _poll_for_recovery's own loop, not during _drive_half_open_probes' "
                 "separate, much shorter poll-until-transition window that runs after it.",
     },
+    "d7_occupancy_ratio": {
+        "path": DATA_DIR / "occupancy_dataset.csv",
+        "n_expected": 162,
+        "blast_scale": 1.0,
+        "blast_denominator": 4,
+        "leg_node_set": "4",
+        "note": "D7 occupancy-ratio sweep (D18): 108 TIME_BASED + 54 COUNT_BASED runs, LINEAR"
+                "+LATENCY only, testing H2b (occupancy_ratio = effective_horizon / "
+                "minimum_number_of_calls crossing 1 predicts inertness). Standalone -- not "
+                "merged into 'current', has its own experiment_id namespace "
+                "(*-M<minimum_calls>-L<lambda> suffix). excluded_reason column is present but "
+                "empty for every row (0/162 exclusions).",
+    },
     "current": {
         "path": DATA_DIR / "master_dataset.csv",
         "n_expected": 360,   # 324 retained LATENCY rows; CRASH rows removed pending re-collection (v6 above)

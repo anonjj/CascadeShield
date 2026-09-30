@@ -588,12 +588,21 @@ def compute_occupancy_ratio(effective_horizon, min_calls):
     return effective_horizon / min_calls
 
 
-def generate_load(endpoint_url, requests_count=50, concurrency=5, interval_s=0.05):
+def generate_load(endpoint_url, requests_count=50, concurrency=5, interval_s=0.05, stop_event=None):
     """Lightweight built-in HTTP load generator to test the mesh.
 
     requests_count requests are dispatched spaced by interval_s (steady offered rate),
     so the same function drives both the short baseline warm-up and the longer,
     duration-sized fault load (via compute_load_plan).
+
+    stop_event (optional, default None): a threading.Event checked once per dispatch
+    iteration, immediately before each executor.submit -- if set, dispatch stops early
+    and requests_count becomes an upper bound rather than a fixed count. Every existing
+    caller passes no stop_event, so `not None`'s check below is always False for them
+    and this function's default behavior is unchanged. Added for recovery_control.py's
+    continuous-load mode (R2), which sends load until an external stop condition fires
+    rather than for a fixed, window-type-sized duration -- see that module's own
+    docstring for why the two arms otherwise get unequal fault exposure.
 
     Also measures the ACHIEVED arrival rate, not just the requested one: interval_s
     is what the dispatch loop below asks for, but a saturated thread pool (worker
@@ -641,6 +650,8 @@ def generate_load(endpoint_url, requests_count=50, concurrency=5, interval_s=0.0
 
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
         for _ in range(requests_count):
+            if stop_event is not None and stop_event.is_set():
+                break
             executor.submit(send_request)
             time.sleep(interval_s)  # Pacing: steady rate, avoids thundering-herd
     # executor.__exit__ blocks until ALL futures complete.

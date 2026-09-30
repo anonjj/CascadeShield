@@ -59,6 +59,12 @@ data/audit/*
 !data/audit/phase4b_poll.jsonl
 !data/audit/phase4b_manifest.json
 !data/audit/phase4b_pids.txt
+# R2's image/host provenance manifest -- same treatment as phase4b_manifest.json
+# above (a citable record, not raw canary evidence). The quarantined canary rows
+# themselves (data/audit/r2_canary_20260930/) stay ignored, same as
+# aborted_launch_20260921T061403Z/ before them -- their existence and reasoning
+# are recorded in docs/paper/r2-equal-exposure-plan.md section 9, not re-tracked here.
+!data/audit/r2_image_manifest.json
 
 # Generated figure artifact (was previously covered by the now-removed bare *.csv)
 figures/summary_stats.csv

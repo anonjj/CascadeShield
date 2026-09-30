@@ -1,0 +1,15 @@
+
+/Users/jayjoshi/Documents/projects/Capstone project/data/cb_transitions.jsonl  (145 records)
+  window_type   HALF_OPEN began with   next transition        n
+  COUNT_BASED   fault_cleared          HALF_OPEN_TO_CLOSED    62
+  COUNT_BASED   fault_cleared          NONE                   10
+  TIME_BASED    fault_active           HALF_OPEN_TO_OPEN      123
+  TIME_BASED    fault_cleared          HALF_OPEN_TO_CLOSED    72
+  TIME_BASED    fault_cleared          NONE                   1
+  HALF_OPEN start minus fault_cleared_at (s), by outcome:
+    COUNT_BASED  HALF_OPEN_TO_CLOSED   min     1.4  max    27.5
+    COUNT_BASED  NONE                  min    12.1  max    27.8
+    TIME_BASED   HALF_OPEN_TO_CLOSED   min     1.1  max    28.2
+    TIME_BASED   HALF_OPEN_TO_OPEN     min -1686.2  max    -2.5
+    TIME_BASED   NONE                  min     1.4  max     1.4
+  bounces that began after clearance: 0; closes that began before clearance: 0 -> SEPARATES_BY_FAULT_STATE

@@ -2007,3 +2007,41 @@ p=0.0005/0.0014, or 8.9×–14.3×.
 horizon defect diagnosed mid-collection, before any corrected count existed) → `4987dee`
 (DEVIATION 02: simplification, verified equivalent) → `5f77cd2` (H3 result) → DEVIATION 02
 correction note (2026-09-22). All on branch `h3-evidence-audit`, not yet merged to `main`.
+
+---
+
+## D28 · The Phase 4B recovery gap is a fault-exposure artifact; H3's recovery-side control is untested; an equal-exposure run (R2) is commissioned
+
+**Date:** 2026-09-29 · **Decided by:** Soham and Jay · **Status:** open until R2 reports (D29)
+**Supersedes:** D26's interpretation (not its numbers) and the 2026-09-22 "H3 falsified" label
+
+**Finding.** `run_experiment_run()` clears the fault only after `generate_load()` returns, and
+`compute_load_plan()` sizes that load by window type: max(3W, 3·n_min, 40) calls at 10 req/s for
+COUNT_BASED (~4-6 s) vs W + D_w + 10 s for TIME_BASED. In Phase 4B the fault stayed on for a median
+3.0-3.2 s after OPEN (COUNT) vs 20.3-47.9 s (TIME). Every HALF_OPEN that began under active fault
+bounced and every one after clearance closed (sidecar: 123/123 and 134/134;
+`recovery_fault_timing_check.py`). A window-type-blind model (HALF_OPEN every D_w; bounce iff the
+fault is still on; fixed 3.5 s / 3.0 s episodes) reproduces bounce count in 72/72 Phase 4B runs,
+and recovery time within 0.6 s (`recovery_exposure_model.py`). Resilience4j 2.2.0 builds HALF_OPEN
+metrics with `CircuitBreakerMetrics.forHalfOpen()`, a fresh COUNT_BASED buffer, whatever the
+configured window type (javap on the pinned jar). Bounce count rising with window size (D22 P1)
+follows from the TIME load plan growing with W.
+
+**Decision.**
+1. In Phase 4B, H3's recovery-side negative control was not tested, because fault exposure was a
+   function of window type and window size. It is reported neither as supported nor as falsified.
+2. The recovery gap is a construct-validity defect with the same root cause as D20: the load plan
+   is sized by the independent variables.
+3. An equal-exposure confirmatory run (R2) is commissioned: fault cleared at OPEN + D_w + 5 s in
+   both arms, continuous 10 req/s load until recovery, the same 24 configurations as Phase 4B.
+   Predictions will be pre-registered before any R2 run. Result recorded as D29.
+
+**Retracted:** "the recovery leak" as a library finding; "a time-based window retains fault
+evidence into recovery"; "COUNT_BASED never bounces, structurally."
+**Corrected:** D26 caveat 3 says the arms were matched on "load". They were not; load duration
+depended on window type. D26's numbers stand as measurements.
+**Unaffected:** H2b/D18 inertness, the two-directions result (D18 + D23), and time_to_open (the
+fault is on from t=0 in both arms).
+
+**Revisit if:** R2 shows a window-type difference in bounce count, or a recovery gap > 1 s in the
+same direction in every stratum.

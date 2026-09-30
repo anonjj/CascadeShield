@@ -260,6 +260,22 @@ Scope: LINEAR + LATENCY, one machine, T50 across window sizes 5/10/20 plus one T
 stratum. Window size is not matched across arms (calls vs seconds). See D26 for the full
 claim-scope statement, which should be reproduced near any figure or table citing this result.
 
+**Update (2026-09-29) — the "FALSIFIED" status above is itself superseded; see
+decision-log.md D28.** The Phase 4B re-collection this section describes did not hold fault
+exposure constant across arms: the harness clears the fault only after its load call returns,
+and that load call is sized by window type (`compute_load_plan`), so the fault stayed active a
+median 3.0–3.2s past OPEN for COUNT_BASED vs 20.3–47.9s for TIME_BASED. Every HALF_OPEN episode
+that began while the fault was still active bounced, and every one that began after clearance
+closed, with no exceptions in the sidecar (`recovery_fault_timing_check.py`); a
+window-type-blind simulation — HALF_OPEN fires `wait_duration` after each (re)open, bounces if
+the fault is still on, closes otherwise, fixed episode durations shared across both arms —
+reproduces the observed bounce count in 72/72 Phase 4B runs and recovery time within 0.6s
+(`recovery_exposure_model.py`). H3's recovery-side negative control was therefore not tested by
+this section's comparison: it is reported neither as supported nor as falsified. The KM medians
+and ratios above stand as measurements; only their attribution to a window-type property is
+withdrawn. An equal-exposure confirmatory run (R2) is commissioned to test the control properly;
+its result will be recorded as D29.
+
 ---
 
 ## 5. $\tau_{\text{leg}}$ is a sensitivity analysis, not a constant

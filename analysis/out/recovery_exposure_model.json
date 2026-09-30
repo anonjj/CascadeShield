@@ -1,0 +1,151 @@
+{
+  "e_fail": 3.5,
+  "e_ok": 3.0,
+  "phase4b": {
+    "summary": {
+      "n": 72,
+      "bounce_exact": 72,
+      "bounce_exact_fraction": "72/72",
+      "recovery_abs_diff_median": 0.18583261966705322,
+      "recovery_abs_diff_max": 0.5973918437957764,
+      "n_with_observed_recovery": 72,
+      "bounce_misses": []
+    },
+    "table": [
+      {
+        "window_type": "COUNT_BASED",
+        "wait_duration": 5,
+        "n": 12,
+        "median_fault_on_after_open_s": 2.9637140035629272,
+        "mean_bounces": 0,
+        "median_observed_recovery_s": 8.14007294178009,
+        "median_predicted_recovery_s": 8.0
+      },
+      {
+        "window_type": "COUNT_BASED",
+        "wait_duration": 15,
+        "n": 12,
+        "median_fault_on_after_open_s": 3.0840845108032227,
+        "mean_bounces": 0,
+        "median_observed_recovery_s": 17.781524419784546,
+        "median_predicted_recovery_s": 18.0
+      },
+      {
+        "window_type": "COUNT_BASED",
+        "wait_duration": 30,
+        "n": 12,
+        "median_fault_on_after_open_s": 3.202221989631653,
+        "mean_bounces": 0,
+        "median_observed_recovery_s": 32.98471736907959,
+        "median_predicted_recovery_s": 33.0
+      },
+      {
+        "window_type": "TIME_BASED",
+        "wait_duration": 5,
+        "n": 12,
+        "median_fault_on_after_open_s": 20.33603346347809,
+        "mean_bounces": 2.25,
+        "median_observed_recovery_s": 25.050590991973877,
+        "median_predicted_recovery_s": 25.0
+      },
+      {
+        "window_type": "TIME_BASED",
+        "wait_duration": 15,
+        "n": 12,
+        "median_fault_on_after_open_s": 31.43068242073059,
+        "mean_bounces": 1.25,
+        "median_observed_recovery_s": 36.53714835643768,
+        "median_predicted_recovery_s": 36.5
+      },
+      {
+        "window_type": "TIME_BASED",
+        "wait_duration": 30,
+        "n": 12,
+        "median_fault_on_after_open_s": 47.94791102409363,
+        "mean_bounces": 1,
+        "median_observed_recovery_s": 66.59436655044556,
+        "median_predicted_recovery_s": 66.5
+      }
+    ]
+  },
+  "older_gateway_clean": {
+    "summary": {
+      "n": 52,
+      "bounce_exact": 49,
+      "bounce_exact_fraction": "49/52",
+      "recovery_abs_diff_median": 0.766381025314331,
+      "recovery_abs_diff_max": 13.185521125793457,
+      "n_with_observed_recovery": 52,
+      "bounce_misses": [
+        {
+          "experiment_id": "LIN-LAT-TIM-T50-W10-D15",
+          "window_type": "TIME_BASED",
+          "fault_on_after_open_s": 65.7,
+          "observed_bounces": 2,
+          "predicted_bounces": 3
+        },
+        {
+          "experiment_id": "LIN-LAT-TIM-T50-W20-D5",
+          "window_type": "TIME_BASED",
+          "fault_on_after_open_s": 701.0,
+          "observed_bounces": 3,
+          "predicted_bounces": 82
+        },
+        {
+          "experiment_id": "LIN-LAT-TIM-T50-W20-D15",
+          "window_type": "TIME_BASED",
+          "fault_on_after_open_s": 2641.0,
+          "observed_bounces": 3,
+          "predicted_bounces": 142
+        }
+      ]
+    },
+    "table": [
+      {
+        "window_type": "COUNT_BASED",
+        "wait_duration": 5,
+        "n": 12,
+        "median_fault_on_after_open_s": 2.423648953437805,
+        "mean_bounces": 0,
+        "median_observed_recovery_s": 6.994662523269653,
+        "median_predicted_recovery_s": 8.0
+      },
+      {
+        "window_type": "COUNT_BASED",
+        "wait_duration": 15,
+        "n": 4,
+        "median_fault_on_after_open_s": 2.6070330142974854,
+        "mean_bounces": 0,
+        "median_observed_recovery_s": 17.410104036331177,
+        "median_predicted_recovery_s": 18.0
+      },
+      {
+        "window_type": "TIME_BASED",
+        "wait_duration": 5,
+        "n": 12,
+        "median_fault_on_after_open_s": 18.977755904197693,
+        "mean_bounces": 2.3333333333333335,
+        "median_observed_recovery_s": 24.612111568450928,
+        "median_predicted_recovery_s": 25.0
+      },
+      {
+        "window_type": "TIME_BASED",
+        "wait_duration": 15,
+        "n": 12,
+        "median_fault_on_after_open_s": 29.577296495437622,
+        "mean_bounces": 1.5,
+        "median_observed_recovery_s": 36.281490445137024,
+        "median_predicted_recovery_s": 36.5
+      },
+      {
+        "window_type": "TIME_BASED",
+        "wait_duration": 30,
+        "n": 12,
+        "median_fault_on_after_open_s": 44.94149351119995,
+        "mean_bounces": 1,
+        "median_observed_recovery_s": 65.77383399009705,
+        "median_predicted_recovery_s": 66.5
+      }
+    ]
+  }
+}

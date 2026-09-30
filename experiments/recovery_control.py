@@ -83,15 +83,12 @@ ORDER_SERVICE = "order"
 ORDER_PORT = R.SERVICE_BREAKERS[ORDER_SERVICE][0]
 ORDER_WATCH_BREAKER = "inventoryServiceCB"
 
-R2_DATASET_PATH = R.BASE_DIR / "data" / "r2_equal_exposure.csv"
-R2_TRANSITIONS_PATH = R.BASE_DIR / "data" / "r2_cb_transitions.jsonl"
-
-R2_EXTRA_COLUMNS = [
-    "open_detected_at", "open_event_at", "fault_clear_offset_s", "fault_cleared_at",
-    "fault_on_after_open_s", "bounce_count", "recovery_event_s", "load_stop_reason",
-    "recovery_censored",
-]
-R2_DATASET_HEADERS = R._with_extra_columns(R2_EXTRA_COLUMNS)
+# R2_DATASET_PATH/R2_TRANSITIONS_PATH/R2_EXTRA_COLUMNS/R2_DATASET_HEADERS now live in
+# runner.py (R.R2_*), not here -- so runner.py's get_dataset_path() and main()'s
+# --mode recovery-control resumability dispatch can reference them directly, the same
+# way every other mode's dataset path/headers are owned by that file. Referenced via
+# the R. prefix throughout this module rather than re-imported under a bare name, so
+# it's always visually obvious which constants are shared with runner.py.
 
 
 # =============================================================================
@@ -231,32 +228,55 @@ def _poll_for_open(port, breaker, stop_polling, poll_interval=OPEN_POLL_INTERVAL
 
 
 def run_recovery_control_experiment(config, topology, replicate, fault_type="latency",
-                                     machine_id="", inject_point=None):
-    """One R2 run. Mirrors run_experiment_run's setup (env write, container recreate,
-    readiness, breaker-reset precondition, warmup, pre-fault baseline) exactly -- only
-    steps 5-7 (compute_load_plan-sized load, then observer.observe_recovery's
-    poll/probe pair) are replaced, with this mode's own continuous-load + OPEN-poll +
-    clear-timer + stop-watcher machinery.
+                                     machine_id="", inject_point=None,
+                                     run_order_seed=None, run_index=None):
+    """One R2 run. Setup (steps 1-2b: apply config to containers, readiness, breaker
+    reset, precondition check) calls runner.setup_and_check_precondition -- the EXACT
+    same function run_experiment_run calls, not a hand copy -- so the two paths cannot
+    silently drift out of parity (see that function's own docstring for what it does
+    and what it returns). Only steps 5-7 (compute_load_plan-sized load, then
+    observer.observe_recovery's poll/probe pair) are replaced, with this mode's own
+    continuous-load + OPEN-poll + clear-timer + stop-watcher machinery.
 
-    Never called by any existing mode's code path -- only runs if a caller explicitly
-    imports and calls this function, or via this file's own __main__ block."""
+    run_order_seed/run_index mirror run_experiment_run's own parameters of the same
+    name -- this run's place in the shuffled execution order, attached to every
+    written row (including the abort path) for the same resumability/audit reason.
+
+    Never called by any existing mode's code path -- only runs via --mode
+    recovery-control (runner.py main()) or a caller that imports and calls this
+    function directly."""
     effective_inject_point = R.resolve_inject_point(inject_point, "recovery-control")
 
-    R.write_env_file(config)
-    if not R.update_containers():
-        print("Skipping run due to Docker compose failure.", file=sys.stderr)
-        return False
-
-    all_ready, readiness_wait_s = R.wait_for_readiness()
-    if not all_ready:
-        print("Skipping run: not all six services became healthy within the readiness "
-              "deadline.", file=sys.stderr)
-        return False
-
-    R.reset_all_breakers()
-    precondition = R.check_breaker_precondition()
-    if not precondition["ok"]:
-        print(f"PRECONDITION_FAIL: {precondition['fail_reason']}", file=sys.stderr)
+    setup = R.setup_and_check_precondition(config)
+    readiness_wait_s = setup["readiness_wait_s"]
+    if not setup["ok"]:
+        if setup["fail_reason"] == "DOCKER_COMPOSE_FAILURE":
+            # Matches run_experiment_run exactly: update_containers() failing has
+            # never produced a logged row at this call site either.
+            return False
+        row = {
+            "experiment_id": R.make_experiment_id(topology, fault_type, config, mode="recovery-control"),
+            "topology": topology.upper(),
+            "fault_type": fault_type.upper(),
+            "window_type": config["slidingWindowType"],
+            "threshold": config["failureRateThreshold"],
+            "window_size": config["slidingWindowSize"],
+            "wait_duration": config["waitDurationInOpenState"],
+            "permitted_calls_half_open": R.PERMITTED_CALLS_HALF_OPEN,
+            "environment": R.ENVIRONMENT,
+            "mode": "recovery-control",
+            "replicate": replicate,
+            "run_timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "precondition_ok": False,
+            "precondition_fail_reason": setup["fail_reason"],
+            "readiness_wait_s": f"{readiness_wait_s:.3f}" if readiness_wait_s is not None else "",
+            "machine_id": machine_id or R.MACHINE_ID,
+        }
+        if setup["cb_state_pre"] is not None:
+            row["cb_state_pre"] = R._serialize_cb_map(setup["cb_state_pre"])
+            row["buffered_calls_pre"] = R._serialize_cb_map(setup["buffered_calls_pre"])
+        os.makedirs(R.R2_DATASET_PATH.parent, exist_ok=True)
+        append_row(R.R2_DATASET_PATH, row, R.R2_DATASET_HEADERS)
         return False
 
     endpoint = f"http://localhost:8080/api/v1/{topology}"
@@ -386,12 +406,16 @@ def run_recovery_control_experiment(config, topology, replicate, fault_type="lat
         "precondition_ok": True,
         "precondition_fail_reason": "",
         "readiness_wait_s": f"{readiness_wait_s:.3f}",
+        "cb_state_pre": R._serialize_cb_map(setup["cb_state_pre"]),
+        "buffered_calls_pre": R._serialize_cb_map(setup["buffered_calls_pre"]),
         "warmup_requests": warmup_requests,
         "warmup_duration_s": f"{warmup_duration_s:.3f}",
         "lambda_target": target_rps,
         "lambda_achieved": lambda_achieved if lambda_achieved is not None else "",
         "lambda_cv": lambda_cv if lambda_cv is not None else "",
         "machine_id": machine_id or R.MACHINE_ID,
+        "run_order_seed": run_order_seed if run_order_seed is not None else "",
+        "run_index": run_index if run_index is not None else "",
         "open_detected_at": state["open_detected_at"] if state["open_detected_at"] is not None else "",
         "open_event_at": open_event_at or "",
         "fault_clear_offset_s": R2_CLEAR_OFFSET_S,
@@ -402,9 +426,9 @@ def run_recovery_control_experiment(config, topology, replicate, fault_type="lat
         "load_stop_reason": state["load_stop_reason"] or "",
         "recovery_censored": state["recovery_censored"],
     }
-    os.makedirs(R2_DATASET_PATH.parent, exist_ok=True)
-    append_row(R2_DATASET_PATH, row, R2_DATASET_HEADERS)
-    observer.log(R2_TRANSITIONS_PATH, experiment_id, topology, fault_type, config,
+    os.makedirs(R.R2_DATASET_PATH.parent, exist_ok=True)
+    append_row(R.R2_DATASET_PATH, row, R.R2_DATASET_HEADERS)
+    observer.log(R.R2_TRANSITIONS_PATH, experiment_id, topology, fault_type, config,
                  "recovery-control", replicate, fault_injected_at,
                  R._now_iso() if state["fault_cleared_at"] is not None else "",
                  transitions, machine_id=machine_id)
@@ -519,9 +543,56 @@ def self_test():
     print()
     print("R2_DATASET_HEADERS sanity")
     check("R2 headers are DATASET_HEADERS + the 9 new columns, excluded_reason still last",
-          R2_DATASET_HEADERS[-1] == "excluded_reason"
-          and set(R2_EXTRA_COLUMNS) <= set(R2_DATASET_HEADERS)
-          and len(R2_DATASET_HEADERS) == len(R.DATASET_HEADERS) + len(R2_EXTRA_COLUMNS))
+          R.R2_DATASET_HEADERS[-1] == "excluded_reason"
+          and set(R.R2_EXTRA_COLUMNS) <= set(R.R2_DATASET_HEADERS)
+          and len(R.R2_DATASET_HEADERS) == len(R.DATASET_HEADERS) + len(R.R2_EXTRA_COLUMNS))
+
+    print()
+    print("T6: the config applied to the containers differs between a TIME_BASED and a "
+          "COUNT_BASED run in window type and size ONLY -- reads write_env_file's real "
+          "output (via runner.ENV_PATH, monkeypatched to a temp file for this check "
+          "only; the real infra/.env is never touched)")
+    import tempfile
+    real_env_path = R.ENV_PATH
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_env = Path(tmpdir) / "test.env"
+        R.ENV_PATH = tmp_env
+        try:
+            count_config = {"slidingWindowType": "COUNT_BASED", "slidingWindowSize": 5,
+                             "failureRateThreshold": 50, "waitDurationInOpenState": 15,
+                             "minimumNumberOfCalls": 5}
+            R.write_env_file(count_config)
+            count_env = tmp_env.read_text()
+
+            time_config = {"slidingWindowType": "TIME_BASED", "slidingWindowSize": 20,
+                            "failureRateThreshold": 50, "waitDurationInOpenState": 15,
+                            "minimumNumberOfCalls": 5}
+            R.write_env_file(time_config)
+            time_env = tmp_env.read_text()
+        finally:
+            R.ENV_PATH = real_env_path
+
+    def parse_env(text):
+        return dict(line.split("=", 1) for line in text.strip().splitlines()
+                    if line and not line.startswith("#"))
+
+    count_vars = parse_env(count_env)
+    time_vars = parse_env(time_env)
+    check("both configs produce the same set of CB_* keys",
+          set(count_vars) == set(time_vars))
+    differing_keys = {k for k in count_vars if count_vars[k] != time_vars.get(k)}
+    check("exactly CB_SLIDING_WINDOW_TYPE and CB_SLIDING_WINDOW_SIZE differ",
+          differing_keys == {"CB_SLIDING_WINDOW_TYPE", "CB_SLIDING_WINDOW_SIZE"})
+    check("every other CB_* var (threshold, wait duration, minimum calls, "
+          "permitted-calls-in-half-open, event buffer size) is identical across arms",
+          all(count_vars[k] == time_vars[k] for k in count_vars
+              if k not in ("CB_SLIDING_WINDOW_TYPE", "CB_SLIDING_WINDOW_SIZE")))
+    check("CB_PERMITTED_CALLS_HALF_OPEN is present and sourced from the module constant "
+          "(not swept, not config-dependent)",
+          count_vars.get("CB_PERMITTED_CALLS_HALF_OPEN") == str(R.PERMITTED_CALLS_HALF_OPEN)
+          == time_vars.get("CB_PERMITTED_CALLS_HALF_OPEN"))
+    check("the real infra/.env was never touched (ENV_PATH restored)",
+          R.ENV_PATH == real_env_path)
 
     return ok
 

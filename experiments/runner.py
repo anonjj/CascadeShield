@@ -35,6 +35,12 @@ DATASET_PATH = Path(os.environ["DATASET_PATH_OVERRIDE"]) if os.environ.get("DATA
 CANARY_DATASET_PATH = BASE_DIR / "data" / "canary_runs.csv"
 SWEEP_DATASET_PATH = BASE_DIR / "data" / "crash_toxicity_sweep.csv"
 OCCUPANCY_DATASET_PATH = BASE_DIR / "data" / "occupancy_dataset.csv"
+# R2 equal-exposure mode (recovery_control.py) -- own file, own sidecar, never
+# master_dataset.csv. Path constants live here (not in recovery_control.py) so
+# get_dataset_path()/main()'s resumability dispatch below can reference them
+# directly, the same way every other mode's dataset path is owned by this file.
+R2_DATASET_PATH = BASE_DIR / "data" / "r2_equal_exposure.csv"
+R2_TRANSITIONS_PATH = BASE_DIR / "data" / "r2_cb_transitions.jsonl"
 STATUS_PATH = BASE_DIR / "data" / "run_status.json"
 ENV_PATH = BASE_DIR / "infra" / ".env"
 COMPOSE_FILE_PATH = BASE_DIR / "infra" / "docker-compose.yml"
@@ -179,6 +185,16 @@ SWEEP_DATASET_HEADERS = _with_extra_columns(["injected_toxicity"])
 # the incident resumable_runner.py's load_completed() now fails loudly on instead of
 # silently.
 OCCUPANCY_DATASET_HEADERS = _with_extra_columns(["occupancy_ratio", "inert"])
+
+# R2 equal-exposure mode (mode="recovery-control"): same base columns as master, plus
+# the fault-exposure/recovery-timing diagnostics recovery_control.py's model needs.
+# Own file (R2_DATASET_PATH above), same reasoning as SWEEP/OCCUPANCY_DATASET_HEADERS.
+R2_EXTRA_COLUMNS = [
+    "open_detected_at", "open_event_at", "fault_clear_offset_s", "fault_cleared_at",
+    "fault_on_after_open_s", "bounce_count", "recovery_event_s", "load_stop_reason",
+    "recovery_censored",
+]
+R2_DATASET_HEADERS = _with_extra_columns(R2_EXTRA_COLUMNS)
 
 # (experiment_id, str(replicate)) pairs already written to the current run's dataset
 # file -- populated once at the top of main() via resumable_runner.load_completed(),
@@ -856,6 +872,61 @@ def check_breaker_precondition():
         "buffered_calls": buffered_calls,
     }
 
+
+def setup_and_check_precondition(config):
+    """Steps 1-2b of every experiment run -- apply the config to the containers,
+    verify readiness, reset breakers, verify the reset took -- factored out of
+    run_experiment_run so any other orchestrator (recovery_control.py's
+    run_recovery_control_experiment) calls this SAME function instead of a hand
+    copy that can silently drift out of parity with it.
+
+    Applying the config is write_env_file(config) + update_containers(): this is
+    what actually carries slidingWindowType, slidingWindowSize, failureRateThreshold,
+    waitDurationInOpenState and minimumNumberOfCalls into the containers via
+    infra/.env's CB_* vars (write_env_file's own docstring lists exactly these
+    fields); permitted-calls-in-half-open is CB_PERMITTED_CALLS_HALF_OPEN, sourced
+    from the module constant PERMITTED_CALLS_HALF_OPEN rather than from `config` --
+    it's a fixed baseline, not swept, same as every existing caller already treats it.
+
+    Returns {"ok": bool, "fail_reason": str | None, "readiness_wait_s": float | None,
+    "cb_state_pre": dict | None, "buffered_calls_pre": dict | None}. fail_reason is
+    None only when ok is True. cb_state_pre/buffered_calls_pre are populated
+    whenever check_breaker_precondition() actually ran -- ON SUCCESS too (the clean
+    CLOSED state it confirmed is exactly as recordable as the dirty state that fails
+    it; run_experiment_run's own success-path row has always written this) -- and
+    are None only for the two earlier abort points, where no precondition read was
+    ever taken. Deliberately does NOT call log_results or write any row itself --
+    callers write to different files with different headers (the master/canary/
+    sweep/occupancy CSVs vs recovery_control.py's own r2_equal_exposure.csv), so
+    row-writing has to stay a caller concern. On a Docker compose failure this
+    returns fail_reason="DOCKER_COMPOSE_FAILURE" without writing anything --
+    update_containers() failing has never produced a logged row at this call site
+    (pre-existing behavior, unchanged by this refactor, see run_experiment_run's own
+    handling of it below)."""
+    write_env_file(config)
+    if not update_containers():
+        print("Skipping run due to Docker compose failure.", file=sys.stderr)
+        return {"ok": False, "fail_reason": "DOCKER_COMPOSE_FAILURE",
+                "readiness_wait_s": None, "cb_state_pre": None, "buffered_calls_pre": None}
+
+    all_ready, readiness_wait_s = wait_for_readiness()
+    if not all_ready:
+        print("Skipping run: not all six services became healthy within the readiness deadline.",
+              file=sys.stderr)
+        return {"ok": False, "fail_reason": "READINESS_TIMEOUT",
+                "readiness_wait_s": readiness_wait_s, "cb_state_pre": None, "buffered_calls_pre": None}
+
+    reset_all_breakers()
+    precondition = check_breaker_precondition()
+    if not precondition["ok"]:
+        print(f"PRECONDITION_FAIL: {precondition['fail_reason']}", file=sys.stderr)
+    return {"ok": precondition["ok"],
+            "fail_reason": None if precondition["ok"] else precondition["fail_reason"],
+            "readiness_wait_s": readiness_wait_s,
+            "cb_state_pre": precondition["cb_state"],
+            "buffered_calls_pre": precondition["buffered_calls"]}
+
+
 # _fetch_breaker_events, snapshot_breaker_event_counts, collect_new_transitions, and
 # log_cb_transitions moved to breaker_observer.py's BreakerObserver class (D12
 # architecture cleanup) -- they had no callers outside run_experiment_run below, and
@@ -1049,14 +1120,16 @@ def write_status(status):
     os.replace(tmp_path, STATUS_PATH)
 
 def get_dataset_path(mode):
-    """canary writes to a disposable file, sweep/occupancy write to their own isolated
-    files, and full writes to the real research dataset."""
+    """canary writes to a disposable file, sweep/occupancy/recovery-control write to
+    their own isolated files, and full writes to the real research dataset."""
     if mode == "canary":
         return CANARY_DATASET_PATH
     if mode == "sweep":
         return SWEEP_DATASET_PATH
     if mode == "occupancy":
         return OCCUPANCY_DATASET_PATH
+    if mode == "recovery-control":
+        return R2_DATASET_PATH
     return DATASET_PATH
 
 def _fmt(metrics, key, decimals=4):
@@ -1206,49 +1279,27 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
     # distinguish runs at a non-default inject point.
     effective_inject_point = resolve_inject_point(inject_point, mode)
 
-    # 1. Update environments
-    write_env_file(config)
-    if not update_containers():
-        print("Skipping run due to Docker compose failure.", file=sys.stderr)
-        return False
-
-    # 2. Verify all six containers came up -- including shared-db-service, which has
-    #    no breaker of its own but sits in every call chain (see wait_for_readiness).
-    all_ready, readiness_wait_s = wait_for_readiness()
-    if not all_ready:
-        print("Skipping run: not all six services became healthy within the readiness deadline.",
-              file=sys.stderr)
-        log_results(config, fault_type, mode, topology, {
+    # 1-2b. Apply the config to the containers, verify readiness, reset breakers,
+    # verify the reset took -- setup_and_check_precondition (factored out so
+    # recovery_control.py's run_recovery_control_experiment calls this exact
+    # function instead of a hand copy; see that function's own docstring).
+    setup = setup_and_check_precondition(config)
+    readiness_wait_s = setup["readiness_wait_s"]
+    if not setup["ok"]:
+        if setup["fail_reason"] == "DOCKER_COMPOSE_FAILURE":
+            return False
+        row = {
             "precondition_ok": False,
-            "precondition_fail_reason": "READINESS_TIMEOUT",
+            "precondition_fail_reason": setup["fail_reason"],
             "readiness_wait_s": readiness_wait_s,
-                        "run_order_seed": run_order_seed,
+            "run_order_seed": run_order_seed,
             "run_index": run_index,
             "injected_toxicity": toxicity,
-        }, replicate, machine_id=machine_id)
-        return False
-
-    # 2b. Breaker-state-reset precondition (see the "Breaker-state-reset precondition"
-    #    block above get_blast_radius() for the full rationale). update_containers()
-    #    already force-recreates every container every run, which SHOULD reset
-    #    Resilience4j's in-memory registry to CLOSED -- this makes that explicit via
-    #    the actuator instead of trusting it blindly, then verifies the result before
-    #    any fault is injected. A run that fails this check measures nothing real and
-    #    is aborted rather than silently recorded as if it started clean.
-    reset_all_breakers()
-    precondition = check_breaker_precondition()
-    if not precondition["ok"]:
-        print(f"PRECONDITION_FAIL: {precondition['fail_reason']}", file=sys.stderr)
-        log_results(config, fault_type, mode, topology, {
-            "precondition_ok": False,
-            "precondition_fail_reason": precondition["fail_reason"],
-            "readiness_wait_s": readiness_wait_s,
-            "cb_state_pre": _serialize_cb_map(precondition["cb_state"]),
-            "buffered_calls_pre": _serialize_cb_map(precondition["buffered_calls"]),
-                        "run_order_seed": run_order_seed,
-            "run_index": run_index,
-            "injected_toxicity": toxicity,
-        }, replicate, machine_id=machine_id)
+        }
+        if setup["cb_state_pre"] is not None:
+            row["cb_state_pre"] = _serialize_cb_map(setup["cb_state_pre"])
+            row["buffered_calls_pre"] = _serialize_cb_map(setup["buffered_calls_pre"])
+        log_results(config, fault_type, mode, topology, row, replicate, machine_id=machine_id)
         return False
 
     # Snapshot each interior breaker's actuator ring buffer before the fault, via
@@ -1435,8 +1486,8 @@ def run_experiment_run(config, fault_type, mode, topology="linear", replicate=1,
         "precondition_ok": True,
         "precondition_fail_reason": "",
         "readiness_wait_s": readiness_wait_s,
-        "cb_state_pre": _serialize_cb_map(precondition["cb_state"]),
-        "buffered_calls_pre": _serialize_cb_map(precondition["buffered_calls"]),
+        "cb_state_pre": _serialize_cb_map(setup["cb_state_pre"]),
+        "buffered_calls_pre": _serialize_cb_map(setup["buffered_calls_pre"]),
         "warmup_requests": warmup_requests,
         "warmup_duration_s": warmup_duration_s,
         "run_order_seed": run_order_seed,
@@ -1607,13 +1658,18 @@ def _status_snapshot(args, total_configs, total_runs, started_at, success_runs, 
 
 def main():
     parser = argparse.ArgumentParser(description="CascadeShield Parameter Sweep Automation Runner")
-    parser.add_argument("--mode", choices=["canary", "full", "sweep", "occupancy"], default="canary",
+    parser.add_argument("--mode", choices=["canary", "full", "sweep", "occupancy", "recovery-control"],
+                         default="canary",
                          help="canary (5 configs × 3 replicates = 15 runs), full (54 configs × 3 replicates "
                               "= 162 runs per fault type; 324 total across 2 faults), sweep (crash toxicity "
                               "sweep -- writes to data/crash_toxicity_sweep.csv, not master; use with "
-                              "--fault crash --toxicity), or occupancy (D7 lambda-sweep, 54 configs × "
+                              "--fault crash --toxicity), occupancy (D7 lambda-sweep, 54 configs × "
                               "replicates -- writes to data/occupancy_dataset.csv, not master; use with "
-                              "--fault latency --topology linear)")
+                              "--fault latency --topology linear), or recovery-control (R2 equal-exposure "
+                              "confirmatory run, decision-log D28/D29 -- same 54-config grid as full, "
+                              "pair with --only-ids docs/paper/phase4b_only_ids.txt for the Phase 4B "
+                              "configs; writes to data/r2_equal_exposure.csv / "
+                              "data/r2_cb_transitions.jsonl, never master; see recovery_control.py)")
     parser.add_argument("--fault", choices=["latency", "crash", "none"], default="latency",
                          help="Fault type to inject. 'none' is the no-fault control condition -- "
                               f"requires --replicates >= {MIN_NONE_FAULT_REPLICATES} (see MIN_NONE_FAULT_REPLICATES).")
@@ -1713,6 +1769,8 @@ def main():
         dataset_headers = SWEEP_DATASET_HEADERS
     elif args.mode == "occupancy":
         dataset_headers = OCCUPANCY_DATASET_HEADERS
+    elif args.mode == "recovery-control":
+        dataset_headers = R2_DATASET_HEADERS
     else:
         dataset_headers = DATASET_HEADERS
     completed_runs = load_completed(dataset_path, dataset_headers)
@@ -1771,10 +1829,23 @@ def main():
         write_status(_status_snapshot(
             args, len(configs), total_runs, started_at, success_runs, failed_runs, "running", _now_iso(),
             run_number=run_number, config_index=i, current_config=config, replicate=rep))
-        success = run_experiment_run(config, args.fault, args.mode, args.topology, replicate=rep,
-                                      run_order_seed=run_order_seed, run_index=run_index,
-                                      toxicity=args.toxicity, machine_id=args.machine_id,
-                                      inject_point=args.inject_point)
+        if args.mode == "recovery-control":
+            # Deferred import: recovery_control.py does `import runner as R` at
+            # module level, so importing it back at runner.py's own module level
+            # would be circular. Importing here (inside main(), at call time, only
+            # when this mode is actually selected) is safe -- runner.py is already
+            # fully loaded by the time this line runs -- and keeps every other
+            # mode's import graph completely unchanged.
+            from recovery_control import run_recovery_control_experiment
+            success = run_recovery_control_experiment(
+                config, args.topology, rep, fault_type=args.fault,
+                machine_id=args.machine_id, inject_point=args.inject_point,
+                run_order_seed=run_order_seed, run_index=run_index)
+        else:
+            success = run_experiment_run(config, args.fault, args.mode, args.topology, replicate=rep,
+                                          run_order_seed=run_order_seed, run_index=run_index,
+                                          toxicity=args.toxicity, machine_id=args.machine_id,
+                                          inject_point=args.inject_point)
         if success:
             success_runs += 1
         else:

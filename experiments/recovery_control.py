@@ -594,6 +594,38 @@ def self_test():
     check("the real infra/.env was never touched (ENV_PATH restored)",
           R.ENV_PATH == real_env_path)
 
+    print()
+    print("T7: R2's config set is pinned to exactly the 24 Phase 4B experiment_ids -- "
+          "runner.py's PHASE4B_ONLY_IDS_PATH / load_only_ids_file / "
+          "validate_only_ids_subset (independent of argparse/main())")
+    phase4b_ids = R.load_only_ids_file(R.PHASE4B_ONLY_IDS_PATH)
+    check("PHASE4B_ONLY_IDS_PATH points at docs/paper/phase4b_only_ids.txt",
+          R.PHASE4B_ONLY_IDS_PATH.name == "phase4b_only_ids.txt")
+    check("the default set has exactly 24 ids", len(phase4b_ids) == 24)
+    # Independent re-parse of the same file (not reusing load_only_ids_file), so this
+    # isn't just checking the loader agrees with itself.
+    with open(R.PHASE4B_ONLY_IDS_PATH) as f:
+        raw_ids = {line.split("#", 1)[0].strip() for line in f}
+    raw_ids.discard("")
+    check("load_only_ids_file's output matches an independent line-by-line re-parse "
+          "of the same file", phase4b_ids == raw_ids)
+    check("a known real id (from the task's own canary list) is in the default set",
+          "LIN-LAT-CNT-T50-W5-D5" in phase4b_ids)
+
+    ok_subset, out_of_set = R.validate_only_ids_subset(
+        {"LIN-LAT-CNT-T50-W5-D5", "LIN-LAT-TIM-T50-W5-D5"}, phase4b_ids)
+    check("two real Phase 4B ids validate as a clean subset", ok_subset and not out_of_set)
+
+    ok_bad, out_of_set_bad = R.validate_only_ids_subset(
+        {"LIN-LAT-CNT-T50-W5-D5", "NOT-A-REAL-PHASE4B-ID"}, phase4b_ids)
+    check("an out-of-set id is rejected", not ok_bad)
+    check("the rejection names exactly the offending id, not the whole request",
+          out_of_set_bad == {"NOT-A-REAL-PHASE4B-ID"})
+
+    ok_all, out_of_set_all = R.validate_only_ids_subset(phase4b_ids, phase4b_ids)
+    check("the full 24-id set validates against itself (the --mode recovery-control "
+          "default with no --only-ids override)", ok_all and not out_of_set_all)
+
     return ok
 
 

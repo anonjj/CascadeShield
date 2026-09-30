@@ -196,6 +196,37 @@ R2_EXTRA_COLUMNS = [
 ]
 R2_DATASET_HEADERS = _with_extra_columns(R2_EXTRA_COLUMNS)
 
+# R2's config set is pinned to exactly these 24 Phase 4B experiment_ids -- the default
+# --only-ids for --mode recovery-control (main() below). Relying on
+# generate_combinations()'s full 54-config grid plus an OPTIONAL --only-ids meant a bare
+# `--mode recovery-control` (no --only-ids) would silently sweep all 54 configs instead
+# of the 24 this mode exists to re-run under equal exposure.
+PHASE4B_ONLY_IDS_PATH = BASE_DIR / "docs" / "paper" / "phase4b_only_ids.txt"
+
+
+def load_only_ids_file(path):
+    """Parses a --only-ids-style file: one experiment_id per line, '#'-comments
+    stripped, blanks discarded. Factored out of main()'s --only-ids handling so R2's
+    default-to-Phase-4B-set logic (below) and an explicit file-based --only-ids parse
+    identically -- one rule, not two copies that could drift."""
+    with open(path) as f:
+        wanted = {line.split("#", 1)[0].strip() for line in f}
+    wanted.discard("")
+    return wanted
+
+
+def validate_only_ids_subset(requested_ids, allowed_ids):
+    """True iff every id in requested_ids is also in allowed_ids. Pure and
+    argparse-independent so it's directly self-testable (T7, recovery_control.py)
+    without going through main()'s CLI parsing. Returns (ok, out_of_set) -- out_of_set
+    is the actual offending ids, not just a bool, so a caller can report exactly which
+    ones and why (almost certainly a typo or a copy-paste from the wrong file, not a
+    deliberate expansion of scope -- R2's whole point is equal exposure on the Phase 4B
+    configs specifically)."""
+    out_of_set = set(requested_ids) - set(allowed_ids)
+    return (not out_of_set, out_of_set)
+
+
 # (experiment_id, str(replicate)) pairs already written to the current run's dataset
 # file -- populated once at the top of main() via resumable_runner.load_completed(),
 # and grown by log_results() after each successful append_row(). Lets a restarted
@@ -1734,6 +1765,24 @@ def main():
         sys.exit(1)
         
     configs = generate_combinations(args.mode)
+    if args.mode == "recovery-control":
+        # Pin the config set (see PHASE4B_ONLY_IDS_PATH above): an explicit --only-ids
+        # is still allowed, but only as a SUBSET of the 24 Phase 4B ids -- refuse
+        # otherwise rather than silently running whatever happened to match.
+        phase4b_ids = load_only_ids_file(PHASE4B_ONLY_IDS_PATH)
+        if args.only_ids:
+            requested = (load_only_ids_file(args.only_ids) if os.path.isfile(args.only_ids)
+                         else {tok.strip() for tok in args.only_ids.split(",")})
+            requested.discard("")
+            ok, out_of_set = validate_only_ids_subset(requested, phase4b_ids)
+            if not ok:
+                print(f"--only-ids names {len(out_of_set)} id(s) outside the 24 Phase 4B "
+                      f"configs ({sorted(out_of_set)}) -- --mode recovery-control only runs "
+                      f"the Phase 4B set ({PHASE4B_ONLY_IDS_PATH}). Remove them, or drop "
+                      "--only-ids entirely to use the full 24-id default.", file=sys.stderr)
+                sys.exit(1)
+        else:
+            args.only_ids = str(PHASE4B_ONLY_IDS_PATH)
     if args.only_ids:
         if os.path.isfile(args.only_ids):
             with open(args.only_ids) as f:

@@ -2045,3 +2045,85 @@ fault is on from t=0 in both arms).
 
 **Revisit if:** R2 shows a window-type difference in bounce count, or a recovery gap > 1 s in the
 same direction in every stratum.
+
+**Update (2026-10-01).** R2 reported; see D29. Neither revisit condition fired.
+
+---
+
+## D29 · R2 equal-exposure confirmatory run: H3's recovery-side control passes; the 2026-09-22 "H3 falsified" / "recovery leak" interpretation is retracted
+
+**Date:** 2026-10-01 · **Decided by:** Soham and Jay · **Status:** closed
+**Supersedes:** The 2026-09-22 "H3 falsified" / "recovery leak" interpretation (D26's framing,
+also carried in `PAPER_BRIEF.md` §V-D and `PAPER_DRAFT_NOTES.md` §28). D26's and D28's raw
+numbers are unaffected.
+
+**Design.** Pre-registered before the first usable run (`docs/paper/r2-equal-exposure-plan.md`,
+commit `9964211`). Fault cleared at `OPEN + D_w + 5s` identically in both arms (vs Phase 4B's
+window-type-dependent clearing, D28), continuous 10 req/s load until recovery, the same 24
+Phase 4B configurations × 3 replicates = 72 runs, LINEAR + LATENCY, one host (`jay-mac`, arm64),
+seed 20260929. Four canary rows collected before the plan existed were discarded and quarantined
+(`data/audit/r2_canary_20260930/`), not analyzed. 72/72 runs completed, 0 excluded under any of
+the plan's 5 exclusion rules (aborted runs, gateway trip, not VERIFIED_CLEAN, implausible
+duration, `lambda_deviation_flag`); 72/72 independently VERIFIED_CLEAN against the gateway
+poller (0 non-CLOSED ticks observed across the sweep).
+
+**Result.**
+1. **P1 (bounce count).** Exactly 1 bounce per run, both arms, all three $D_w$ strata (72/72).
+   Phase 4B's COUNT_BASED non-bounce result (0/18) is attributed to unequal fault exposure (D28),
+   not an inherent COUNT_BASED/ring-buffer limitation.
+2. **P2 (arm difference), primary evidence** — per-stratum median diff vs the pre-registered 1 s
+   threshold, with between-config SD (the spread of the 4 config means the median is taken over):
+   - $D_w$=5: TIME 13.927 s vs COUNT 13.968 s, diff 0.040 s (SD 0.021 / 0.022)
+   - $D_w$=15: TIME 33.913 s vs COUNT 33.942 s, diff 0.029 s (SD 0.029 / 0.034)
+   - $D_w$=30: TIME 63.940 s vs COUNT 63.840 s, diff 0.101 s (SD 0.052 / 0.102)
+
+   All three strata pass the <1 s threshold; every diff is the same order of magnitude as each
+   arm's own between-config spread — the numbers are not artificially precise. Direction signs
+   are mixed (COUNT higher at $D_w$=5/15, TIME higher at $D_w$=30), reported as observed rather
+   than smoothed over; the magnitudes involved are small relative to the threshold regardless of
+   sign.
+3. **P2, secondary evidence.** `stratified_cluster_permutation_test`: statistic=6.0,
+   p=0.365773 (exact floor 0.000006, 343,000 total assignments) — non-significant. Per the
+   pre-registered statistical treatment (§5), this does not by itself establish equivalence; the
+   primary evidence for P2 is the per-stratum median-difference check above.
+4. **Falsification check (§3).** Neither condition triggers: bounce counts do not differ
+   systematically by window type, and no recovery gap over 1 s appears in the same direction
+   across all three strata.
+5. **Descriptive, not a test (§4).** Phase 4B's fitted episode constants (E_FAIL=3.5s,
+   E_OK=3.0s, fitted on soham-local/x86) predict 16.5/36.5/66.5 s at $D_w$=5/15/30; observed
+   medians run ~2.5-2.6 s lower at every stratum, implying an episode-sum ≈3.9 s on jay-mac
+   (arm64) — consistent with the R2 canary's own indication that these constants are
+   host-specific. R2's gateway image differs from Phase 4B's (`sha256:c281f7db…` vs
+   `sha256:ce110c0a…`, `data/audit/r2_image_manifest.json`), so this is reported as a
+   host-constant difference, not compared to Phase 4B in absolute terms.
+
+**Decision.**
+1. H3's recovery-side negative control passes under equal exposure: window type does not reach
+   recovery, matching D28's model.
+2. The 2026-09-22 "H3 falsified" conclusion (D26's framing) is retracted as a harness artifact —
+   the recovery difference Phase 4B observed was unequal fault exposure (D28), not a
+   Resilience4j window-type/library effect. Chronology: Phase 4B appeared to falsify H3
+   (2026-09-22) → D28 showed the comparison was confounded, so H3 was neither supported nor
+   falsified on recovery → R2 removes the confound and the control passes.
+3. This is a construct-validity/instrumentation-defect finding (§VI class, not a current §V
+   result): diagnosed by inspection (D28), modeled (`recovery_exposure_model.py`), and confirmed
+   by a dedicated pre-registered confirmatory experiment (R2) — distinct from defects closed by
+   inspection alone.
+
+**Retracted (as current library findings — historical mentions remain, labeled superseded):**
+"the recovery leak"; "a time-based window retains fault evidence into recovery"; "COUNT_BASED
+never bounces, structurally."
+**Corrected:** none beyond D28's corrections — R2 adds a confirmatory result, it does not change
+any Phase 4B number.
+**Unaffected:** H2b/D18 inertness, the two-directions result (D18 + D23), and `time_to_open`.
+
+**Scope.** LINEAR + LATENCY, one machine (`jay-mac`, arm64, Docker in a VM), threshold 50 at
+window sizes 5/10/20 plus one threshold-70 probe per stratum, database state not reset between
+runs. R2 numbers are not directly comparable in absolute terms to Phase 4B's (different gateway
+image/host, §8 of the pre-registration plan); every R2 claim is a within-R2 comparison between
+arms.
+
+**Provenance.** Pre-registration `docs/paper/r2-equal-exposure-plan.md`, commit `9964211`
+(predates the first R2 run — `data/audit/r2_launch_manifest.json`). Sweep output `19697a1`.
+Analysis `analysis/r2_equal_exposure_analysis.py`, commits `a4779ec` (primary) and `dba08eb`
+(within-arm dispersion addition). Branch `experiment/r2-equal-exposure`, not yet on `main`.

@@ -276,6 +276,27 @@ and ratios above stand as measurements; only their attribution to a window-type 
 withdrawn. An equal-exposure confirmatory run (R2) is commissioned to test the control properly;
 its result will be recorded as D29.
 
+**Update (2026-10-01) — R2 completed; H3's recovery-side control passes under equal exposure
+(decision-log.md D29). The "FALSIFIED" status and "the recovery leak" framing above are
+retracted as a harness artifact, not a library finding.** 72/72 pre-registered runs
+(`docs/paper/r2-equal-exposure-plan.md`, commit `9964211`), fault cleared identically in both
+arms. Both arms bounced exactly once in every run, every stratum (P1, 72/72) — Phase 4B's
+COUNT_BASED non-bounce result (0/18) is attributed to unequal fault exposure, not an inherent
+COUNT_BASED property. Per-stratum median recovery differs by 0.040s/0.029s/0.101s at
+$D_w$=5/15/30, all under the pre-registered 1s equivalence threshold and the same order of
+magnitude as each arm's own between-config spread (SD 0.021-0.102s); direction signs are mixed
+across strata (not all COUNT-faster or all TIME-faster) and are reported as observed. The
+secondary `stratified_cluster_permutation_test` is non-significant (p=0.366) and, per §5 of the
+pre-registration, does not by itself establish equivalence — the primary evidence is the
+per-stratum median-difference check. Neither of D28's revisit conditions fired. H3's
+recovery-side negative control therefore **passes**: window type does not reach recovery.
+Chronology: Phase 4B appeared to falsify H3 (2026-09-22) → D28 showed the comparison was
+confounded (2026-09-29) → R2 removes the confound and the control passes (2026-10-01). This is
+reported as a construct-validity/instrumentation-defect finding, not a current result about
+Resilience4j window-type semantics. R2's numbers are not directly comparable in absolute terms
+to Phase 4B's (different gateway image/host — see D29's scope note); every R2 claim is a
+within-R2 comparison between arms. Scope unchanged from above.
+
 ---
 
 ## 5. $\tau_{\text{leg}}$ is a sensitivity analysis, not a constant

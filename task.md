@@ -157,7 +157,10 @@
       gateway correction. Do not quote them. Further correction, D28, 2026-09-29: D26's
       own re-collection also ran under unequal fault exposure by window type — H3's
       recovery-side control was not tested, reported neither as supported nor falsified.
-      R2 (equal-exposure) pending, result recorded as D29.)*
+      R2 (equal-exposure) pending, result recorded as D29. Final correction, D29, 2026-10-01:
+      R2 completed, 72/72 clean runs, equal fault exposure — H3's recovery-side control
+      **passes**; the recovery-leak interpretation above is retracted as a fault-exposure
+      artifact, not a Resilience4j property. See decision-log.md D29.)*
 
 - [x] **Precise HALF_OPEN->CLOSED metric computed for the first time (2026-08-27),
       after fixing two harness bugs that were silently suppressing it:**
@@ -182,7 +185,9 @@
       exposure by window type (`recovery_fault_timing_check.py`,
       `recovery_exposure_model.py`) — H3's recovery-side control was not tested, reported
       neither as supported nor falsified. R2 (equal-exposure) pending, result recorded as
-      D29.)*
+      D29. Final correction, D29, 2026-10-01: R2 completed, 72/72 clean runs, equal fault
+      exposure — H3's recovery-side control **passes**; "LEAK_CONFIRMED_ON_HALF_OPEN_LEG"
+      above is retracted as a fault-exposure artifact. See decision-log.md D29.)*
 
 - [ ] **Not yet "final confirmed": every precise median above is n=1 TIME_BASED row per
       `wait_duration` bucket.** Real, directionally consistent, but too thin to close.

@@ -1,5 +1,12 @@
 # CascadeShield — writing brief
 
+> **WORKING DOCUMENT — NOT A RELEASE ARTIFACT.** Listed in `docs/MANIFEST.md` under "Not
+> release artifacts." This is a living writing brief, not verified output — it is corrected
+> in place as errors are found (see the 2026-10-02 Config audit retraction below for an
+> example) and its "deadline" and "done" markers reflect whenever they were last true, not
+> current state. Cite `docs/paper/decision-log.md` and the committed `analysis/out/*.json`
+> files for verified numbers, never this file directly.
+
 **For:** drafting the paper, deadline 2026-09-24 night
 **Supersedes:** `PAPER_DRAFT_NOTES.md` for writing purposes. That file is the
 audit trail — 31 sections of corrections, several superseding each other. Use it

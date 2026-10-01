@@ -27,7 +27,7 @@ Gate logic follows the sprint plan's table exactly:
   no lambda effect                         -> Paper B  (construct validity)
 
 Usage:
-  python analysis/canary_readout.py --dataset data/canary_runs.csv
+  python analysis/canary_readout.py     # default --dataset is the committed data/canary_matrix_runs.csv
   python analysis/canary_readout.py --self-test     # synthetic data, verifies the pipeline
 
 Output: analysis/out/canary_readout.json, figures/fig4_trip_rate_vs_lambda.png,
@@ -35,6 +35,7 @@ Output: analysis/out/canary_readout.json, figures/fig4_trip_rate_vs_lambda.png,
 """
 
 import argparse
+import os
 
 import numpy as np
 import pandas as pd
@@ -58,7 +59,7 @@ from constants import LAMBDA_DEVIATION_THRESHOLD as LAMBDA_TOLERANCE
 
 # ------------------------------------------------------------------------------ loading
 
-def load_canary(path):
+def load_canary(path, design_path="data/canary_matrix.csv"):
     df = pd.read_csv(path)
     for col in ("time_to_open", "time_to_recover", "lambda_achieved", "lambda_target",
                 "effective_horizon", "lambda_cv"):
@@ -66,7 +67,27 @@ def load_canary(path):
             df[col] = pd.to_numeric(df[col], errors="coerce")
     df = drop_excluded(df)
     df["tripped"] = df["time_to_open"].notna()
-    return df.reset_index(drop=True)
+    df = df.reset_index(drop=True)
+
+    # The results file (`path`) never carries "arm" itself -- only the design file does.
+    # Without it, h2_base_arm()'s filter has nothing to match and used to silently no-op,
+    # pooling the matched_horizon arm into what's supposed to be base-only (120 rows
+    # becoming 180). Join it in here, once, for every caller, rather than leaving each
+    # analysis function to remember to do it.
+    if "arm" not in df.columns and os.path.exists(design_path):
+        design = pd.read_csv(design_path)
+        design = design[design["run_index"].notna()].copy()
+        design["run_index"] = design["run_index"].astype(df["run_index"].dtype)
+        before = len(df)
+        df = df.merge(design[["run_index", "replicate", "arm"]],
+                       on=["run_index", "replicate"], how="left")
+        if len(df) != before:
+            raise ValueError(
+                "load_canary(): joining data/canary_matrix.csv's 'arm' column changed the "
+                "row count ({} -> {}) -- (run_index, replicate) is not unique in the design "
+                "file for the rows being joined; refusing to silently fan out.".format(
+                    before, len(df)))
+    return df
 
 
 def check_lambda_fidelity(df):
@@ -120,8 +141,21 @@ def h2_base_arm(df):
     a crossover on its own.
     """
     out = df[df["fault_type"].astype(str).str.upper() != "NONE"]
-    if "arm" in out.columns and "base" in set(out["arm"]):
-        out = out[out["arm"] == "base"]
+    if "arm" not in out.columns or "base" not in set(out["arm"]):
+        # A filter that silently does nothing is the defect, not a convenience. Without
+        # "arm", the matched_horizon rows leak into what's supposed to be base-only (seen
+        # directly: 120 base + 60 matched_horizon = 180, not 120) -- pooling two different
+        # designs' window-size choices into one curve, exactly the mistake this function's
+        # own docstring warns about. `data/canary_matrix_runs.csv` (the results file) never
+        # carries "arm" itself; join it from `data/canary_matrix.csv` (the committed design
+        # file) on ("run_index", "replicate") before calling this.
+        raise ValueError(
+            "h2_base_arm(): no 'arm' column (or no 'base' rows in it) -- the base-arm filter "
+            "cannot be applied, so refusing to silently return every row instead. Join "
+            "data/canary_matrix.csv's 'arm' column onto this frame on (run_index, replicate) "
+            "first."
+        )
+    out = out[out["arm"] == "base"]
     return out
 
 
@@ -460,7 +494,7 @@ def synthesise(seed=7, h2_effect=True, variance_gap=True):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--dataset", default="data/canary_runs.csv")
+    ap.add_argument("--dataset", default="data/canary_matrix_runs.csv")
     ap.add_argument("--self-test", action="store_true",
                     help="run against synthetic data to verify the pipeline before the sweep")
     ap.add_argument("--no-figures", action="store_true")

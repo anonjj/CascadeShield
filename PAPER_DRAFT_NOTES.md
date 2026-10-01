@@ -1,5 +1,14 @@
 # Paper draft — provenance, evidence, and handoff notes
 
+> **WORKING DOCUMENT — NOT A RELEASE ARTIFACT.** Listed in `docs/MANIFEST.md` under "Not
+> release artifacts." This is an append-only audit trail of in-progress reasoning, including
+> unverified literature candidates (e.g. the Pashko et al. entry, §5, explicitly flagged
+> uncitable), self-criticism, and framing later superseded elsewhere (most recently by
+> `decision-log.md` D30, §30). Entries are corrected by appending a dated note, never by
+> deleting — read a section's latest update before trusting its body text. Cite
+> `docs/paper/decision-log.md` and the committed `analysis/out/*.json` files for verified
+> numbers, never this file directly.
+
 **Written:** 2026-09-16 · **Revised:** 2026-09-17 (mechanism investigations; KM correction)
 **Describes:** `cascadeshield.tex` (7-page IEEEtran draft)
 **Purpose:** so a future session (or a future you) can tell what in that draft is

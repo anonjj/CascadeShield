@@ -87,18 +87,33 @@ Var(B) = 0 on **both** LINEAR and FANOUT under LATENCY. 162/162 rows each side,
 exactly one leg firing. **Structural null** — exact zero variance across 324 runs,
 not underpowered.
 
-### Config audit (D25)
+### Config audit (D25 Lead 3 / D30)
+
+**Retracted 2026-10-02 (D30).** "821 instances, 740 repos," "median λ* = 0.4, robust
+across five groupings," "Deduplicated (48 configs) median ≈ 0.55," and "38–63% at
+λ* = 0.4 depending on grouping" are all superseded — neither 821 nor the earlier 447
+figure was a correctly-parsed count, and the dual-estimand framing above was built on
+the wrong one. Do not quote any of the four rows above; the table below replaces them.
+
 | | |
 |---|---|
-| Corpus | **821 instances, 740 repos**, scraped through 2026-09-17/19 |
-| Instance-level median λ* | **0.4 req/s**, robust across five groupings |
-| Deduplicated (48 configs) | median ≈ 0.55 |
-| Mode concentration | 38–63% at λ* = 0.4 depending on grouping |
-| Maximum | **λ* = 20** — 5 s window, `minimumNumberOfCalls` unset → library default 100 |
+| Corpus | **1,057 instances**, 626 file occurrences, 537 distinct blobs, **384 contributing repositories** of 740 searched, re-fetched by git blob sha from the 2026-09-17 scrape (content-addressed, byte-identical to the original) |
+| Instance-level median λ* | **0.4 req/s** — same at every grouping (instance/config-dedup/file/repo/blob-level); the estimand choice no longer moves the headline the way the retracted 0.4-vs-0.55 framing implied |
+| **The finding is composition, not the median (D30).** 1,057 instances collapse to **66 distinct parameter pairs**. One pair (`minimumNumberOfCalls=4, slidingWindowSize=10`) alone is **433 instances (41%)**, across only 181 blobs and roughly 3–5 structural template lineages (shared `eureka`/datasource key-shapes, byte-distinct files, different service names) — not 433 independent configuration choices. Instance-level counts measure **propagation**, not independent practice: Q3 moves from 0.5 (instance-level) to 0.97 (repo-level) once the duplication weight is removed. |
+| Maximum | **λ* = 20** — 5 s window, `minimumNumberOfCalls` unset → library default 100. 14 instances, 5 repositories (was 9/3 before the reconciliation) |
 
-**The estimand choice changes the headline** (0.4 vs 0.55). State the grouping
-explicitly and show one alternative. Instance-level is recommended: a config
-deployed in 100 places is 100 exposures.
+**No tutorial/non-tutorial split (D30, dropped).** The flag was a substring match on
+repo name/path against 17 keywords — not stars, not content, not structure. It caught
+only 13/433 (3%) of the dominant duplicated cluster and is inverted relative to what it
+claims: the instances it did **not** flag duplicate at 3× the rate of the ones it did.
+Do not use a tutorial/non-tutorial split anywhere in the paper. If teaching material
+needs to be distinguished from production configuration, say in §VII that it could not
+be reliably separated — do not re-introduce the keyword heuristic to do so.
+
+**Report at repository level and by distinct parameter pair, not instance-level alone.**
+Instance-level is a legitimate secondary view (it is literally how widely a
+configuration spread) but should be labelled as the propagation view, not presented as
+the headline.
 
 **Never name a repository.** Describe the λ*=20 case by configuration shape.
 Raw config content was not retained because the corpus contained credentials —
@@ -176,8 +191,10 @@ $\lambda$ is invisible at the configuration surface. Contributions list.
 
 **Strongest opening available** — the three-source significance argument:
 practitioners report the symptom (Resilience4j issues #1731, #1349, discussion
-#1815); the config audit shows prevalence (821 instances, median λ* = 0.4); the
-experiments show the mechanism.
+#1815); the config audit shows the pattern appears in public configurations at
+repository level, not merely as a copied instance (384 repositories, D30 — see §2's
+"Config audit" table and its 2026-10-02 reconciliation note); the experiments show
+the mechanism.
 
 ### §II Related work (~0.75 p)
 From `docs/paper/references.bib` (17 verified entries). **ResilienceBench**
@@ -297,6 +314,13 @@ here as a result."
 
 **§V-E Config audit** — numbers in §2. This is the paper's only evidence about
 software outside the lab. Quote one configuration **by shape**, never by repo.
+**Narrowed 2026-10-02 (D30):** do not frame this as "where public configurations sit
+relative to the gate" — report at repository level and by distinct parameter pair,
+and state the claim as *a small number of widely-copied configurations sit near the
+gate*, not as independent practitioner convergence. A copied configuration propagates
+its defect — the same construct-validity argument the paper makes elsewhere (§VI), on
+a different mechanism (corpus composition, not instrumentation). No tutorial/
+non-tutorial split (D30 dropped it; see §2).
 
 **§V-F Control** — φ = 0.000.
 

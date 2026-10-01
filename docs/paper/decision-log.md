@@ -2265,3 +2265,90 @@ arms.
 (predates the first R2 run — `data/audit/r2_launch_manifest.json`). Sweep output `19697a1`.
 Analysis `analysis/r2_equal_exposure_analysis.py`, commits `a4779ec` (primary) and `dba08eb`
 (within-arm dispersion addition). Branch `experiment/r2-equal-exposure`, not yet on `main`.
+
+---
+
+## D30 · Config audit reconciled: the corpus measures propagation, not practice
+
+**Date:** 2026-10-02 · **Decided by:** Soham and Jay · **Status:** closes V2
+**Supersedes:** both prior instance counts (447 and 821) and the tutorial/non-tutorial split
+
+**Why this was opened.** Two extractions over the same corpus reported different numbers —
+447 (`audits/resilience4j_timebased_audit.py`, on an unmerged branch) and 821
+(`analysis/lambda_star_ecdf.py`, merged, powering Figure 2). Neither had been reconciled
+against the other, and the figure rested on the larger.
+
+**Neither prior number was correct, for different reasons.** The 821 run walked every YAML
+node for a literal camelCase `slidingWindowType: TIME_BASED`, with no path restriction: it
+counted 110 `configs:` templates as if they were deployed instances and 14 off-schema nodes
+(including two that were not Resilience4j at all), while missing kebab-case keys,
+inheritance-derived instances, and whole files whose multi-document YAML raised a
+ComposerError. The 447 run parsed correctly but never found Spring's flat dotted-key form
+(`resilience4j.circuitbreaker:` as one root key), which 245 of 249 affected files use —
+a form the 821 run's key-agnostic walk happened to catch.
+
+**Method.** The 2026-09-17 scrape's per-hit git blob SHAs were re-fetched (content-addressed,
+so byte-identical to the original: 991 unique blobs, matching the T8 run's recorded
+`n_unique_content_files_cached`). The correct parser — both key casings, `base-config`
+inheritance resolved, `safe_load_all`, restricted to the `instances` path, plus the flat
+dotted-key form — was ported to `analysis/config_audit_parser.py` with 16 self-tests, and
+run once. Raw content stays in gitignored local cache; no committed artifact carries a
+repository identifier.
+
+**Reconciliation, zero remainder both directions.** Against 821: 689 match, 110 config
+templates, 14 off-schema, 8 genuinely out of scope. Against the canonical 1,057: 797 shared,
+91 kebab-case, 101 inheritance-derived, 48 lost to ComposerError, 20 lowercase enum values
+(Spring's binding is case-insensitive; the 821 run's exact string match was not).
+
+**Canonical counts.** 1,057 instances · 626 file occurrences · 537 distinct blobs
+(887 instances) · 384 contributing repositories, out of 740 searched. Median λ* = 0.4 at
+every grouping.
+
+**The finding is the composition, not the median.** 1,057 instances collapse to 66 distinct
+parameter pairs. One pair — `minimumNumberOfCalls=4, slidingWindowSize=10` — accounts for
+433 instances (41%) across 181 blobs. Those blobs are byte-distinct, but 93% share an
+identical `eureka` key structure, 78% of those with a datasource share the same four keys
+in one of two casing conventions, and 53% fall into three combined structural fingerprints.
+This is a small number of template lineages — roughly three to five — reproduced with real
+per-author edits, not independent configuration choices.
+
+**Consequences for the claim.** Instance-level counts measure propagation, not practice.
+The paper reports the distribution at repository level and by distinct parameter pair, and
+states instance-level counts as a measure of how widely a configuration spread. The
+apparent tightness of the instance-level distribution is itself an artifact of copying:
+Q3 moves from 0.5 at instance level to 0.97 at repository level, so what looks like
+practitioner consensus is one lineage counted many times.
+
+This narrows the §V-E claim and should be written as such throughout: not "where public
+configurations sit relative to the gate" but that a small number of widely-copied
+configurations sit near it — a copied configuration propagates its defect, which is the
+same argument the paper makes elsewhere, on a different mechanism.
+
+**The tutorial/non-tutorial split is dropped.** The flag was a substring match on
+repository name and path against 17 keywords. It caught 13 of the 433 instances in the
+`(4,10)` cluster (3%) — the most clearly template-derived material in the corpus — and the
+instances it did not flag duplicate at three times the rate of those it did. It is
+inverted with respect to what it claims to measure, because a course project forked into a
+service-shaped name keeps its configuration and loses the keyword. No tutorial filtering is
+claimed anywhere in the paper; §VII states instead that teaching material could not be
+reliably separated from production configuration.
+
+Structural fingerprinting — shared key-shapes across files — detected the lineage the
+keyword flag missed entirely, and is the method worth reporting in its place.
+
+**λ* = 20 tail case.** Survives and grows: 14 instances across 11 blobs and 5 repositories
+(was 9 across 3), the extra two surfaced by the flat-key fix. Reported by configuration
+shape only — a 5 s window with `minimumNumberOfCalls` unset, inheriting the library default
+of 100 — never by repository.
+
+**Figure 2.** Not yet regenerated. The existing script (`analysis/lambda_star_ecdf.py`)
+carries the superseded parser and the dropped tutorial split, so it needs reworking rather
+than re-running: repository level becomes the primary curve, the distinct-parameter-pair
+table sits alongside it, and instance level is shown as the propagation view and labelled
+as such. Queued; the figure must not be built from this entry's numbers until that rework
+lands.
+
+**Provenance:** `analysis/config_audit_parser.py` and `analysis/config_audit_v2_report.py`
+with `analysis/out/config_audit_v2_report.json`, commit `6ec0850`. The retired branch
+`audits/resilience4j-timebased-config-audit` stays retired; its parser logic is ported, its
+output and identifiers are not.

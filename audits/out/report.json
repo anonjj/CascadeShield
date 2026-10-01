@@ -1,0 +1,4477 @@
+{
+  "n_files_with_content": 1141,
+  "n_time_based_instances": 447,
+  "n_tutorial_like": 49,
+  "rows": [
+    {
+      "instance": "openAPI_getWeatherForecast",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 1.0,
+      "stars": 16,
+      "pushed_at": "2025-01-01T16:10:19Z",
+      "tutorial_like": false,
+      "stars_bucket": "10-99"
+    },
+    {
+      "instance": "openAPI_getMidLandForecast",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 1.0,
+      "stars": 16,
+      "pushed_at": "2025-01-01T16:10:19Z",
+      "tutorial_like": false,
+      "stars_bucket": "10-99"
+    },
+    {
+      "instance": "openAPI_getWeekWeatherForecast",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 1.0,
+      "stars": 16,
+      "pushed_at": "2025-01-01T16:10:19Z",
+      "tutorial_like": false,
+      "stars_bucket": "10-99"
+    },
+    {
+      "instance": "circuitbreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 14,
+      "pushed_at": "2023-09-13T16:36:26Z",
+      "tutorial_like": false,
+      "stars_bucket": "10-99"
+    },
+    {
+      "instance": "circuitbreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 14,
+      "pushed_at": "2023-09-13T16:36:26Z",
+      "tutorial_like": false,
+      "stars_bucket": "10-99"
+    },
+    {
+      "instance": "iamFallback",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.16666666666666666,
+      "stars": 5,
+      "pushed_at": "2026-09-16T02:10:36Z",
+      "tutorial_like": true,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "getConsumerGroups",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 3,
+      "pushed_at": "2024-09-20T14:43:03Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "authorization-circuit",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 50.0,
+      "lambda_star": 5.0,
+      "stars": 2,
+      "pushed_at": "2025-05-19T22:45:41Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "kyc-service",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.16666666666666666,
+      "stars": 5,
+      "pushed_at": "2026-08-25T08:56:57Z",
+      "tutorial_like": true,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "pedidoListarPorIdCB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 4.0,
+      "lambda_star": 0.4,
+      "stars": 0,
+      "pushed_at": "2024-11-28T03:58:28Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "kakaoPayApi",
+      "sliding_window_size_s": 20.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.25,
+      "stars": 3,
+      "pushed_at": "2026-07-07T12:26:21Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "paymentServiceCircuitBreaker",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 5,
+      "pushed_at": "2026-08-25T08:56:57Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "walletServiceCircuitBreaker",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 5,
+      "pushed_at": "2026-08-25T08:56:57Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "userServiceCircuitBreaker",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 5,
+      "pushed_at": "2026-08-25T08:56:57Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "bank-transfer-api",
+      "sliding_window_size_s": 120.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.041666666666666664,
+      "stars": 5,
+      "pushed_at": "2026-08-25T08:56:57Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "identity-verification",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 8.0,
+      "lambda_star": 0.13333333333333333,
+      "stars": 5,
+      "pushed_at": "2026-08-25T08:56:57Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "document-verification",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 8.0,
+      "lambda_star": 0.13333333333333333,
+      "stars": 5,
+      "pushed_at": "2026-08-25T08:56:57Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "core-banking",
+      "sliding_window_size_s": 120.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.041666666666666664,
+      "stars": 5,
+      "pushed_at": "2026-08-25T08:56:57Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "mambu-api",
+      "sliding_window_size_s": 120.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.041666666666666664,
+      "stars": 5,
+      "pushed_at": "2026-08-25T08:56:57Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "pedidoListarPorIdCB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 4.0,
+      "lambda_star": 0.4,
+      "stars": 0,
+      "pushed_at": "2024-11-28T03:58:28Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "getUserAgeCircuitBreaker",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 3.0,
+      "lambda_star": 0.3,
+      "stars": 1,
+      "pushed_at": "2024-11-10T19:25:48Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "pedidoListarPorIdCB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 4.0,
+      "lambda_star": 0.4,
+      "stars": 0,
+      "pushed_at": "2024-11-28T03:58:28Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuit-test-70000",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 1.0,
+      "stars": 7,
+      "pushed_at": "2026-01-21T23:41:22Z",
+      "tutorial_like": true,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "circuit-db-select-200",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 1.0,
+      "stars": 7,
+      "pushed_at": "2026-01-21T23:41:22Z",
+      "tutorial_like": true,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "circuit-db-select-300",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 1.0,
+      "stars": 7,
+      "pushed_at": "2026-01-21T23:41:22Z",
+      "tutorial_like": true,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "dbBreaker",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.16666666666666666,
+      "stars": 1,
+      "pushed_at": "2026-05-08T13:17:04Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "authors",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2024-07-03T18:48:59Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "genres",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2024-07-03T18:48:59Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "books",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2024-07-03T18:48:59Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "comments",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2024-07-03T18:48:59Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "monolithService",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-04-19T16:05:32Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "loginService",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 3.0,
+      "lambda_star": 0.1,
+      "stars": 0,
+      "pushed_at": "2026-05-17T07:21:19Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "getUserAgeCircuitBreaker",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 3.0,
+      "lambda_star": 0.3,
+      "stars": 0,
+      "pushed_at": "2024-11-09T23:32:16Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "pedidoListarPorIdCB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 4.0,
+      "lambda_star": 0.4,
+      "stars": 0,
+      "pushed_at": "2023-11-26T04:16:30Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "clienteFeign",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 4.0,
+      "lambda_star": 0.4,
+      "stars": 0,
+      "pushed_at": "2025-06-07T01:12:54Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "userService",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.16666666666666666,
+      "stars": 0,
+      "pushed_at": "2026-01-23T20:40:36Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "payment",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 4.0,
+      "lambda_star": 0.4,
+      "stars": 0,
+      "pushed_at": "2023-12-07T13:51:56Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "content-cb",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 1.0,
+      "stars": 0,
+      "pushed_at": "2026-07-27T02:30:41Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "search-cb",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 1.0,
+      "stars": 0,
+      "pushed_at": "2026-07-27T02:30:41Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "analytics-cb",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 1.0,
+      "stars": 0,
+      "pushed_at": "2026-07-27T02:30:41Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "user-cb",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 1.0,
+      "stars": 0,
+      "pushed_at": "2026-07-27T02:30:41Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "dlq-cb",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 1.0,
+      "stars": 0,
+      "pushed_at": "2026-07-27T02:30:41Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "workload",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 0,
+      "pushed_at": "2025-09-30T20:44:03Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "auth-service",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-11-08T06:41:47Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "product-service",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-11-08T06:41:47Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "cart-service",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-11-08T06:41:47Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "order-service",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-11-08T06:41:47Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "payment-service",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-11-08T06:41:47Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerA",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-06-27T07:48:43Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-06-27T07:48:43Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "orderInternal",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 0,
+      "pushed_at": "2026-08-14T16:56:11Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "paymentGateway",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 0,
+      "pushed_at": "2026-08-14T16:56:11Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "catalogCache",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 0,
+      "pushed_at": "2026-08-14T16:56:11Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "cloud-payment-service",
+      "sliding_window_size_s": 2.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 1.0,
+      "stars": 13,
+      "pushed_at": "2026-05-05T06:39:57Z",
+      "tutorial_like": true,
+      "stars_bucket": "10-99"
+    },
+    {
+      "instance": "cardApi",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.16666666666666666,
+      "stars": 0,
+      "pushed_at": "2021-12-03T11:48:33Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "core",
+      "sliding_window_size_s": 2.0,
+      "minimum_number_of_calls": 1.0,
+      "lambda_star": 0.5,
+      "stars": 3,
+      "pushed_at": "2025-04-06T08:51:07Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "pedidoListarPorIdCB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 4.0,
+      "lambda_star": 0.4,
+      "stars": 0,
+      "pushed_at": "2023-11-26T04:16:30Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "clienteFeign",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 4.0,
+      "lambda_star": 0.4,
+      "stars": 0,
+      "pushed_at": "2025-06-07T01:12:54Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "certificacion-service",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-05-30T02:01:56Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "cards",
+      "sliding_window_size_s": 5.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 1.0,
+      "stars": 1,
+      "pushed_at": "2026-03-23T23:29:26Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "payment-service",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-10-27T19:09:49Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "carbon-credit-service",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-10-27T19:09:49Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "certificate-service",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-10-27T19:09:49Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "cloud-payment-service",
+      "sliding_window_size_s": 2.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 1.0,
+      "stars": 0,
+      "pushed_at": "2024-09-10T08:17:40Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "walletService",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2023-07-21T11:41:14Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "walletHold",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 0,
+      "pushed_at": "2026-09-16T11:36:28Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "coffeeService",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 1.0,
+      "stars": 1,
+      "pushed_at": "2025-06-02T15:30:23Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "demoService",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 3.0,
+      "lambda_star": 0.3,
+      "stars": 1,
+      "pushed_at": "2025-06-02T15:30:23Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "circuitBreakerA",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-07-13T07:47:44Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-07-13T07:47:44Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "cart-service",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-11-08T06:41:47Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "product-service",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-11-08T06:41:47Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "auth-service",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-11-08T06:41:47Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "userService",
+      "sliding_window_size_s": 5.0,
+      "minimum_number_of_calls": 100.0,
+      "lambda_star": 20.0,
+      "stars": 0,
+      "pushed_at": "2022-11-14T13:34:11Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerA",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-06-27T07:48:43Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-06-27T07:48:43Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "globalSearch",
+      "sliding_window_size_s": 5.0,
+      "minimum_number_of_calls": 100.0,
+      "lambda_star": 20.0,
+      "stars": 0,
+      "pushed_at": "2022-11-14T13:34:11Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "hospitalSearchService",
+      "sliding_window_size_s": 5.0,
+      "minimum_number_of_calls": 100.0,
+      "lambda_star": 20.0,
+      "stars": 0,
+      "pushed_at": "2022-11-14T13:34:11Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "StoreServicecheckOpenYnString",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.16666666666666666,
+      "stars": 0,
+      "pushed_at": "2024-02-01T13:02:03Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "riskClient",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-09-16T02:34:51Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "orderInternal",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 0,
+      "pushed_at": "2026-08-14T16:56:11Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "paymentGateway",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 0,
+      "pushed_at": "2026-08-14T16:56:11Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "catalogCache",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 0,
+      "pushed_at": "2026-08-14T16:56:11Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "cart-service",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-05-11T17:43:55Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "product-service",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-05-11T17:43:55Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "auth-service",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-05-11T17:43:55Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "authors",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 1.0,
+      "lambda_star": 0.1,
+      "stars": 0,
+      "pushed_at": "2024-07-03T18:48:59Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "genres",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 1.0,
+      "lambda_star": 0.1,
+      "stars": 0,
+      "pushed_at": "2024-07-03T18:48:59Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "books",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 1.0,
+      "lambda_star": 0.1,
+      "stars": 0,
+      "pushed_at": "2024-07-03T18:48:59Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "comments",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 1.0,
+      "lambda_star": 0.1,
+      "stars": 0,
+      "pushed_at": "2024-07-03T18:48:59Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "queueService",
+      "sliding_window_size_s": 5.0,
+      "minimum_number_of_calls": 100.0,
+      "lambda_star": 20.0,
+      "stars": 0,
+      "pushed_at": "2026-04-22T15:07:45Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "user-identityClient",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.16666666666666666,
+      "stars": 0,
+      "pushed_at": "2025-10-23T01:57:23Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "organizationalClient",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.16666666666666666,
+      "stars": 0,
+      "pushed_at": "2025-10-23T01:57:23Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "aiProviderService",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-07-26T15:24:00Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "pedidoListarPorIdCB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 4.0,
+      "lambda_star": 0.4,
+      "stars": 0,
+      "pushed_at": "2023-11-26T04:16:30Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerApi",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-08-28T05:51:13Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "cloud-payment-service",
+      "sliding_window_size_s": 2.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 1.0,
+      "stars": 0,
+      "pushed_at": "2024-09-10T08:17:40Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "microservice",
+      "sliding_window_size_s": 5.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 2.0,
+      "stars": 0,
+      "pushed_at": "2024-09-19T15:03:09Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "kakaoBook",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 0.6666666666666666,
+      "stars": 0,
+      "pushed_at": "2026-08-09T08:06:42Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "aladinBook",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 0.6666666666666666,
+      "stars": 0,
+      "pushed_at": "2026-08-09T08:06:42Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "aiServer",
+      "sliding_window_size_s": 120.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.041666666666666664,
+      "stars": 0,
+      "pushed_at": "2026-08-09T08:06:42Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "identity-service",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-05-26T03:57:48Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "tenant-service",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-05-26T03:57:48Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "backendB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 2.0,
+      "stars": 0,
+      "pushed_at": "2026-05-16T11:55:51Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "cloud-payment-service",
+      "sliding_window_size_s": 2.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 1.0,
+      "stars": 0,
+      "pushed_at": "2024-08-17T07:56:39Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "categoryService",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-03-29T23:25:14Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerA",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-06-27T07:48:43Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-06-27T07:48:43Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "catalogCb",
+      "sliding_window_size_s": 120.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.08333333333333333,
+      "stars": 0,
+      "pushed_at": "2026-08-14T16:56:11Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "userCb",
+      "sliding_window_size_s": 120.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.08333333333333333,
+      "stars": 0,
+      "pushed_at": "2026-08-14T16:56:11Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "orderCb",
+      "sliding_window_size_s": 120.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.08333333333333333,
+      "stars": 0,
+      "pushed_at": "2026-08-14T16:56:11Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "cartCb",
+      "sliding_window_size_s": 120.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.08333333333333333,
+      "stars": 0,
+      "pushed_at": "2026-08-14T16:56:11Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "reviewCb",
+      "sliding_window_size_s": 120.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.08333333333333333,
+      "stars": 0,
+      "pushed_at": "2026-08-14T16:56:11Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "cart-service",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-05-11T17:43:55Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "product-service",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-05-11T17:43:55Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "auth-service",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-05-11T17:43:55Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "cart-service",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-11-08T06:41:47Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "product-service",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-11-08T06:41:47Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "auth-service",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-11-08T06:41:47Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "userService",
+      "sliding_window_size_s": 5.0,
+      "minimum_number_of_calls": 100.0,
+      "lambda_star": 20.0,
+      "stars": 0,
+      "pushed_at": "2022-11-14T13:34:11Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "suggest-db",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-09-03T17:44:57Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "keyscloak-admin-client",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2024-11-22T09:46:22Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "user-identityClient",
+      "sliding_window_size_s": 2.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 1.0,
+      "stars": 0,
+      "pushed_at": "2025-10-23T01:57:23Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "organizationalClient",
+      "sliding_window_size_s": 2.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 1.0,
+      "stars": 0,
+      "pushed_at": "2025-10-23T01:57:23Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "kakaoLogin",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.08333333333333333,
+      "stars": 0,
+      "pushed_at": "2026-09-16T17:10:02Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "kakaoLogout",
+      "sliding_window_size_s": 300.0,
+      "minimum_number_of_calls": 3.0,
+      "lambda_star": 0.01,
+      "stars": 0,
+      "pushed_at": "2026-09-16T17:10:02Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "kakaoUnlink",
+      "sliding_window_size_s": 300.0,
+      "minimum_number_of_calls": 3.0,
+      "lambda_star": 0.01,
+      "stars": 0,
+      "pushed_at": "2026-09-16T17:10:02Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "couponSeq",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 100.0,
+      "lambda_star": 10.0,
+      "stars": 0,
+      "pushed_at": "2026-09-16T17:10:02Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "couponWrite",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 2.0,
+      "stars": 0,
+      "pushed_at": "2026-09-16T17:10:02Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "userServiceCircuitBreaker",
+      "sliding_window_size_s": 100.0,
+      "minimum_number_of_calls": 100.0,
+      "lambda_star": 1.0,
+      "stars": 6,
+      "pushed_at": "2025-08-24T16:40:20Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "llmServiceCircuitBreaker",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 100.0,
+      "lambda_star": 3.3333333333333335,
+      "stars": 6,
+      "pushed_at": "2025-08-24T16:40:20Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "userMemoryServiceCircuitBreaker",
+      "sliding_window_size_s": 100.0,
+      "minimum_number_of_calls": 100.0,
+      "lambda_star": 1.0,
+      "stars": 6,
+      "pushed_at": "2025-08-24T16:40:20Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "myCircuitBreaker",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 1.0,
+      "stars": 0,
+      "pushed_at": "2023-06-09T18:13:38Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "pedidoListarPorIdCB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 4.0,
+      "lambda_star": 0.4,
+      "stars": 0,
+      "pushed_at": "2023-11-26T04:16:30Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerA",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-05-19T13:17:41Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-05-19T13:17:41Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "cm-partner",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.16666666666666666,
+      "stars": 0,
+      "pushed_at": "2026-08-03T15:28:53Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "external-service",
+      "sliding_window_size_s": 8.0,
+      "minimum_number_of_calls": 3.0,
+      "lambda_star": 0.375,
+      "stars": 0,
+      "pushed_at": "2025-10-08T21:56:37Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "order-service",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-11-08T06:41:47Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "bookingService",
+      "sliding_window_size_s": 5.0,
+      "minimum_number_of_calls": 100.0,
+      "lambda_star": 20.0,
+      "stars": 0,
+      "pushed_at": "2022-11-14T13:34:11Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "searchProductCircuitBreaker",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 1.0,
+      "stars": 0,
+      "pushed_at": "2024-08-25T10:52:16Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "openaiCB",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 100.0,
+      "lambda_star": 1.6666666666666667,
+      "stars": 0,
+      "pushed_at": "2025-09-10T07:29:12Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "core",
+      "sliding_window_size_s": 2.0,
+      "minimum_number_of_calls": 1.0,
+      "lambda_star": 0.5,
+      "stars": 3,
+      "pushed_at": "2025-04-06T08:51:07Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "myCircuitBreaker",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 1.0,
+      "stars": 0,
+      "pushed_at": "2023-06-09T18:13:29Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "queueService",
+      "sliding_window_size_s": 5.0,
+      "minimum_number_of_calls": 100.0,
+      "lambda_star": 20.0,
+      "stars": 0,
+      "pushed_at": "2026-04-22T15:07:45Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "pedidoListarPorIdCB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 4.0,
+      "lambda_star": 0.4,
+      "stars": 0,
+      "pushed_at": "2023-11-26T04:16:30Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "newsServiceInstance",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.16666666666666666,
+      "stars": 0,
+      "pushed_at": "2025-08-21T13:55:39Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerA",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-05-19T13:17:41Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-05-19T13:17:41Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "backendA",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 2.0,
+      "stars": 0,
+      "pushed_at": "2023-11-15T17:21:41Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "backendB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 2.0,
+      "stars": 0,
+      "pushed_at": "2023-11-15T17:21:41Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "recruitPage",
+      "sliding_window_size_s": 2.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 10.0,
+      "stars": 0,
+      "pushed_at": "2023-11-15T17:21:41Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "auth-service",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-11-08T06:41:47Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "product-service",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-11-08T06:41:47Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "cart-service",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-11-08T06:41:47Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "order-service",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-11-08T06:41:47Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "payment-service",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-11-08T06:41:47Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "newsServiceInstance",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.16666666666666666,
+      "stars": 0,
+      "pushed_at": "2025-08-21T13:55:39Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "commonBreaker",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 8.0,
+      "lambda_star": 0.8,
+      "stars": 5,
+      "pushed_at": "2026-02-03T08:58:06Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "slowCallBreaker",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 8.0,
+      "lambda_star": 0.8,
+      "stars": 5,
+      "pushed_at": "2026-02-03T08:58:06Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "paymentBreaker",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 2.0,
+      "stars": 6,
+      "pushed_at": "2024-07-17T14:41:45Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "rideBreaker",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 2.0,
+      "stars": 6,
+      "pushed_at": "2024-07-17T14:41:45Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "cb-getAllPosts",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 1,
+      "pushed_at": "2026-02-26T14:50:57Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "cb-getPostById",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 1,
+      "pushed_at": "2026-02-26T14:50:57Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "rideBreaker",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 2.0,
+      "stars": 6,
+      "pushed_at": "2024-07-17T14:41:45Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "paymentBreaker",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 2.0,
+      "stars": 6,
+      "pushed_at": "2024-07-17T14:41:45Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "circuitbreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2025-01-17T13:51:10Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitbreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2025-01-17T13:51:10Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "processdrinks",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.03333333333333333,
+      "stars": 0,
+      "pushed_at": "2023-09-13T10:52:18Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "processdishes",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.03333333333333333,
+      "stars": 0,
+      "pushed_at": "2023-09-13T10:52:18Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "getdishes",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.03333333333333333,
+      "stars": 0,
+      "pushed_at": "2023-09-13T10:52:18Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "getdrinks",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.03333333333333333,
+      "stars": 0,
+      "pushed_at": "2023-09-13T10:52:18Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "getprice",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.03333333333333333,
+      "stars": 0,
+      "pushed_at": "2023-09-13T10:52:18Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "getname",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.03333333333333333,
+      "stars": 0,
+      "pushed_at": "2023-09-13T10:52:18Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "cb-getAllPosts",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 0,
+      "pushed_at": "2026-05-19T03:57:23Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "cb-getPostById",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 0,
+      "pushed_at": "2026-05-19T03:57:23Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "cb-getAllPosts",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 0,
+      "pushed_at": "2026-05-19T03:57:23Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "cb-getPostById",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 0,
+      "pushed_at": "2026-05-19T03:57:23Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "cb-getAllPosts",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 0,
+      "pushed_at": "2026-05-19T03:57:23Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "cb-getPostById",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 0,
+      "pushed_at": "2026-05-19T03:57:23Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "dummyjson-window",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.2,
+      "stars": 0,
+      "pushed_at": "2026-03-19T13:58:25Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitbreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 3.0,
+      "lambda_star": 0.1,
+      "stars": 1,
+      "pushed_at": "2023-03-06T04:13:57Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "exchangeRateApi",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-08-25T16:06:54Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "cryptoPriceApi",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-08-25T16:06:54Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "pgSettlementApi",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-08-25T16:06:54Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "cb-getAllPosts",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 0,
+      "pushed_at": "2026-05-19T03:57:23Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "cb-getPostById",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 0,
+      "pushed_at": "2026-05-19T03:57:23Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "cb-getAllPosts",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 0,
+      "pushed_at": "2026-05-19T03:57:23Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "cb-getPostById",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 0,
+      "pushed_at": "2026-05-19T03:57:23Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "cb-getAllPosts",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 0,
+      "pushed_at": "2026-05-19T03:57:23Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "cb-getPostById",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 0,
+      "pushed_at": "2026-05-19T03:57:23Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitbreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2023-12-13T00:04:07Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitbreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2023-12-13T00:04:07Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitbreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2025-07-30T23:51:33Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitbreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2026-01-28T22:17:48Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 1,
+      "pushed_at": "2025-11-03T19:10:37Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "circuitbreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2022-10-14T04:36:51Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "checkRandom",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2024-12-26T02:12:42Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitbreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2025-06-09T16:26:56Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "pedidoCB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 1,
+      "pushed_at": "2024-12-03T20:49:42Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "productoCB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 1,
+      "pushed_at": "2024-12-03T20:49:42Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "emailCB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 1,
+      "pushed_at": "2024-12-03T20:49:42Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "pagoCB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 1,
+      "pushed_at": "2024-12-03T20:49:42Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "productoCB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 1,
+      "pushed_at": "2024-12-03T20:49:42Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "circuitbreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2026-01-28T22:17:48Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2025-02-17T04:27:33Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "order-service",
+      "sliding_window_size_s": 5.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 1.0,
+      "stars": 0,
+      "pushed_at": "2023-12-07T08:58:04Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitbreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2024-01-21T02:15:30Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2025-02-17T04:27:33Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitbreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2022-12-07T02:35:22Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitbreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2024-05-18T00:50:04Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitbreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2024-09-11T22:27:33Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitbreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2024-04-20T04:01:24Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerApi",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 2,
+      "pushed_at": "2025-08-06T00:37:13Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "circuitbreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2024-01-21T02:15:30Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitbreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2022-12-07T02:35:22Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitbreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2024-09-11T22:27:33Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitbreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2024-04-20T04:01:24Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "defaultCircuitBreaker",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-08-11T08:49:30Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "rest-circuit-breaker",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 100.0,
+      "lambda_star": 3.3333333333333335,
+      "stars": 1,
+      "pushed_at": "2023-03-11T18:01:44Z",
+      "tutorial_like": true,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "rest-circuit-breaker",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 100.0,
+      "lambda_star": 3.3333333333333335,
+      "stars": 1,
+      "pushed_at": "2023-03-11T18:01:44Z",
+      "tutorial_like": true,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "circuitbreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2023-12-13T00:04:07Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2025-11-03T17:41:36Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "fastpayCB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-08-10T00:07:14Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "backendB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2024-12-10T08:52:17Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitbreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2026-01-27T00:28:28Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitbreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2026-01-27T00:28:28Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerApi",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 2,
+      "pushed_at": "2025-08-06T00:37:13Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "availableBooksBreaker",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 2.0,
+      "stars": 0,
+      "pushed_at": "2025-05-11T17:31:22Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "availableBooksBreaker",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 2.0,
+      "stars": 0,
+      "pushed_at": "2025-05-11T17:31:22Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "eventosServiceCB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 4.0,
+      "lambda_star": 0.4,
+      "stars": 0,
+      "pushed_at": "2026-01-30T13:20:50Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "compraServiceCB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 4.0,
+      "lambda_star": 0.4,
+      "stars": 0,
+      "pushed_at": "2026-01-30T13:20:50Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "availableBooksBreaker",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 2.0,
+      "stars": 0,
+      "pushed_at": "2025-05-11T17:31:22Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "sellsBooksBreaker",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 2.0,
+      "stars": 0,
+      "pushed_at": "2025-05-11T17:31:22Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "forecastBreaker",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 2.0,
+      "stars": 0,
+      "pushed_at": "2025-05-11T17:31:22Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "hospitalSearchService",
+      "sliding_window_size_s": 5.0,
+      "minimum_number_of_calls": 100.0,
+      "lambda_star": 20.0,
+      "stars": 0,
+      "pushed_at": "2022-11-14T13:34:11Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "backendA",
+      "sliding_window_size_s": 100.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.05,
+      "stars": 10763,
+      "pushed_at": "2026-08-31T06:01:41Z",
+      "tutorial_like": true,
+      "stars_bucket": "100+"
+    },
+    {
+      "instance": "backendA",
+      "sliding_window_size_s": 100.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.05,
+      "stars": 4,
+      "pushed_at": "2026-02-22T23:11:32Z",
+      "tutorial_like": true,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "backendA",
+      "sliding_window_size_s": 100.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.05,
+      "stars": 4,
+      "pushed_at": "2026-02-22T23:11:32Z",
+      "tutorial_like": true,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "platformUserManagement",
+      "sliding_window_size_s": 20.0,
+      "minimum_number_of_calls": 8.0,
+      "lambda_star": 0.4,
+      "stars": 16,
+      "pushed_at": "2026-03-16T13:43:28Z",
+      "tutorial_like": false,
+      "stars_bucket": "10-99"
+    },
+    {
+      "instance": "platformServiceRegistry",
+      "sliding_window_size_s": 25.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.4,
+      "stars": 16,
+      "pushed_at": "2026-03-16T13:43:28Z",
+      "tutorial_like": false,
+      "stars_bucket": "10-99"
+    },
+    {
+      "instance": "menuBackend",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-02-18T14:53:04Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "reviewBackend",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-02-18T14:53:04Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "treasuryClient",
+      "sliding_window_size_s": 300.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.016666666666666666,
+      "stars": 0,
+      "pushed_at": "2026-08-19T08:16:38Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "redis-rate-limit",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-06-11T06:06:27Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "menuBackend",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-03-28T06:52:55Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "reviewBackend",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-03-28T06:52:55Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "order",
+      "sliding_window_size_s": 100000.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 2e-05,
+      "stars": 4,
+      "pushed_at": "2023-02-18T03:21:00Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "user",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 1.0,
+      "stars": 4,
+      "pushed_at": "2023-02-18T03:21:00Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "menuBackend",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-08-31T18:57:06Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "reviewBackend",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-08-31T18:57:06Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "findByGenre",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2023-04-22T15:18:53Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "simpleCircuitBreaker",
+      "sliding_window_size_s": 5.0,
+      "minimum_number_of_calls": 3.0,
+      "lambda_star": 0.6,
+      "stars": 0,
+      "pushed_at": "2025-10-20T14:22:54Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "simpleCircuitBreaker2",
+      "sliding_window_size_s": 20.0,
+      "minimum_number_of_calls": 3.0,
+      "lambda_star": 0.15,
+      "stars": 0,
+      "pushed_at": "2025-10-20T14:22:54Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "databaseCalls",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 1,
+      "pushed_at": "2026-07-22T08:34:06Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "menuBackend",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-04-19T12:32:04Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "reviewBackend",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-04-19T12:32:04Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "redis",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 2.0,
+      "stars": 1,
+      "pushed_at": "2026-06-03T12:42:51Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "USERS",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2024-02-21T08:57:56Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "LETTUCE_CACHE",
+      "sliding_window_size_s": 20.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.25,
+      "stars": 0,
+      "pushed_at": "2024-02-21T08:57:56Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "shippingCircuitBreaker",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 3.0,
+      "lambda_star": 0.3,
+      "stars": 0,
+      "pushed_at": "2026-09-17T01:49:48Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "redisOps",
+      "sliding_window_size_s": 5.0,
+      "minimum_number_of_calls": 50.0,
+      "lambda_star": 10.0,
+      "stars": 0,
+      "pushed_at": "2026-05-05T03:01:40Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "backend-b",
+      "sliding_window_size_s": 3.0,
+      "minimum_number_of_calls": 1.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 0,
+      "pushed_at": "2022-12-19T17:27:47Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "ai",
+      "sliding_window_size_s": 120.0,
+      "minimum_number_of_calls": 50.0,
+      "lambda_star": 0.4166666666666667,
+      "stars": 0,
+      "pushed_at": "2026-01-29T07:41:18Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "backendA",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 1.0,
+      "lambda_star": 0.1,
+      "stars": 4,
+      "pushed_at": "2024-06-25T06:47:37Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "backendA",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 1.0,
+      "lambda_star": 0.1,
+      "stars": 4,
+      "pushed_at": "2024-06-25T06:47:37Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "shippingCircuitBreaker",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 3.0,
+      "lambda_star": 0.3,
+      "stars": 0,
+      "pushed_at": "2026-09-17T01:49:48Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "menuServiceCircuitBreaker",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-06-17T09:15:03Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "ordersServiceCircuitBreaker",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-06-17T09:15:03Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "reviewServiceCircuitBreaker",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-06-17T09:15:03Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "menuAggregateServiceCircuitBreaker",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-06-17T09:15:03Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "rest-circuit-breaker",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 100.0,
+      "lambda_star": 10.0,
+      "stars": 0,
+      "pushed_at": "2025-09-07T13:17:36Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "rest-circuit-breaker",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 100.0,
+      "lambda_star": 10.0,
+      "stars": 1,
+      "pushed_at": "2025-09-07T16:17:32Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "pgRequest",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.16666666666666666,
+      "stars": 0,
+      "pushed_at": "2025-10-12T16:54:13Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "getTransaction",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.16666666666666666,
+      "stars": 0,
+      "pushed_at": "2025-10-12T16:54:13Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "findProductCache",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 0,
+      "pushed_at": "2025-10-12T16:54:13Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "dataSender",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.16666666666666666,
+      "stars": 0,
+      "pushed_at": "2025-10-12T16:54:13Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "courseServiceCircuitBreaker",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-02-14T09:14:57Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "enrollmentsServiceCircuitBreaker",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-02-14T09:14:57Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "feedbackServiceCircuitBreaker",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-02-14T09:14:57Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "courseAggregateServiceCircuitBreaker",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-02-14T09:14:57Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "pg-client",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 0,
+      "pushed_at": "2026-08-04T03:47:53Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "redis-cache",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-08-04T03:47:53Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "pg-simulator-payment",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 3.0,
+      "lambda_star": 0.3,
+      "stars": 0,
+      "pushed_at": "2025-09-17T16:55:44Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "get-payment",
+      "sliding_window_size_s": 20.0,
+      "minimum_number_of_calls": 100.0,
+      "lambda_star": 5.0,
+      "stars": 0,
+      "pushed_at": "2025-09-21T05:41:27Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "waitingQueueRedis",
+      "sliding_window_size_s": 20.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 1.0,
+      "stars": 1,
+      "pushed_at": "2026-09-16T08:04:00Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "converterService",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.16666666666666666,
+      "stars": 0,
+      "pushed_at": "2024-06-18T14:36:29Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuit1",
+      "sliding_window_size_s": 5.0,
+      "minimum_number_of_calls": 100.0,
+      "lambda_star": 20.0,
+      "stars": 0,
+      "pushed_at": "2026-08-14T17:42:17Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "publicNotification",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.16666666666666666,
+      "stars": 1,
+      "pushed_at": "2026-09-14T12:04:50Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "default",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-12-12T17:09:45Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "productServiceCircuitBreaker",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 1,
+      "pushed_at": "2026-05-27T14:54:16Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "orderServiceCircuitBreaker",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 1,
+      "pushed_at": "2026-05-27T14:54:16Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "userServiceCircuitBreaker",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 1,
+      "pushed_at": "2026-05-27T14:54:16Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "polygonNewsCB",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 50.0,
+      "lambda_star": 0.8333333333333334,
+      "stars": 0,
+      "pushed_at": "2025-11-11T16:32:55Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "redisCircuitBreaker",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 0,
+      "pushed_at": "2025-10-12T16:54:13Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "dataSender",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.16666666666666666,
+      "stars": 0,
+      "pushed_at": "2025-10-12T16:54:13Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "likeWeight",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.16666666666666666,
+      "stars": 0,
+      "pushed_at": "2025-10-12T16:54:13Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "viewWeight",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.16666666666666666,
+      "stars": 0,
+      "pushed_at": "2025-10-12T16:54:13Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "salesWeight",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.16666666666666666,
+      "stars": 0,
+      "pushed_at": "2025-10-12T16:54:13Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "userService",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 0,
+      "pushed_at": "2025-08-21T15:35:16Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2025-08-05T01:15:02Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2025-08-05T01:15:02Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "default",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-12-12T17:09:45Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "cloud-payment-service",
+      "sliding_window_size_s": 2.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 1.0,
+      "stars": 0,
+      "pushed_at": "2024-06-25T03:46:57Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "freeCurrencyCB",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 0,
+      "pushed_at": "2025-11-11T16:32:55Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "userService",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 0,
+      "pushed_at": "2025-08-21T15:35:16Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "defaultCircuitBreater",
+      "sliding_window_size_s": 1.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 5.0,
+      "stars": 1,
+      "pushed_at": "2025-05-16T17:35:56Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "defaultCircuitBreaker",
+      "sliding_window_size_s": 1.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 5.0,
+      "stars": 0,
+      "pushed_at": "2025-05-21T11:47:00Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "timeBasedCb",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 0,
+      "pushed_at": "2026-09-17T01:23:57Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitbreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2023-02-24T12:04:34Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "loginCircuit",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 3.0,
+      "lambda_star": 0.1,
+      "stars": 0,
+      "pushed_at": "2026-05-18T17:32:36Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "emailService",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.16666666666666666,
+      "stars": 0,
+      "pushed_at": "2026-09-03T20:16:11Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "loginCircuit",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 3.0,
+      "lambda_star": 0.1,
+      "stars": 0,
+      "pushed_at": "2025-11-24T20:20:01Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "pixCircuitBreaker",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 1.0,
+      "stars": 1,
+      "pushed_at": "2025-09-01T13:34:16Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "authCircuitBreaker",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 1.0,
+      "stars": 1,
+      "pushed_at": "2025-09-01T13:34:16Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "circuitbreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2023-02-24T12:04:34Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "loginCircuit",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 3.0,
+      "lambda_star": 0.1,
+      "stars": 0,
+      "pushed_at": "2026-05-18T17:32:36Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "log-producer-cb",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.08333333333333333,
+      "stars": 0,
+      "pushed_at": "2025-09-09T23:31:45Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "menuServiceCircuitBreaker",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-03-18T20:33:08Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "ordersServiceCircuitBreaker",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-03-18T20:33:08Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "reviewServiceCircuitBreaker",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-03-18T20:33:08Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "menuAggregateServiceCircuitBreaker",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-03-18T20:33:08Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "auth-service",
+      "sliding_window_size_s": 20.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.5,
+      "stars": 5,
+      "pushed_at": "2025-09-02T18:07:12Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "payment-service",
+      "sliding_window_size_s": 15.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 5,
+      "pushed_at": "2025-09-02T18:07:12Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "product-service",
+      "sliding_window_size_s": 50.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 0.4,
+      "stars": 5,
+      "pushed_at": "2025-09-02T18:07:12Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "menuServiceCircuitBreaker",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-02-14T20:14:55Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "ordersServiceCircuitBreaker",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-02-14T20:14:55Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "reviewServiceCircuitBreaker",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-02-14T20:14:55Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "menuAggregateServiceCircuitBreaker",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-02-14T20:14:55Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "userService",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 0,
+      "pushed_at": "2025-11-08T10:09:53Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "b",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 2.0,
+      "stars": 0,
+      "pushed_at": "2026-08-17T06:07:18Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "ragService",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-05-30T18:26:33Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "backendA",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.2,
+      "stars": 1,
+      "pushed_at": "2025-07-10T08:19:57Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "menuBackend",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-03-18T20:33:08Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "reviewBackend",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-03-18T20:33:08Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "userServiceCircuitBreaker",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 50.0,
+      "lambda_star": 0.8333333333333334,
+      "stars": 0,
+      "pushed_at": "2025-09-07T13:17:36Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "paymentServiceCircuitBreaker",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 100.0,
+      "lambda_star": 1.6666666666666667,
+      "stars": 0,
+      "pushed_at": "2025-09-07T13:17:36Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "dataServiceCircuitBreaker",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 50.0,
+      "lambda_star": 0.8333333333333334,
+      "stars": 0,
+      "pushed_at": "2025-09-07T13:17:36Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "chartServiceCircuitBreaker",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 50.0,
+      "lambda_star": 0.8333333333333334,
+      "stars": 0,
+      "pushed_at": "2025-09-07T13:17:36Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "searchServiceCircuitBreaker",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 50.0,
+      "lambda_star": 0.8333333333333334,
+      "stars": 0,
+      "pushed_at": "2025-09-07T13:17:36Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "scheduleServiceCircuitBreaker",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 50.0,
+      "lambda_star": 0.8333333333333334,
+      "stars": 0,
+      "pushed_at": "2025-09-07T13:17:36Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "newsServiceCircuitBreaker",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 50.0,
+      "lambda_star": 0.8333333333333334,
+      "stars": 0,
+      "pushed_at": "2025-09-07T13:17:36Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "backtestingServiceCircuitBreaker",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 50.0,
+      "lambda_star": 0.8333333333333334,
+      "stars": 0,
+      "pushed_at": "2025-09-07T13:17:36Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "userServiceCircuitBreaker",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 50.0,
+      "lambda_star": 0.8333333333333334,
+      "stars": 1,
+      "pushed_at": "2025-09-07T16:17:32Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "paymentServiceCircuitBreaker",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 100.0,
+      "lambda_star": 1.6666666666666667,
+      "stars": 1,
+      "pushed_at": "2025-09-07T16:17:32Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "dataServiceCircuitBreaker",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 50.0,
+      "lambda_star": 0.8333333333333334,
+      "stars": 1,
+      "pushed_at": "2025-09-07T16:17:32Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "chartServiceCircuitBreaker",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 50.0,
+      "lambda_star": 0.8333333333333334,
+      "stars": 1,
+      "pushed_at": "2025-09-07T16:17:32Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "searchServiceCircuitBreaker",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 50.0,
+      "lambda_star": 0.8333333333333334,
+      "stars": 1,
+      "pushed_at": "2025-09-07T16:17:32Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "scheduleServiceCircuitBreaker",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 50.0,
+      "lambda_star": 0.8333333333333334,
+      "stars": 1,
+      "pushed_at": "2025-09-07T16:17:32Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "newsServiceCircuitBreaker",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 50.0,
+      "lambda_star": 0.8333333333333334,
+      "stars": 1,
+      "pushed_at": "2025-09-07T16:17:32Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "backtestingServiceCircuitBreaker",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 50.0,
+      "lambda_star": 0.8333333333333334,
+      "stars": 1,
+      "pushed_at": "2025-09-07T16:17:32Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "backendA",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 1.0,
+      "lambda_star": 0.1,
+      "stars": 0,
+      "pushed_at": "2024-06-08T09:36:39Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "backendA",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.2,
+      "stars": 1,
+      "pushed_at": "2025-07-10T08:19:57Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "log-producer-cb",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.08333333333333333,
+      "stars": 0,
+      "pushed_at": "2025-09-16T23:54:30Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitA",
+      "sliding_window_size_s": 10000.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.0005,
+      "stars": 0,
+      "pushed_at": "2025-06-26T00:36:18Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitB",
+      "sliding_window_size_s": 10000.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.0005,
+      "stars": 0,
+      "pushed_at": "2025-06-26T00:36:18Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "backendA",
+      "sliding_window_size_s": 5000.0,
+      "minimum_number_of_calls": 1.0,
+      "lambda_star": 0.0002,
+      "stars": 0,
+      "pushed_at": "2025-07-13T05:23:24Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "backendB",
+      "sliding_window_size_s": 5000.0,
+      "minimum_number_of_calls": 1.0,
+      "lambda_star": 0.0002,
+      "stars": 0,
+      "pushed_at": "2025-07-13T05:23:24Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitA",
+      "sliding_window_size_s": 10000.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.0005,
+      "stars": 0,
+      "pushed_at": "2025-06-26T12:25:54Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitB",
+      "sliding_window_size_s": 10000.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.0005,
+      "stars": 0,
+      "pushed_at": "2025-06-26T12:25:54Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "gatewayBreaker",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-06-23T21:16:46Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "backendA",
+      "sliding_window_size_s": 5000.0,
+      "minimum_number_of_calls": 1.0,
+      "lambda_star": 0.0002,
+      "stars": 0,
+      "pushed_at": "2025-06-26T20:18:33Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "backendB",
+      "sliding_window_size_s": 5000.0,
+      "minimum_number_of_calls": 1.0,
+      "lambda_star": 0.0002,
+      "stars": 0,
+      "pushed_at": "2025-06-26T20:18:33Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "fabric",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-07-10T11:41:58Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerA",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-05-23T14:29:42Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-05-23T14:29:42Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerA",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-05-27T07:28:04Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-05-27T07:28:04Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "backendA",
+      "sliding_window_size_s": 10000.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.0005,
+      "stars": 0,
+      "pushed_at": "2025-06-26T16:10:05Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "backendB",
+      "sliding_window_size_s": 10000.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.0005,
+      "stars": 0,
+      "pushed_at": "2025-06-26T16:10:05Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitA",
+      "sliding_window_size_s": 10000.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.0005,
+      "stars": 0,
+      "pushed_at": "2025-06-25T16:36:05Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitB",
+      "sliding_window_size_s": 10000.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.0005,
+      "stars": 0,
+      "pushed_at": "2025-06-25T16:36:05Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerA",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-06-27T15:40:40Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-06-27T15:40:40Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitA",
+      "sliding_window_size_s": 10000.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.0005,
+      "stars": 0,
+      "pushed_at": "2025-06-26T00:36:18Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitB",
+      "sliding_window_size_s": 10000.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.0005,
+      "stars": 0,
+      "pushed_at": "2025-06-26T00:36:18Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "spark-gateway",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.16666666666666666,
+      "stars": 0,
+      "pushed_at": "2026-06-16T06:50:05Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerA",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-06-16T15:19:56Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-06-16T15:19:56Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "backendA",
+      "sliding_window_size_s": 5000.0,
+      "minimum_number_of_calls": 1.0,
+      "lambda_star": 0.0002,
+      "stars": 0,
+      "pushed_at": "2025-06-23T12:39:26Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "backendB",
+      "sliding_window_size_s": 5000.0,
+      "minimum_number_of_calls": 1.0,
+      "lambda_star": 0.0002,
+      "stars": 0,
+      "pushed_at": "2025-06-23T12:39:26Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "accountService",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 1,
+      "pushed_at": "2026-09-17T10:53:00Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "authService",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 1,
+      "pushed_at": "2026-09-17T10:53:00Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "securityService",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 1,
+      "pushed_at": "2026-09-17T10:53:00Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "gatewayBreaker",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-06-23T21:16:46Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "breakerA",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-06-23T21:16:46Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "breakerB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-06-23T21:16:46Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerA",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-06-16T15:19:56Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-06-16T15:19:56Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "user-login",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 3.0,
+      "lambda_star": 0.3,
+      "stars": 0,
+      "pushed_at": "2025-11-20T18:57:50Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "patientService",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.16666666666666666,
+      "stars": 0,
+      "pushed_at": "2026-05-31T02:34:29Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "log-producer-cb",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.08333333333333333,
+      "stars": 0,
+      "pushed_at": "2025-09-16T23:54:30Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "backendA",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.2,
+      "stars": 1,
+      "pushed_at": "2025-07-10T08:19:57Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "backendA",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.2,
+      "stars": 1,
+      "pushed_at": "2025-07-10T08:19:57Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "supplier",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 1,
+      "pushed_at": "2026-09-17T10:53:00Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "toss-payments",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 1,
+      "pushed_at": "2026-09-17T10:53:00Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "circuitBreakerA",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-06-18T10:57:22Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-06-18T10:57:22Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerA",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-06-18T10:57:22Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreakerB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2025-06-18T10:57:22Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "userService",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.3333333333333333,
+      "stars": 0,
+      "pushed_at": "2025-11-08T10:09:53Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "backendA",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 1.0,
+      "lambda_star": 0.1,
+      "stars": 0,
+      "pushed_at": "2024-06-08T09:13:37Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "log-producer-cb",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.08333333333333333,
+      "stars": 0,
+      "pushed_at": "2025-09-16T23:54:30Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "breakerA",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-06-23T21:16:46Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "breakerB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-06-23T21:16:46Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "defaultCircuitBreaker",
+      "sliding_window_size_s": 100.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.1,
+      "stars": 0,
+      "pushed_at": "2025-01-10T15:01:35Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuit",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 100.0,
+      "lambda_star": 10.0,
+      "stars": 8,
+      "pushed_at": "2026-08-14T17:42:14Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "identityAuth",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 0.6666666666666666,
+      "stars": 5,
+      "pushed_at": "2026-09-01T02:27:46Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "identityApi",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 0.6666666666666666,
+      "stars": 5,
+      "pushed_at": "2026-09-01T02:27:46Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "commerceSearch",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 0.6666666666666666,
+      "stars": 5,
+      "pushed_at": "2026-09-01T02:27:46Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "commerceApi",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 0.6666666666666666,
+      "stars": 5,
+      "pushed_at": "2026-09-01T02:27:46Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "circuitbreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2024-02-02T20:32:34Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitbreakInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2023-09-21T21:49:51Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitbreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2024-02-02T20:32:34Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitbreakInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2023-09-21T21:49:51Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuit-breaker-by-time",
+      "sliding_window_size_s": 5.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 1.0,
+      "stars": 0,
+      "pushed_at": "2023-01-05T18:14:23Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitbreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2024-11-05T20:27:41Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "storage-service",
+      "sliding_window_size_s": 50.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.1,
+      "stars": 0,
+      "pushed_at": "2024-03-17T18:30:53Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "storage-service",
+      "sliding_window_size_s": 50.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.1,
+      "stars": 0,
+      "pushed_at": "2024-03-06T08:23:11Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "imaggaCB",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 100.0,
+      "lambda_star": 10.0,
+      "stars": 0,
+      "pushed_at": "2024-09-09T11:02:43Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBreaker",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 0.5,
+      "stars": 2,
+      "pushed_at": "2025-07-06T11:38:46Z",
+      "tutorial_like": false,
+      "stars_bucket": "1-9"
+    },
+    {
+      "instance": "administrationServiceCircuitBreaker",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-09-08T12:44:09Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "appointmentServiceCircuitBreaker",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-09-08T12:44:09Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "brandServiceCircuitBreaker",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-09-08T12:44:09Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "studioAggregateServiceCircuitBreaker",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-09-08T12:44:09Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "userAggregateServiceCircuitBreaker",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-09-08T12:44:09Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitbreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2023-07-24T01:36:54Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitbreakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 0.06666666666666667,
+      "stars": 0,
+      "pushed_at": "2024-10-07T18:41:40Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "scrapperClient",
+      "sliding_window_size_s": 100.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.1,
+      "stars": 0,
+      "pushed_at": "2025-06-24T08:56:45Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBrakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 4.0,
+      "lambda_star": 0.13333333333333333,
+      "stars": 0,
+      "pushed_at": "2022-05-27T23:39:51Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "circuitBrakerInstance",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 4.0,
+      "lambda_star": 0.13333333333333333,
+      "stars": 0,
+      "pushed_at": "2022-05-27T23:39:51Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "yandexMapsApi",
+      "sliding_window_size_s": 100.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.1,
+      "stars": 0,
+      "pushed_at": "2025-04-03T04:11:49Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "update-currency-rates",
+      "sliding_window_size_s": 86400.0,
+      "minimum_number_of_calls": 5.0,
+      "lambda_star": 5.787037037037037e-05,
+      "stars": 0,
+      "pushed_at": "2026-09-16T15:06:41Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "recommendations",
+      "sliding_window_size_s": 10.0,
+      "minimum_number_of_calls": 20.0,
+      "lambda_star": 2.0,
+      "stars": 0,
+      "pushed_at": "2026-06-01T10:31:16Z",
+      "tutorial_like": true,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "githubClient",
+      "sliding_window_size_s": 100.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.1,
+      "stars": 0,
+      "pushed_at": "2025-06-24T08:56:45Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "stackoverflowClient",
+      "sliding_window_size_s": 100.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.1,
+      "stars": 0,
+      "pushed_at": "2025-06-24T08:56:45Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "linkTrackerBotClient",
+      "sliding_window_size_s": 100.0,
+      "minimum_number_of_calls": 10.0,
+      "lambda_star": 0.1,
+      "stars": 0,
+      "pushed_at": "2025-06-24T08:56:45Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "administrationServiceCircuitBreaker",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-09-08T12:44:09Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "appointmentServiceCircuitBreaker",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-09-08T12:44:09Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "brandServiceCircuitBreaker",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-09-08T12:44:09Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "studioAggregateServiceCircuitBreaker",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-09-08T12:44:09Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "userAggregateServiceCircuitBreaker",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 15.0,
+      "lambda_star": 0.5,
+      "stars": 0,
+      "pushed_at": "2026-09-08T12:44:09Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "course-service",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 100.0,
+      "lambda_star": 3.3333333333333335,
+      "stars": 0,
+      "pushed_at": "2026-01-11T02:53:24Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "cloud-payment-service",
+      "sliding_window_size_s": 2.0,
+      "minimum_number_of_calls": 2.0,
+      "lambda_star": 1.0,
+      "stars": 0,
+      "pushed_at": "2026-07-02T08:51:23Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "course-service",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 100.0,
+      "lambda_star": 3.3333333333333335,
+      "stars": 0,
+      "pushed_at": "2026-01-11T02:53:24Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "github-cb",
+      "sliding_window_size_s": 30.0,
+      "minimum_number_of_calls": 100.0,
+      "lambda_star": 3.3333333333333335,
+      "stars": 0,
+      "pushed_at": "2026-06-09T12:00:42Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    },
+    {
+      "instance": "stackoverflow-cb",
+      "sliding_window_size_s": 60.0,
+      "minimum_number_of_calls": 100.0,
+      "lambda_star": 1.6666666666666667,
+      "stars": 0,
+      "pushed_at": "2026-06-09T12:00:42Z",
+      "tutorial_like": false,
+      "stars_bucket": "0"
+    }
+  ]
+}

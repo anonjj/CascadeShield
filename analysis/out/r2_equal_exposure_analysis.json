@@ -150,6 +150,154 @@
         "LIN-LAT-CNT-T50-W10-D30": 3
       }
     },
+    "config_stdevs": {
+      "TIME_BASED|D5": {
+        "LIN-LAT-TIM-T50-W10-D5": 0.017776388834631417,
+        "LIN-LAT-TIM-T50-W5-D5": 0.04750789408087914,
+        "LIN-LAT-TIM-T50-W20-D5": 0.053777318638995,
+        "LIN-LAT-TIM-T70-W10-D5": 0.035218366420567825
+      },
+      "COUNT_BASED|D5": {
+        "LIN-LAT-CNT-T50-W5-D5": 0.030924639582917073,
+        "LIN-LAT-CNT-T50-W20-D5": 0.03397548135543276,
+        "LIN-LAT-CNT-T50-W10-D5": 0.05185878260558488,
+        "LIN-LAT-CNT-T70-W10-D5": 0.145142458754609
+      },
+      "TIME_BASED|D30": {
+        "LIN-LAT-TIM-T50-W10-D30": 0.03439476704384029,
+        "LIN-LAT-TIM-T50-W5-D30": 0.02850146195080512,
+        "LIN-LAT-TIM-T70-W10-D30": 0.10212247548899463,
+        "LIN-LAT-TIM-T50-W20-D30": 0.03996248240537682
+      },
+      "TIME_BASED|D15": {
+        "LIN-LAT-TIM-T70-W10-D15": 0.031511902513178654,
+        "LIN-LAT-TIM-T50-W5-D15": 0.08151278018404998,
+        "LIN-LAT-TIM-T50-W20-D15": 0.07736493607140793,
+        "LIN-LAT-TIM-T50-W10-D15": 0.01123981020005765
+      },
+      "COUNT_BASED|D15": {
+        "LIN-LAT-CNT-T50-W10-D15": 0.043965895873958306,
+        "LIN-LAT-CNT-T50-W5-D15": 0.0297713508819046,
+        "LIN-LAT-CNT-T50-W20-D15": 0.07315964279118198,
+        "LIN-LAT-CNT-T70-W10-D15": 0.0782708971031574
+      },
+      "COUNT_BASED|D30": {
+        "LIN-LAT-CNT-T50-W5-D30": 0.03304542328371378,
+        "LIN-LAT-CNT-T50-W20-D30": 0.1765002360716078,
+        "LIN-LAT-CNT-T70-W10-D30": 0.5130769922730927,
+        "LIN-LAT-CNT-T50-W10-D30": 0.1279413928328109
+      }
+    },
+    "config_ranges": {
+      "TIME_BASED|D5": {
+        "LIN-LAT-TIM-T50-W10-D5": [
+          13.872,
+          13.906
+        ],
+        "LIN-LAT-TIM-T50-W5-D5": [
+          13.881,
+          13.976
+        ],
+        "LIN-LAT-TIM-T50-W20-D5": [
+          13.906,
+          14.002
+        ],
+        "LIN-LAT-TIM-T70-W10-D5": [
+          13.886,
+          13.951
+        ]
+      },
+      "COUNT_BASED|D5": {
+        "LIN-LAT-CNT-T50-W5-D5": [
+          13.925,
+          13.98
+        ],
+        "LIN-LAT-CNT-T50-W20-D5": [
+          13.927,
+          13.993
+        ],
+        "LIN-LAT-CNT-T50-W10-D5": [
+          13.943,
+          14.039
+        ],
+        "LIN-LAT-CNT-T70-W10-D5": [
+          13.881,
+          14.156
+        ]
+      },
+      "TIME_BASED|D30": {
+        "LIN-LAT-TIM-T50-W10-D30": [
+          63.914,
+          63.981
+        ],
+        "LIN-LAT-TIM-T50-W5-D30": [
+          63.914,
+          63.971
+        ],
+        "LIN-LAT-TIM-T70-W10-D30": [
+          63.73,
+          63.933
+        ],
+        "LIN-LAT-TIM-T50-W20-D30": [
+          63.902,
+          63.981
+        ]
+      },
+      "TIME_BASED|D15": {
+        "LIN-LAT-TIM-T70-W10-D15": [
+          33.861,
+          33.924
+        ],
+        "LIN-LAT-TIM-T50-W5-D15": [
+          33.808,
+          33.964
+        ],
+        "LIN-LAT-TIM-T50-W20-D15": [
+          33.884,
+          34.038
+        ],
+        "LIN-LAT-TIM-T50-W10-D15": [
+          33.917,
+          33.939
+        ]
+      },
+      "COUNT_BASED|D15": {
+        "LIN-LAT-CNT-T50-W10-D15": [
+          33.898,
+          33.983
+        ],
+        "LIN-LAT-CNT-T50-W5-D15": [
+          33.931,
+          33.984
+        ],
+        "LIN-LAT-CNT-T50-W20-D15": [
+          33.796,
+          33.933
+        ],
+        "LIN-LAT-CNT-T70-W10-D15": [
+          33.903,
+          34.041
+        ]
+      },
+      "COUNT_BASED|D30": {
+        "LIN-LAT-CNT-T50-W5-D30": [
+          63.938,
+          63.998
+        ],
+        "LIN-LAT-CNT-T50-W20-D30": [
+          63.648,
+          63.965
+        ],
+        "LIN-LAT-CNT-T70-W10-D30": [
+          63.12,
+          64.028
+        ],
+        "LIN-LAT-CNT-T50-W10-D30": [
+          63.731,
+          63.973
+        ]
+      }
+    },
     "censored_replicates": [],
     "n_configs_by_arm_stratum": {
       "TIME_BASED|D5": 4,
@@ -205,6 +353,8 @@
     "D5": {
       "time_median": 13.927166666666668,
       "count_median": 13.967500000000001,
+      "time_sd": 0.020640440348447253,
+      "count_sd": 0.021729609428747455,
       "abs_diff": 0.04033333333333289,
       "threshold_s": 1.0,
       "passes_equivalence": true
@@ -212,6 +362,8 @@
     "D15": {
       "time_median": 33.91316666666667,
       "count_median": 33.941833333333335,
+      "time_sd": 0.02902489353028437,
+      "count_sd": 0.03360045744838316,
       "abs_diff": 0.028666666666666174,
       "threshold_s": 1.0,
       "passes_equivalence": true
@@ -219,6 +371,8 @@
     "D30": {
       "time_median": 63.940333333333335,
       "count_median": 63.83966666666667,
+      "time_sd": 0.05166155888730644,
+      "count_sd": 0.10171474273127121,
       "abs_diff": 0.1006666666666618,
       "threshold_s": 1.0,
       "passes_equivalence": true

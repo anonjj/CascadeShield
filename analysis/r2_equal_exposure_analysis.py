@@ -208,9 +208,20 @@ def config_level_values(rows, value_col="recovery_event_s"):
 
     means = {}
     config_counts = {}
+    config_stdevs = {}
+    config_ranges = {}
     for stratum_key, configs in by_stratum_config.items():
         means[stratum_key] = {cid: statistics.mean(vals) for cid, vals in configs.items()}
         config_counts[stratum_key] = {cid: len(vals) for cid, vals in configs.items()}
+        # Within-config spread across replicates -- "ordinary run-to-run noise" (n<2 -> None,
+        # not 0.0, since a single replicate has no spread to report).
+        config_stdevs[stratum_key] = {
+            cid: (statistics.stdev(vals) if len(vals) >= 2 else None)
+            for cid, vals in configs.items()
+        }
+        config_ranges[stratum_key] = {
+            cid: (min(vals), max(vals)) for cid, vals in configs.items()
+        }
 
     ties = []
     for stratum_key, cfg_means in means.items():
@@ -226,6 +237,8 @@ def config_level_values(rows, value_col="recovery_event_s"):
     return {
         "means": means,
         "config_counts": config_counts,
+        "config_stdevs": config_stdevs,
+        "config_ranges": config_ranges,
         "censored_replicates": censored,
         "n_configs_by_arm_stratum": n_configs_by_arm_stratum,
         "ties": ties,
@@ -273,8 +286,13 @@ def p2_primary(means_by_stratum):
         time_median = statistics.median(time_vals)
         count_median = statistics.median(count_vals)
         diff = abs(time_median - count_median)
+        # Spread of the same 4 config-means the median is taken over, in each arm --
+        # situates |diff| against ordinary between-config noise, not just the 1s threshold.
+        time_sd = statistics.stdev(time_vals) if len(time_vals) >= 2 else None
+        count_sd = statistics.stdev(count_vals) if len(count_vals) >= 2 else None
         report[f"D{int(dw)}"] = {
             "time_median": time_median, "count_median": count_median,
+            "time_sd": time_sd, "count_sd": count_sd,
             "abs_diff": diff, "threshold_s": P2_THRESHOLD_S,
             "passes_equivalence": diff < P2_THRESHOLD_S,
         }
@@ -417,6 +435,8 @@ def run_analysis():
         **cfg,
         "means": {f"{wt}|D{dw}": m for (wt, dw), m in cfg["means"].items()},
         "config_counts": {f"{wt}|D{dw}": c for (wt, dw), c in cfg["config_counts"].items()},
+        "config_stdevs": {f"{wt}|D{dw}": c for (wt, dw), c in cfg["config_stdevs"].items()},
+        "config_ranges": {f"{wt}|D{dw}": c for (wt, dw), c in cfg["config_ranges"].items()},
         "ties": [{"stratum": f"{s[0]}|D{s[1]}", "tied_values": t["tied_values"]}
                  for t in cfg["ties"] for s in [t["stratum"]]],
     }
@@ -461,6 +481,12 @@ def print_report(result):
     print(f"  configs per arm per stratum: {result['step3_config_level']['n_configs_by_arm_stratum']}")
     print(f"  censored replicates: {result['step3_config_level']['censored_replicates']}")
     print(f"  exact ties: {result['step3_config_level']['ties']}")
+    print("  within-config stdev (n=3 replicates each) -- ordinary run-to-run noise:")
+    all_sds = [sd for cell in result['step3_config_level']['config_stdevs'].values()
+               for sd in cell.values() if sd is not None]
+    if all_sds:
+        print(f"    mean={statistics.mean(all_sds):.4f}s "
+              f"min={min(all_sds):.4f}s max={max(all_sds):.4f}s across {len(all_sds)} configs")
 
     print("\nSTEP 4 -- P1, the bounce prediction (§3)")
     for key, v in result["step4_bounce_report"].items():
@@ -476,7 +502,8 @@ def print_report(result):
         if "error" in v:
             print(f"    {key}: {v}")
             continue
-        print(f"    {key}: TIME={v['time_median']:.3f}s COUNT={v['count_median']:.3f}s "
+        print(f"    {key}: TIME={v['time_median']:.3f}s (sd={v['time_sd']:.4f}) "
+              f"COUNT={v['count_median']:.3f}s (sd={v['count_sd']:.4f}) "
               f"|diff|={v['abs_diff']:.3f}s passes(<1s)={v['passes_equivalence']}")
     print(f"  (b) direction signs (before any pooled p-value): "
           f"{result['step5b_direction_signs']} -- consistent: "
@@ -621,6 +648,19 @@ def self_test():
           cfg["means"][("COUNT_BASED", "5")]["X"] == 11.0)
     check("the censored replicate is reported, not silently dropped",
           cfg["censored_replicates"] == ["X#3"])
+    check("config X's stdev matches statistics.stdev([10.0, 12.0]) (censored replicate excluded)",
+          abs(cfg["config_stdevs"][("COUNT_BASED", "5")]["X"] - statistics.stdev([10.0, 12.0])) < 1e-9)
+    check("config X's range is (10.0, 12.0)",
+          cfg["config_ranges"][("COUNT_BASED", "5")]["X"] == (10.0, 12.0))
+
+    print("config_level_values: single-replicate config has stdev=None, not 0.0")
+    rows2b = [
+        {"experiment_id": "Y", "replicate": "1", "window_type": "COUNT_BASED",
+         "wait_duration": "5", "recovery_event_s": "10.0", "recovery_censored": "False"},
+    ]
+    cfg_single = config_level_values(rows2b, "recovery_event_s")
+    check("a single-replicate config reports stdev=None (not a fabricated 0.0)",
+          cfg_single["config_stdevs"][("COUNT_BASED", "5")]["Y"] is None)
 
     print("bounce_report: P1 all-exactly-1 detection")
     rows3 = [
@@ -641,6 +681,8 @@ def self_test():
     p2a = p2_primary(means)
     check("D5 passes equivalence (medians nearly identical, well under 1s)",
           p2a["D5"]["passes_equivalence"] is True)
+    check("D5's time_sd matches statistics.stdev of its 4 config means",
+          abs(p2a["D5"]["time_sd"] - statistics.stdev([14.0, 14.5, 13.8, 14.2])) < 1e-9)
     signs, consistent = p2_direction_consistency(means)
     check("direction sign is recorded for D5", signs["D5"] in ("TIME_higher", "COUNT_higher", "tied"))
 

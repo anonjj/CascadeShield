@@ -78,7 +78,8 @@ to already-published numbers.
 - **§VI audited against the real decision log (§20).** Two fabricated claims found
   and one omission that **retracts the "lead with the τ curve" advice** — D-001's
   informative band may be an artifact of D17's blending bug. Closes the §6 gap.
-- **D26 — H3's mechanism CLOSED (PR #68).** Full chain established; the ~9.8 s
+- **§19's "D26" (this section's own internal label, not decision-log.md's D26 — see
+  §19's note) — H3's mechanism CLOSED (PR #68).** Full chain established; the ~9.8 s
   residual dissolves entirely. Retracts §12.3's two-component framing. **The
   largest positive content change of the session — see §19.**
 - **D25 — measurement-plane fixed and live-verified.** D23's mechanism confirmed
@@ -511,7 +512,8 @@ while a count-based ring buffer has been overwritten by fresh successes. Larger
 T means longer residual memory of the fault, so more bounces before a clean
 close.
 
-> **SUPERSEDED 2026-09-17 by §19 (D26).** The residual below does not exist —
+> **SUPERSEDED 2026-09-17 by §19 (§19's internal "D26" label, not decision-log.md's
+> D26 — see §19's note).** The residual below does not exist —
 > it is failed-episode time, accounted for by the additive decomposition. Do not
 > use the two-component framing. Kept here as the reasoning that led to the
 > decomposition test.
@@ -909,6 +911,12 @@ be clean; whether to spend the ~4 h is still the open call.
 > The mechanism below is the explanation of a failed prediction. Also: Soham
 > reports there is no D26 in the decision log — this content sits in D22 as an
 > update dated 2026-09-18. Use the log's numbering, not these notes'.
+>
+> **Update (2026-10-01).** decision-log.md now has a real D26 — the Phase 4B
+> re-collection (2026-09-22, see §30) — a different entry entirely, unrelated to this
+> section's content. Every "D26" in this file before §30 (this title included) means
+> this section's own internal label, never that entry. Cite this section's content as
+> D22's 2026-09-18 update, not as "D26."
 
 **H3 moves from "confirmed effect, unidentified mechanism" to "confirmed effect
 with a specified and quantified mechanism, no residual."** This is the largest
@@ -1807,7 +1815,8 @@ version takes a paragraph. Figure 4 is cheap and orients the reader early.
 
 ### 27.4 🟠 Title, abstract and contribution list are stale
 
-All three predate D23, D25, D26 and the H4 absorption. The abstract still claims
+All three predate D23, D25, §19's "D26" (not decision-log.md's D26) and the H4
+absorption. The abstract still claims
 four results in the old configuration and says nothing about the config audit —
 which is now the paper's only evidence about software outside the lab.
 
@@ -1916,7 +1925,8 @@ that would prove it wrong.
 
 Window settings **do** affect recovery. Time-based windows recover roughly an
 order of magnitude more slowly than count-based. D22's 2026-09-18 update (called
-D26 in these notes) goes further: larger time-based windows cause more failed
+D26 in these notes — §19's internal label, not decision-log.md's D26, a different,
+later entry) goes further: larger time-based windows cause more failed
 recovery attempts, so **window size** affects recovery as well.
 
 **The negative control fails. By its own definition, H3 is falsified.**

@@ -199,3 +199,11 @@
       `TIME_BASED` runs specifically at each `wait_duration`, then re-run
       `python analysis/window_type_recovery_leak.py current` and check `n_time` in the
       `half_open_to_closed` block is above 1 per bucket before treating D13 as closed.
+
+## Standing reminder — STATUS.md sync
+
+- [ ] When a decision-log.md entry supersedes or retracts an earlier one, update
+      STATUS.md's corresponding row in the same change — don't let decision-log.md move on
+      while STATUS.md still quotes the retracted claim. D26 (2026-09-22) and D28
+      (2026-09-29) both landed without a STATUS.md update; the 2026-09-16 "H3 Confirmed /
+      LEAK_CONFIRMED" row sat there, unflagged, until the 2026-10-01 main merge caught it.

@@ -1,0 +1,30 @@
+{
+  "preregistration_sha": "99642111ba54802741d39545fa88e6db3b9aa785",
+  "preregistration_sha_short": "9964211",
+  "preregistration_commit_time": "2026-10-01T00:22:42+05:30",
+  "preregistration_file": "docs/paper/r2-equal-exposure-plan.md",
+  "preregistration_note": "The commit above is the one and only commit that introduced docs/paper/r2-equal-exposure-plan.md (git log confirms a single 'docs(R2): pre-register...' commit touching that path). Its commit timestamp is recorded here BEFORE the sweep's launch command is run, so this manifest itself is evidence the plan predates the first row -- not just an assertion made after the fact.",
+  "git_branch": "experiment/r2-equal-exposure",
+  "git_head_at_launch": "99642111ba54802741d39545fa88e6db3b9aa785",
+  "machine_id": "jay-mac",
+  "mode": "recovery-control",
+  "fault": "latency",
+  "topology": "linear",
+  "replicates": 3,
+  "seed": 20260929,
+  "expected_runs": 72,
+  "only_ids_source": "default (--mode recovery-control with no --only-ids -- the 24 Phase 4B ids from docs/paper/phase4b_only_ids.txt)",
+  "dataset_path": "data/r2_equal_exposure.csv",
+  "transitions_path": "data/r2_cb_transitions.jsonl",
+  "poll_path": "data/audit/r2_sweep_poll.jsonl",
+  "poll_pid": 63489,
+  "observability": "prometheus and grafana STOPPED before launch (docker stop prometheus grafana), confirmed via docker ps showing neither running, before any proxy setup or run began. Matches Phase 4B's collection conditions -- differs from the R2 canary (2026-09-30), which ran with both live (see data/audit/r2_image_manifest.json).",
+  "preflight": {
+    "toxiproxy_proxies_recreated": "python3 experiments/fault_injector.py -- all 5 proxies confirmed present and reset before launch",
+    "healthcheck_wait_s": 60,
+    "curl_linear_200_x3": true
+  },
+  "launch_command": "python3 experiments/runner.py --mode recovery-control --machine-id jay-mac --seed 20260929 --replicates 3 --topology linear --fault latency",
+  "launch_time_utc": "2026-09-30T18:57:10Z",
+  "image_manifest_ref": "data/audit/r2_image_manifest.json"
+}

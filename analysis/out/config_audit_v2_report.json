@@ -1,0 +1,211 @@
+{
+  "methodology_note": "Instances using analysis/config_audit_parser.py's analyze_file(): both camelCase and kebab-case keys accepted, base-config/baseConfig inheritance resolved, multi-document YAML handled, flat-dotted-key document roots (e.g. 'resilience4j.circuitbreaker:' as one literal string key) resolved -- the defect found and fixed during this reconciliation (see decision log once filed). No repo name, path, or blob sha appears anywhere below.",
+  "corpus": {
+    "repos_searched": 740,
+    "hits_total": 1141,
+    "canonical_skips": {
+      "no_time_based_instance_found": 501,
+      "yaml_parse_error": 10,
+      "not_a_mapping": 4
+    }
+  },
+  "groupings": {
+    "instance_level": {
+      "n": 1057,
+      "min": 2e-05,
+      "max": 20.0,
+      "median": 0.4,
+      "q1": 0.4,
+      "q3": 0.5
+    },
+    "config_level_deduplicated": {
+      "n_distinct_pairs": 66,
+      "n": 66,
+      "min": 2e-05,
+      "max": 20.0,
+      "median": 0.4,
+      "q1": 0.1,
+      "q3": 1.0
+    },
+    "file_level": {
+      "n_files": 626,
+      "n": 626,
+      "min": 5.787037037037037e-05,
+      "max": 20.0,
+      "median": 0.4,
+      "q1": 0.4,
+      "q3": 0.5000025
+    },
+    "repo_level": {
+      "n_repos": 384,
+      "n": 384,
+      "min": 5.787037037037037e-05,
+      "max": 20.0,
+      "median": 0.4,
+      "q1": 0.375,
+      "q3": 0.96875
+    },
+    "blob_level": {
+      "n_blobs": 537,
+      "n_instances": 887,
+      "n": 887,
+      "min": 2e-05,
+      "max": 20.0,
+      "median": 0.4,
+      "q1": 0.4,
+      "q3": 0.6666666666666666
+    }
+  },
+  "duplication": {
+    "instances_in_cross_repo_duplicated_content": 246,
+    "instances_in_same_repo_duplicated_content": 54,
+    "top_10_parameter_pairs_by_instance_count": [
+      {
+        "minimum_number_of_calls": 4.0,
+        "sliding_window_size": 10.0,
+        "lambda_star": 0.4,
+        "instances": 433,
+        "distinct_blobs": 181,
+        "distinct_repos": 118
+      },
+      {
+        "minimum_number_of_calls": 5.0,
+        "sliding_window_size": 10.0,
+        "lambda_star": 0.5,
+        "instances": 121,
+        "distinct_blobs": 65,
+        "distinct_repos": 50
+      },
+      {
+        "minimum_number_of_calls": 10.0,
+        "sliding_window_size": 10.0,
+        "lambda_star": 1.0,
+        "instances": 60,
+        "distinct_blobs": 23,
+        "distinct_repos": 18
+      },
+      {
+        "minimum_number_of_calls": 20.0,
+        "sliding_window_size": 10.0,
+        "lambda_star": 2.0,
+        "instances": 56,
+        "distinct_blobs": 44,
+        "distinct_repos": 36
+      },
+      {
+        "minimum_number_of_calls": 2.0,
+        "sliding_window_size": 30.0,
+        "lambda_star": 0.06666666666666667,
+        "instances": 42,
+        "distinct_blobs": 39,
+        "distinct_repos": 24
+      },
+      {
+        "minimum_number_of_calls": 15.0,
+        "sliding_window_size": 30.0,
+        "lambda_star": 0.5,
+        "instances": 36,
+        "distinct_blobs": 9,
+        "distinct_repos": 9
+      },
+      {
+        "minimum_number_of_calls": 10.0,
+        "sliding_window_size": 60.0,
+        "lambda_star": 0.16666666666666666,
+        "instances": 29,
+        "distinct_blobs": 18,
+        "distinct_repos": 15
+      },
+      {
+        "minimum_number_of_calls": 1.0,
+        "sliding_window_size": 1.0,
+        "lambda_star": 1.0,
+        "instances": 22,
+        "distinct_blobs": 12,
+        "distinct_repos": 5
+      },
+      {
+        "minimum_number_of_calls": 20.0,
+        "sliding_window_size": 60.0,
+        "lambda_star": 0.3333333333333333,
+        "instances": 21,
+        "distinct_blobs": 12,
+        "distinct_repos": 7
+      },
+      {
+        "minimum_number_of_calls": 50.0,
+        "sliding_window_size": 60.0,
+        "lambda_star": 0.8333333333333334,
+        "instances": 17,
+        "distinct_blobs": 5,
+        "distinct_repos": 5
+      }
+    ],
+    "top_10_pairs_share_of_corpus": 0.7918637653736992
+  },
+  "tutorial_flag": {
+    "method": "substring match on lower(repo_full_name + '/' + path) against a fixed keyword list -- not stars, not content, not structure",
+    "keywords": [
+      "tutorial",
+      "demo",
+      "example",
+      "sample",
+      "learn",
+      "study",
+      "course",
+      "training",
+      "workshop",
+      "bootcamp",
+      "practice",
+      "playground",
+      "guide",
+      "starter",
+      "101",
+      "test-project",
+      "toy"
+    ],
+    "tutorial_instances": 101,
+    "non_tutorial_instances": 956,
+    "tutorial_quartiles": {
+      "n": 101,
+      "min": 0.06666666666666667,
+      "max": 20.0,
+      "median": 0.5,
+      "q1": 0.16666666666666666,
+      "q3": 1.6666666666666667
+    },
+    "non_tutorial_quartiles": {
+      "n": 956,
+      "min": 2e-05,
+      "max": 20.0,
+      "median": 0.4,
+      "q1": 0.4,
+      "q3": 0.5
+    },
+    "distinct_pairs_touched_by_tutorial": 20,
+    "distinct_pairs_touched_by_non_tutorial": 62,
+    "avg_instances_per_pair_tutorial": 5.05,
+    "avg_instances_per_pair_non_tutorial": 15.419354838709678,
+    "caveat": "the 'non-tutorial' bucket has a HIGHER average instances-per-pair than the 'tutorial' bucket -- this flag undercounts templated/duplicated content, confirmed directly against the (4,10) cluster (3% tutorial-flagged)"
+  },
+  "reconciliation": {
+    "n_canonical": 1057,
+    "n_run821_on_same_content": 821,
+    "n_original_447_retired_script": 447,
+    "n_original_821_committed": 821,
+    "causes_of_821_rows": {
+      "matches_canonical": 689,
+      "config_template_miscounted_as_instance": 110,
+      "off_schema_or_false_positive": 14,
+      "real_instance_canonical_still_misses": 8
+    },
+    "causes_canonical_rows_missed_by_821": {
+      "found_in_821": 797,
+      "multi_document_parse_failure_in_821": 48,
+      "inheritance_derived": 101,
+      "value_case_sensitivity": 20,
+      "kebab_case": 91
+    },
+    "zero_remainder_either_direction": true
+  }
+}

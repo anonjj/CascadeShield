@@ -1985,6 +1985,120 @@ that shape before it becomes a silent leak again.
 
 ---
 
+
+## D26 · H3 post-D25 re-collection: gateway-verified COUNT vs TIME recovery
+
+**Date:** 2026-09-22 · **Decided by:** Soham and Jay · **Status:** final for the numbers below;
+branch `h3-evidence-audit`, not yet merged to `main`
+
+**Context.** D23 found the gateway measurement-plane was not isolated for COUNT_BASED sweeps,
+contaminating 20 of 73 sidecar-recorded runs and invalidating the published H3 recovery table
+(2.04/9.83/14.99s COUNT progression, p=0.0005/0.0014). D25 fixed the gateway pin. This entry
+reports the re-collection and re-analysis on verified post-D25 data.
+
+**Audit (Phase 2, branch `h3-evidence-audit`).** Every existing dataset in the repo predates
+D25, and most lack sidecar coverage; zero rows in any existing dataset qualified as
+verified-clean post-fix (`docs/paper/phase2-contamination-audit.md`). No gateway
+circuit-breaker trip was observed within the verified observation horizon under either swept
+window type across the Phase 1 canary runs (n=4, LINEAR only, post-fix gateway image
+bdc2fff79e75).
+
+**Pre-registration.** `docs/paper/h3-postd25-analysis-plan.md` fixed the primary metric
+(`time_to_recover`), the test (`stratified_cluster_permutation_test`, configuration as unit,
+strata $D_w \in \{5,15,30\}$), the config-level value rule, the exclusion rules and the claim
+scope. It is frozen at `3e4ad1e`, the third commit of the chain `8f1623b` → `34bfda7` →
+`3e4ad1e`; all three predate the smoke run (2026-09-19T23:49:51Z) and every Phase 4B run, and
+the file is byte-identical to `3e4ad1e` in `HEAD`.
+
+**Collection (Phase 4B).** 72 runs (Option C: 4 configs × 2 arms × 3 strata × 3 replicates),
+LINEAR + LATENCY, `soham-local`, seed 20260920, 2026-09-21T17:10:12Z–19:46:49Z. Result:
+**72 unique keys, 0 aborted rows**. A first launch attempt (`cec9155`, 2026-09-21T06:08Z) was
+stopped after 1 of 72 runs when the laptop had to be closed; all of its output was quarantined
+to `data/audit/aborted_launch_20260921T061403Z/`, and the decision to discard was taken on the
+run count alone, before any outcome column was read. Gateway image provenance is evidence, not
+proof: the running container's image ID matched the built image
+(`sha256:ce110c0a…`, recorded in `data/audit/phase4b_manifest.json`), and the image was built
+after the newest commit touching the gateway's source paths. Docker images carry no commit
+label here, so this does not prove the image was built from a specific commit.
+
+**Verification.** The sidecar records **zero gateway transitions of any kind** across the 72
+runs. The independent poller (`analysis/gateway_poll_verify.py`) recorded **22,686 data ticks**
+(22,687 lines including the `poller_start` marker) from 2026-09-21T17:07:50Z to 23:47:31Z.
+**Among all 59,292 observed gateway states, none was non-CLOSED.** 2,926 ticks (12.9%)
+recorded no state — the gateway was down between runs for container recreate and readiness —
+and none of them falls inside any run's verification window. Neither fact depends on a horizon
+choice. The log carries no `poller_stop` marker; coverage is judged from the ticks.
+
+A defect was found in the pre-registered verification horizon mid-collection
+(`docs/paper/deviation-01-verification-horizon.md`, commit `78ea155`): the horizon's length
+scaled with `time_to_recover` itself, so it ran into the next run's container-recreate window
+and differentially excluded the TIME arm — 35 of 36 TIME runs are NOT_VERIFIED under the
+literal rule, against 0 of 36 COUNT runs. This was not contamination: the gateway showed zero
+anomalous activity throughout. The defect was diagnosed, and a corrected rule committed, before
+any count under it was computed.
+
+The rule was then simplified (`docs/paper/deviation-02-horizon-simplification.md`, commit
+`4987dee`) to `end = run_timestamp`, which reads no outcome column. **It is not
+outcome-independent.** `run_timestamp` is stamped when the row is written, after recovery
+detection, so horizon length correlates with `time_to_recover` at **r = 0.994** (correction
+note appended to DEVIATION 02, 2026-09-22). This does not undermine the fix: verification ends
+at the row write, which structurally cannot fall inside the next run's recreate window, and the
+correlation makes verification *stricter* for slow recoveries, not more lenient — the opposite
+of a bias that could manufacture a TIME-slower effect. No run was excluded under it. DEVIATION
+02 produces **identical verdict sets key by key** to DEVIATION 01 (72/72 VERIFIED_CLEAN), plus
+identical statistic, p-value, floor, per-stratum signs and config values
+(`h3_phase4b_analysis.py --self-test`). `h3-postd25-analysis-plan.md` itself was never edited.
+
+**Result** (`analysis/h3_phase4b_analysis.py`, commit `5f77cd2`). All 72 runs retained (0
+excluded by any rule), 0 censored replicates, 0 ties between config values. Complete
+separation between arms in all three strata (COUNT max < TIME min, every stratum). Effect
+direction consistent across all three strata, checked per §7 before pooling (per-stratum
+statistic −8.0 in each). Stratified permutation test: statistic −24.0 (the design's minimum),
+343,000 assignments, **p = 5.830903790087464e-06 (= 2/343,000, the exact design floor — the
+test is saturated, not merely significant)**. Per-stratum sensitivity
+(`cluster_permutation_rank_test`) agrees in direction in all three strata; each of its
+p-values, 0.0286, is that stratum's own exact 4v4 floor, so it is saturated too.
+
+KM medians (descriptive, uncensored): $D_w$=5 → COUNT 6.732s / TIME 23.613s (3.51×);
+$D_w$=15 → COUNT 16.332s / TIME 35.085s (2.15×); $D_w$=30 → COUNT 31.435s / TIME 65.165s
+(2.07×).
+
+**What this does to H3 (agreed 2026-09-22, Soham and Jay).** H3 is **falsified as a
+prediction**: window parameters do affect $t_{\text{rec}}$, which fails H3's own recovery-side
+negative control (`hypotheses.md` §4.1, "H3's negative control, stress-tested directly against
+window_type"; §3.1 requires both halves of the dissociation to hold). The finding this entry
+reports is **the recovery leak**, not a confirmation of H3. Older entries that read "H3
+confirmed" or "H3 closes" (D13's 2026-09-16 update, D22, and `STATUS.md`) describe the
+pre-D23 state and stay as written per the append-only convention; they are superseded here.
+
+**Supersedes:** the retracted D13/D24 figures above. Do not re-quote 2.04/9.83/14.99s,
+p=0.0005/0.0014, or 8.9×–14.3×.
+
+**Caveats, load-bearing:**
+1. COUNT recovery ≈ $D_w$ + 1.33–1.73s (KM medians). The SD of per-config mean recovery time
+   within the COUNT arm — across its four configurations, i.e. window sizes 5/10/20 at T50 and
+   the T70/W10 probe — is **0.023 / 0.063 / 0.053 s** at $D_w$=5/15/30. Window size and
+   threshold have almost no effect within the COUNT arm; its recovery is close to a
+   deterministic function of $D_w$ alone.
+2. The saturated p-value reflects the design's resolution ceiling (4v4 configs/stratum), not
+   effect strength — cite the KM ratios for effect size, not the p-value.
+3. `slidingWindowSize` is calls under COUNT_BASED and seconds under TIME_BASED — this is NOT
+   a claim of "COUNT beats TIME at matched window size." Arms are matched on threshold, $D_w$,
+   topology, fault type and load only.
+4. LINEAR + LATENCY only, one machine (`soham-local`), database state not reset between the 72
+   runs. Configuration coverage is threshold=50 at window sizes 5/10/20 plus one threshold=70
+   probe per stratum — the inference is mainly COUNT vs TIME across window sizes at T50.
+5. A secondary, descriptive pattern (TIME arm elevated at window_size=20 for $D_w$=5/15,
+   vanishing at $D_w$=30) is noted but not claimed as a window-size effect, per the design's
+   claim-scope restriction to one threshold-variation probe.
+
+**Provenance chain:** `3e4ad1e` (pre-registration, final amendment) → `78ea155` (DEVIATION 01:
+horizon defect diagnosed mid-collection, before any corrected count existed) → `4987dee`
+(DEVIATION 02: simplification, verified equivalent) → `5f77cd2` (H3 result) → DEVIATION 02
+correction note (2026-09-22). All on branch `h3-evidence-audit`, not yet merged to `main`.
+
+---
+
 ## D27 · Novelty claim checked against the literature — reframed as systematic characterization, not first observation
 
 **Date:** 2026-09-20 · **Decided by:** Jay, closing task T1 ("Verify the novelty claim") ·
@@ -2031,3 +2145,123 @@ be written directly from `related-work.md` instead of from memory.
 **Revisit if:** the manuscript's actual Related Work section, once drafted, needs citations
 beyond this near-miss table (e.g., a reviewer names a specific paper this search missed) — add
 it to `related-work.md` as a new row, don't reopen this entry.
+
+---
+
+## D28 · The Phase 4B recovery gap is a fault-exposure artifact; H3's recovery-side control is untested; an equal-exposure run (R2) is commissioned
+
+**Date:** 2026-09-29 · **Decided by:** Soham and Jay · **Status:** open until R2 reports (D29)
+**Supersedes:** D26's interpretation (not its numbers) and the 2026-09-22 "H3 falsified" label
+
+**Finding.** `run_experiment_run()` clears the fault only after `generate_load()` returns, and
+`compute_load_plan()` sizes that load by window type: max(3W, 3·n_min, 40) calls at 10 req/s for
+COUNT_BASED (~4-6 s) vs W + D_w + 10 s for TIME_BASED. In Phase 4B the fault stayed on for a median
+3.0-3.2 s after OPEN (COUNT) vs 20.3-47.9 s (TIME). Every HALF_OPEN that began under active fault
+bounced and every one after clearance closed (sidecar: 123/123 and 134/134;
+`recovery_fault_timing_check.py`). A window-type-blind model (HALF_OPEN every D_w; bounce iff the
+fault is still on; fixed 3.5 s / 3.0 s episodes) reproduces bounce count in 72/72 Phase 4B runs,
+and recovery time within 0.6 s (`recovery_exposure_model.py`). Resilience4j 2.2.0 builds HALF_OPEN
+metrics with `CircuitBreakerMetrics.forHalfOpen()`, a fresh COUNT_BASED buffer, whatever the
+configured window type (javap on the pinned jar). Bounce count rising with window size (D22 P1)
+follows from the TIME load plan growing with W.
+
+**Decision.**
+1. In Phase 4B, H3's recovery-side negative control was not tested, because fault exposure was a
+   function of window type and window size. It is reported neither as supported nor as falsified.
+2. The recovery gap is a construct-validity defect with the same root cause as D20: the load plan
+   is sized by the independent variables.
+3. An equal-exposure confirmatory run (R2) is commissioned: fault cleared at OPEN + D_w + 5 s in
+   both arms, continuous 10 req/s load until recovery, the same 24 configurations as Phase 4B.
+   Predictions will be pre-registered before any R2 run. Result recorded as D29.
+
+**Retracted:** "the recovery leak" as a library finding; "a time-based window retains fault
+evidence into recovery"; "COUNT_BASED never bounces, structurally."
+**Corrected:** D26 caveat 3 says the arms were matched on "load". They were not; load duration
+depended on window type. D26's numbers stand as measurements.
+**Unaffected:** H2b/D18 inertness, the two-directions result (D18 + D23), and time_to_open (the
+fault is on from t=0 in both arms).
+
+**Revisit if:** R2 shows a window-type difference in bounce count, or a recovery gap > 1 s in the
+same direction in every stratum.
+
+**Update (2026-10-01).** R2 reported; see D29. Neither revisit condition fired.
+
+---
+
+## D29 · R2 equal-exposure confirmatory run: H3's recovery-side control passes; the 2026-09-22 "H3 falsified" / "recovery leak" interpretation is retracted
+
+**Date:** 2026-10-01 · **Decided by:** Soham and Jay · **Status:** closed
+**Supersedes:** The 2026-09-22 "H3 falsified" / "recovery leak" interpretation (D26's framing,
+also carried in `PAPER_BRIEF.md` §V-D and `PAPER_DRAFT_NOTES.md` §28). D26's and D28's raw
+numbers are unaffected.
+
+**Design.** Pre-registered before the first usable run (`docs/paper/r2-equal-exposure-plan.md`,
+commit `9964211`). Fault cleared at `OPEN + D_w + 5s` identically in both arms (vs Phase 4B's
+window-type-dependent clearing, D28), continuous 10 req/s load until recovery, the same 24
+Phase 4B configurations × 3 replicates = 72 runs, LINEAR + LATENCY, one host (`jay-mac`, arm64),
+seed 20260929. Four canary rows collected before the plan existed were discarded and quarantined
+(`data/audit/r2_canary_20260930/`), not analyzed. 72/72 runs completed, 0 excluded under any of
+the plan's 5 exclusion rules (aborted runs, gateway trip, not VERIFIED_CLEAN, implausible
+duration, `lambda_deviation_flag`); 72/72 independently VERIFIED_CLEAN against the gateway
+poller (0 non-CLOSED ticks observed across the sweep).
+
+**Result.**
+1. **P1 (bounce count).** Exactly 1 bounce per run, both arms, all three $D_w$ strata (72/72).
+   Phase 4B's COUNT_BASED non-bounce result (0/18) is attributed to unequal fault exposure (D28),
+   not an inherent COUNT_BASED/ring-buffer limitation.
+2. **P2 (arm difference), primary evidence** — per-stratum median diff vs the pre-registered 1 s
+   threshold, with between-config SD (the spread of the 4 config means the median is taken over):
+   - $D_w$=5: TIME 13.927 s vs COUNT 13.968 s, diff 0.040 s (SD 0.021 / 0.022)
+   - $D_w$=15: TIME 33.913 s vs COUNT 33.942 s, diff 0.029 s (SD 0.029 / 0.034)
+   - $D_w$=30: TIME 63.940 s vs COUNT 63.840 s, diff 0.101 s (SD 0.052 / 0.102)
+
+   All three strata pass the <1 s threshold; every diff is the same order of magnitude as each
+   arm's own between-config spread — the numbers are not artificially precise. Direction signs
+   are mixed (COUNT higher at $D_w$=5/15, TIME higher at $D_w$=30), reported as observed rather
+   than smoothed over; the magnitudes involved are small relative to the threshold regardless of
+   sign.
+3. **P2, secondary evidence.** `stratified_cluster_permutation_test`: statistic=6.0,
+   p=0.365773 (exact floor 0.000006, 343,000 total assignments) — non-significant. Per the
+   pre-registered statistical treatment (§5), this does not by itself establish equivalence; the
+   primary evidence for P2 is the per-stratum median-difference check above.
+4. **Falsification check (§3).** Neither condition triggers: bounce counts do not differ
+   systematically by window type, and no recovery gap over 1 s appears in the same direction
+   across all three strata.
+5. **Descriptive, not a test (§4).** Phase 4B's fitted episode constants (E_FAIL=3.5s,
+   E_OK=3.0s, fitted on soham-local/x86) predict 16.5/36.5/66.5 s at $D_w$=5/15/30; observed
+   medians run ~2.5-2.6 s lower at every stratum, implying an episode-sum ≈3.9 s on jay-mac
+   (arm64) — consistent with the R2 canary's own indication that these constants are
+   host-specific. R2's gateway image differs from Phase 4B's (`sha256:c281f7db…` vs
+   `sha256:ce110c0a…`, `data/audit/r2_image_manifest.json`), so this is reported as a
+   host-constant difference, not compared to Phase 4B in absolute terms.
+
+**Decision.**
+1. H3's recovery-side negative control passes under equal exposure: window type does not reach
+   recovery, matching D28's model.
+2. The 2026-09-22 "H3 falsified" conclusion (D26's framing) is retracted as a harness artifact —
+   the recovery difference Phase 4B observed was unequal fault exposure (D28), not a
+   Resilience4j window-type/library effect. Chronology: Phase 4B appeared to falsify H3
+   (2026-09-22) → D28 showed the comparison was confounded, so H3 was neither supported nor
+   falsified on recovery → R2 removes the confound and the control passes.
+3. This is a construct-validity/instrumentation-defect finding (§VI class, not a current §V
+   result): diagnosed by inspection (D28), modeled (`recovery_exposure_model.py`), and confirmed
+   by a dedicated pre-registered confirmatory experiment (R2) — distinct from defects closed by
+   inspection alone.
+
+**Retracted (as current library findings — historical mentions remain, labeled superseded):**
+"the recovery leak"; "a time-based window retains fault evidence into recovery"; "COUNT_BASED
+never bounces, structurally."
+**Corrected:** none beyond D28's corrections — R2 adds a confirmatory result, it does not change
+any Phase 4B number.
+**Unaffected:** H2b/D18 inertness, the two-directions result (D18 + D23), and `time_to_open`.
+
+**Scope.** LINEAR + LATENCY, one machine (`jay-mac`, arm64, Docker in a VM), threshold 50 at
+window sizes 5/10/20 plus one threshold-70 probe per stratum, database state not reset between
+runs. R2 numbers are not directly comparable in absolute terms to Phase 4B's (different gateway
+image/host, §8 of the pre-registration plan); every R2 claim is a within-R2 comparison between
+arms.
+
+**Provenance.** Pre-registration `docs/paper/r2-equal-exposure-plan.md`, commit `9964211`
+(predates the first R2 run — `data/audit/r2_launch_manifest.json`). Sweep output `19697a1`.
+Analysis `analysis/r2_equal_exposure_analysis.py`, commits `a4779ec` (primary) and `dba08eb`
+(within-arm dispersion addition). Branch `experiment/r2-equal-exposure`, not yet on `main`.

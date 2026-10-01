@@ -1,0 +1,4 @@
+# Phase 4B real Windows python.exe PIDs, launched 2026-09-21T17:07:49Z
+poller=5928
+mem_logger=4624
+sweep=9328

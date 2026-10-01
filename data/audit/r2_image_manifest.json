@@ -1,0 +1,38 @@
+{
+  "purpose": "Side-by-side image/host record for the R2 canary (jay-mac, 2026-09-30) against Phase 4B's recorded provenance (soham-local, data/audit/phase4b_manifest.json), so a later timing discrepancy has something concrete to check against.",
+  "phase4b_soham_local": {
+    "source": "data/audit/phase4b_manifest.json",
+    "gateway_image_repo": "infra-gateway-service",
+    "gateway_image_id": "sha256:ce110c0a0bfbc290e735fe810f4bb5a60b2ef84ad5e63c0b627a0b90cecbabfc",
+    "gateway_image_created": "2026-09-19T22:14:43.12549436Z",
+    "order_image_id": null,
+    "toxiproxy_image_id": null,
+    "architecture": null,
+    "observability": "prometheus and grafana STOPPED for all 72 Phase 4B runs",
+    "host": {"free_mb_at_launch": 1731.6, "free_disk_gb_at_launch": 25, "power": "status=2 charge=92%"},
+    "note": "order_image_id/toxiproxy_image_id/architecture were never recorded in phase4b_manifest.json -- not that they matched jay-mac's, simply absent from the source."
+  },
+  "r2_canary_jay_mac": {
+    "source": "docker image inspect, run 2026-09-30 immediately before the canary",
+    "gateway_image_repo": "infra-gateway-service",
+    "gateway_image_id": "sha256:c281f7db011e9176bf98f3ae325d3ff01deaa64cc5de73f42bcc2961883ca6b2",
+    "gateway_image_created": "2026-09-18T13:19:21.47424192+05:30",
+    "order_image_id": "sha256:4b5b1931de695800deab3ff3f030a092be9b32eadd45d37c31eff4aefad2eb88",
+    "order_image_created": "2026-08-30T23:55:37.673448532+05:30",
+    "toxiproxy_image_id": "sha256:b44c283298cea49e2defaba1b3028783798346f2a926684e3a345fd8441af3b8",
+    "toxiproxy_image_created": "2024-03-12T18:35:25.221551997Z",
+    "architecture": "arm64",
+    "observability": "prometheus and grafana were RUNNING during the canary (not stopped) -- confirmed via `docker ps` immediately beforehand",
+    "host": null
+  },
+  "comparable": [
+    "gateway_image_repo (both infra-gateway-service, both built by this repo's own two-stage Dockerfile)"
+  ],
+  "not_comparable": [
+    "gateway_image_id -- DIFFERENT digest: Phase 4B's is sha256:ce110c0a..., jay-mac's canary is sha256:c281f7db... Different build, not the same artifact. Both postdate D25 (2026-09-18) by source inspection (see docs/paper/decision-log.md D25), but a differing digest means this cannot be verified from the digest alone -- only from re-reading each image's packaged application.yml.",
+    "order_image_id / toxiproxy_image_id -- Phase 4B's manifest never recorded these; nothing to compare jay-mac's values against.",
+    "architecture -- Phase 4B's manifest never recorded this either. jay-mac is confirmed arm64; soham-local's architecture is unknown from this record.",
+    "observability state -- a REAL, known difference, not just an absent field: Phase 4B ran with Prometheus/Grafana stopped for all 72 runs; the R2 canary ran with both live. Phase 4B's own manifest note says this matters if it differs from a collection it's being compared against -- it does here."
+  ],
+  "going_forward": "The canary ran with Prometheus/Grafana live -- that's a one-time, known deviation from Phase 4B's conditions, scoped to these 4 quarantined rows. The R2 sweep itself will match Phase 4B: Prometheus and Grafana stopped before launch and kept stopped throughout, per docs/paper/r2-equal-exposure-plan.md section 2 (launch procedure) and section 8. The sweep's own launch manifest will record which observability services were running, the same way phase4b_manifest.json does."
+}

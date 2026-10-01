@@ -2,8 +2,21 @@
 """
 H3 mechanism -- per-episode decomposition of HALF_OPEN recovery.
 
-The question
-------------
+RETRACTED 2026-10-01 (decision-log.md D28/D29): this script's premise -- that
+TIME_BASED's bounce count rising with window_size while COUNT_BASED never bounces is
+a window-type property -- is a harness fault-exposure artifact, not a Resilience4j
+behaviour. The Phase 4B load plan cleared the injected fault later, after OPEN, for
+larger TIME_BASED windows (compute_load_plan scales TIME_BASED's load duration with
+W) and far later for TIME_BASED than COUNT_BASED generally; that is what produced
+the asymmetric bounce counts this script decomposes. A pre-registered equal-exposure
+run (R2) found both arms bounce exactly once in every run regardless of window type
+or size (72/72). This script and its historical Phase 4B output remain valid as an
+analysis of *that specific confounded dataset* -- kept for the record, not rerun --
+but its "why" (residual window contents) does not hold as a current explanation.
+See decision-log.md D28/D29 and PAPER_DRAFT_NOTES.md §30.
+
+The question (as originally posed, 2026-09-18 -- see retraction above)
+----------------------------------------------------------------------
 D22 established that bounce count (HALF_OPEN_TO_OPEN events) explains most of the
 TIME-vs-COUNT recovery gap, and that TIME_BASED's bounce count rises with
 slidingWindowSize while COUNT_BASED never bounces at all. D24 confirmed that

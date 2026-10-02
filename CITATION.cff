@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: "If you use this software or data, please cite it as below."
+title: "CascadeShield: A Construct-Validity Study of Circuit-Breaker Window Configuration in Resilience4j"
+authors:
+  - family-names: "More"
+    given-names: "Soham"
+    affiliation: "NMIMS Navi Mumbai"
+  - family-names: "Joshi"
+    given-names: "Jay"
+    affiliation: "NMIMS Navi Mumbai"
+repository-code: "https://github.com/anonjj/CascadeShield"
+url: "https://github.com/anonjj/CascadeShield"
+license: MIT
+license-url: "https://github.com/anonjj/CascadeShield/blob/main/LICENSE"
+version: "paper-state-2026-10-02-d30"
+date-released: "2026-10-02"

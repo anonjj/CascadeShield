@@ -1,0 +1,12 @@
+# Python dependencies for analysis/ -- pinned to the versions these scripts were run and
+# self-tested against. Python 3.9 compatible (see analysis/common.py's module docstring).
+matplotlib==3.9.4
+numpy==2.0.2
+pandas==2.3.3
+scipy==1.13.1
+PyYAML==6.0.3
+
+# Optional: analysis/phase4b_reconcile.py's live-process check only (not needed for any
+# self-test, not needed to reproduce any committed output). Uncomment if you need that
+# specific live-process-detection path.
+# psutil

@@ -75,6 +75,16 @@ data/audit/*
 # phase4b_poll.jsonl/phase4b_manifest.json above, for the same reason.
 !data/audit/r2_sweep_poll.jsonl
 !data/audit/r2_launch_manifest.json
+# D16's raw calibration evidence, preserved from the three (now-deleted) data/d6-calibration-*
+# branches -- nothing on main cites these by filename, but they're D16's actual data, not
+# scratch. A subdirectory needs the same un-ignore-then-negate step as data/audit/ itself:
+# un-ignore the dir here, and since nothing re-ignores its contents, the files inside are
+# visible without negating each one by name.
+!data/audit/d16_calibration/
+# D13 top-up provenance: the run log and the ID list it topped up, moved here from the repo
+# root / experiments/ where they sat untracked. Real provenance, not scratch.
+!data/audit/d13_topup.log
+!data/audit/d13_topup_ids.txt
 
 # Generated figure artifact (was previously covered by the now-removed bare *.csv)
 figures/summary_stats.csv

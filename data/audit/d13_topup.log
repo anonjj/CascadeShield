@@ -1,0 +1,1880 @@
+Starting CascadeShield Runner in 'full' mode targeting 'linear' topology with 'latency' fault.
+Creating proxy 'order-service-proxy' listening on port 8661 -> order-service:8081
+Creating proxy 'inventory-service-proxy' listening on port 8662 -> inventory-service:8082
+Creating proxy 'payment-service-proxy' listening on port 8663 -> payment-service:8083
+Creating proxy 'notification-service-proxy' listening on port 8664 -> notification-service:8084
+Creating proxy 'shared-db-service-proxy' listening on port 8665 -> shared-db-service:8085
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+--only-ids filter: 54 configs -> 18 matching 'linear'/'latency' (of 18 IDs listed).
+Generated 18 configs × 5 replicates = 90 total runs.
+Resuming data/master_dataset_d13_topup_mac.csv: 324 (experiment_id, replicate) cell(s) already recorded and will be skipped.
+Run order shuffled with seed 1705762162 (90 runs). Pass --seed 1705762162 to reproduce this exact order.
+Skipping: LIN-LAT-TIM-T50-W10-D30 replicate 1 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-CNT-T50-W10-D5 replicate 1 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-CNT-T50-W5-D15 replicate 3 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-TIM-T50-W5-D30 replicate 3 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-CNT-T50-W10-D15 replicate 1 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-CNT-T50-W20-D15 replicate 3 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-CNT-T50-W10-D30 replicate 2 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-TIM-T50-W20-D15 replicate 1 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-CNT-T50-W5-D5 replicate 1 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-CNT-T50-W20-D15 replicate 2 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-TIM-T50-W20-D5 replicate 3 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-TIM-T50-W20-D15 replicate 2 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-CNT-T50-W5-D15 replicate 1 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-TIM-T50-W5-D5 replicate 1 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-CNT-T50-W20-D30 replicate 1 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-CNT-T50-W20-D30 replicate 3 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-TIM-T50-W10-D30 replicate 2 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-CNT-T50-W20-D5 replicate 3 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-TIM-T50-W10-D15 replicate 2 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-CNT-T50-W5-D5 replicate 3 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-TIM-T50-W10-D5 replicate 2 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-CNT-T50-W5-D30 replicate 1 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-TIM-T50-W10-D30 replicate 3 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-CNT-T50-W5-D30 replicate 2 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-TIM-T50-W5-D5 replicate 2 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-TIM-T50-W5-D30 replicate 2 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-TIM-T50-W5-D15 replicate 2 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-CNT-T50-W10-D30 replicate 3 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-TIM-T50-W20-D5 replicate 2 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-CNT-T50-W5-D15 replicate 2 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-TIM-T50-W5-D15 replicate 3 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-TIM-T50-W10-D15 replicate 1 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-TIM-T50-W20-D15 replicate 3 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-CNT-T50-W20-D5 replicate 2 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-TIM-T50-W10-D15 replicate 3 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-TIM-T50-W10-D5 replicate 3 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-TIM-T50-W20-D30 replicate 1 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-CNT-T50-W10-D5 replicate 2 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-CNT-T50-W5-D30 replicate 3 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-CNT-T50-W20-D30 replicate 2 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-TIM-T50-W10-D5 replicate 1 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-CNT-T50-W20-D15 replicate 1 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-CNT-T50-W10-D5 replicate 3 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-TIM-T50-W5-D15 replicate 1 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-TIM-T50-W5-D5 replicate 3 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-TIM-T50-W5-D30 replicate 1 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-TIM-T50-W20-D30 replicate 2 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-CNT-T50-W10-D30 replicate 1 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-TIM-T50-W20-D5 replicate 1 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-CNT-T50-W20-D5 replicate 1 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-CNT-T50-W10-D15 replicate 3 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-CNT-T50-W10-D15 replicate 2 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-TIM-T50-W20-D30 replicate 3 already in data/master_dataset_d13_topup_mac.csv.
+Skipping: LIN-LAT-CNT-T50-W5-D5 replicate 2 already in data/master_dataset_d13_topup_mac.csv.
+
+Progress: Run 1 of 36 (config 5/18, replicate 5/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=5
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 5, 'waitDurationInOpenState': 30, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 5, 'waitDurationInOpenState': 30, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+order-service is healthy!
+inventory-service is healthy!
+payment-service is healthy!
+notification-service is healthy!
+gateway-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 20.8s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 21.95ms, Throughput: 19.20 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 18.71 req/s (requested ~20.00 req/s), CV: 0.031
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (COUNT_BASED): 40 requests over ~4s @ 10 req/s
+Generating load: 40 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~4.0s dispatch)...
+Load Results - Successes: 32, Failures: 8, Avg Latency: 2427.64ms, Throughput: 5.13 TPS, Error Rate: 20.00%
+Arrival rate - achieved: 9.66 req/s (requested ~10.00 req/s), CV: 0.018
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 2 of 36 (config 9/18, replicate 4/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=4
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 10, 'waitDurationInOpenState': 15, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 10, 'waitDurationInOpenState': 15, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+gateway-service is healthy!
+order-service is healthy!
+payment-service is healthy!
+notification-service is healthy!
+inventory-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 20.8s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 25.50ms, Throughput: 19.12 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 18.54 req/s (requested ~20.00 req/s), CV: 0.071
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (COUNT_BASED): 40 requests over ~4s @ 10 req/s
+Generating load: 40 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~4.0s dispatch)...
+Load Results - Successes: 34, Failures: 6, Avg Latency: 2577.94ms, Throughput: 5.28 TPS, Error Rate: 15.00%
+Arrival rate - achieved: 9.63 req/s (requested ~10.00 req/s), CV: 0.017
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 3 of 36 (config 11/18, replicate 5/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=5
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 10, 'waitDurationInOpenState': 30, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 10, 'waitDurationInOpenState': 30, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+gateway-service is healthy!
+order-service is healthy!
+inventory-service is healthy!
+payment-service is healthy!
+notification-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 20.8s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 19.98ms, Throughput: 19.53 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 18.89 req/s (requested ~20.00 req/s), CV: 0.033
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (COUNT_BASED): 40 requests over ~4s @ 10 req/s
+Generating load: 40 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~4.0s dispatch)...
+Load Results - Successes: 33, Failures: 7, Avg Latency: 2503.75ms, Throughput: 5.19 TPS, Error Rate: 17.50%
+Arrival rate - achieved: 9.63 req/s (requested ~10.00 req/s), CV: 0.019
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 4 of 36 (config 10/18, replicate 5/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=5
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 10, 'waitDurationInOpenState': 15, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 10, 'waitDurationInOpenState': 15, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+gateway-service is healthy!
+notification-service is healthy!
+order-service is healthy!
+inventory-service is healthy!
+payment-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 20.8s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 19.06ms, Throughput: 19.75 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 19.09 req/s (requested ~20.00 req/s), CV: 0.034
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (TIME_BASED): 350 requests over ~35s @ 10 req/s
+Generating load: 350 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~35.0s dispatch)...
+Load Results - Successes: 69, Failures: 281, Avg Latency: 608.13ms, Throughput: 1.90 TPS, Error Rate: 80.29%
+Arrival rate - achieved: 9.63 req/s (requested ~10.00 req/s), CV: 0.016
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 5 of 36 (config 3/18, replicate 5/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=5
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 5, 'waitDurationInOpenState': 15, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 5, 'waitDurationInOpenState': 15, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+gateway-service is healthy!
+order-service is healthy!
+inventory-service is healthy!
+payment-service is healthy!
+notification-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 20.8s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 21.08ms, Throughput: 19.51 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 18.83 req/s (requested ~20.00 req/s), CV: 0.037
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (COUNT_BASED): 40 requests over ~4s @ 10 req/s
+Generating load: 40 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~4.0s dispatch)...
+Load Results - Successes: 32, Failures: 8, Avg Latency: 2424.40ms, Throughput: 5.13 TPS, Error Rate: 20.00%
+Arrival rate - achieved: 9.69 req/s (requested ~10.00 req/s), CV: 0.019
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 6 of 36 (config 16/18, replicate 5/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=5
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 20, 'waitDurationInOpenState': 15, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 20, 'waitDurationInOpenState': 15, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+order-service is healthy!
+inventory-service is healthy!
+payment-service is healthy!
+notification-service is healthy!
+gateway-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 20.7s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 21.62ms, Throughput: 19.73 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 19.10 req/s (requested ~20.00 req/s), CV: 0.027
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (TIME_BASED): 450 requests over ~45s @ 10 req/s
+Generating load: 450 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~45.0s dispatch)...
+Load Results - Successes: 125, Failures: 325, Avg Latency: 848.89ms, Throughput: 2.56 TPS, Error Rate: 72.22%
+Arrival rate - achieved: 9.65 req/s (requested ~10.00 req/s), CV: 0.016
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 7 of 36 (config 6/18, replicate 5/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=5
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 5, 'waitDurationInOpenState': 30, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 5, 'waitDurationInOpenState': 30, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+gateway-service is healthy!
+order-service is healthy!
+inventory-service is healthy!
+payment-service is healthy!
+notification-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 20.8s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 21.90ms, Throughput: 19.53 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 18.93 req/s (requested ~20.00 req/s), CV: 0.036
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (TIME_BASED): 450 requests over ~45s @ 10 req/s
+Generating load: 450 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~45.0s dispatch)...
+Load Results - Successes: 44, Failures: 406, Avg Latency: 307.18ms, Throughput: 0.94 TPS, Error Rate: 90.22%
+Arrival rate - achieved: 9.64 req/s (requested ~10.00 req/s), CV: 0.015
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 8 of 36 (config 11/18, replicate 4/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=4
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 10, 'waitDurationInOpenState': 30, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 10, 'waitDurationInOpenState': 30, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+gateway-service is healthy!
+order-service is healthy!
+inventory-service is healthy!
+payment-service is healthy!
+notification-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 20.7s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 20.12ms, Throughput: 19.25 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 18.62 req/s (requested ~20.00 req/s), CV: 0.034
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (COUNT_BASED): 40 requests over ~4s @ 10 req/s
+Generating load: 40 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~4.0s dispatch)...
+Load Results - Successes: 34, Failures: 6, Avg Latency: 2575.39ms, Throughput: 5.28 TPS, Error Rate: 15.00%
+Arrival rate - achieved: 9.66 req/s (requested ~10.00 req/s), CV: 0.018
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 9 of 36 (config 16/18, replicate 4/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=4
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 20, 'waitDurationInOpenState': 15, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 20, 'waitDurationInOpenState': 15, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+payment-service is healthy!
+gateway-service is healthy!
+order-service is healthy!
+inventory-service is healthy!
+notification-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 20.8s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 19.86ms, Throughput: 19.74 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 19.10 req/s (requested ~20.00 req/s), CV: 0.033
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (TIME_BASED): 450 requests over ~45s @ 10 req/s
+Generating load: 450 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~45.0s dispatch)...
+Load Results - Successes: 124, Failures: 326, Avg Latency: 844.22ms, Throughput: 2.55 TPS, Error Rate: 72.44%
+Arrival rate - achieved: 9.65 req/s (requested ~10.00 req/s), CV: 0.016
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 10 of 36 (config 17/18, replicate 5/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=5
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 20, 'waitDurationInOpenState': 30, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 20, 'waitDurationInOpenState': 30, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+gateway-service is healthy!
+order-service is healthy!
+inventory-service is healthy!
+payment-service is healthy!
+notification-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 20.8s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 18.42ms, Throughput: 19.72 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 19.06 req/s (requested ~20.00 req/s), CV: 0.036
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (COUNT_BASED): 60 requests over ~6s @ 10 req/s
+Generating load: 60 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~6.0s dispatch)...
+Load Results - Successes: 39, Failures: 21, Avg Latency: 1971.18ms, Throughput: 5.59 TPS, Error Rate: 35.00%
+Arrival rate - achieved: 9.63 req/s (requested ~10.00 req/s), CV: 0.017
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 11 of 36 (config 12/18, replicate 4/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=4
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 10, 'waitDurationInOpenState': 30, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 10, 'waitDurationInOpenState': 30, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+order-service is healthy!
+inventory-service is healthy!
+payment-service is healthy!
+notification-service is healthy!
+gateway-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 20.8s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 20.51ms, Throughput: 19.53 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 18.90 req/s (requested ~20.00 req/s), CV: 0.030
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (TIME_BASED): 500 requests over ~50s @ 10 req/s
+Generating load: 500 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~50.0s dispatch)...
+Load Results - Successes: 70, Failures: 430, Avg Latency: 435.96ms, Throughput: 1.35 TPS, Error Rate: 86.00%
+Arrival rate - achieved: 9.65 req/s (requested ~10.00 req/s), CV: 0.016
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 12 of 36 (config 10/18, replicate 4/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=4
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 10, 'waitDurationInOpenState': 15, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 10, 'waitDurationInOpenState': 15, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+gateway-service is healthy!
+order-service is healthy!
+inventory-service is healthy!
+payment-service is healthy!
+notification-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 20.8s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 20.55ms, Throughput: 19.63 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 19.04 req/s (requested ~20.00 req/s), CV: 0.035
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (TIME_BASED): 350 requests over ~35s @ 10 req/s
+Generating load: 350 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~35.0s dispatch)...
+Load Results - Successes: 71, Failures: 279, Avg Latency: 624.81ms, Throughput: 1.96 TPS, Error Rate: 79.71%
+Arrival rate - achieved: 9.64 req/s (requested ~10.00 req/s), CV: 0.016
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 13 of 36 (config 1/18, replicate 4/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=4
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 5, 'waitDurationInOpenState': 5, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 5, 'waitDurationInOpenState': 5, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+gateway-service is healthy!
+order-service is healthy!
+inventory-service is healthy!
+payment-service is healthy!
+notification-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 20.8s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 19.50ms, Throughput: 19.52 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 18.92 req/s (requested ~20.00 req/s), CV: 0.034
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (COUNT_BASED): 40 requests over ~4s @ 10 req/s
+Generating load: 40 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~4.0s dispatch)...
+Load Results - Successes: 32, Failures: 8, Avg Latency: 2427.09ms, Throughput: 5.13 TPS, Error Rate: 20.00%
+Arrival rate - achieved: 9.62 req/s (requested ~10.00 req/s), CV: 0.016
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 14 of 36 (config 8/18, replicate 5/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=5
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 10, 'waitDurationInOpenState': 5, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 10, 'waitDurationInOpenState': 5, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+notification-service is healthy!
+gateway-service is healthy!
+order-service is healthy!
+inventory-service is healthy!
+payment-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 21.5s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 18.28ms, Throughput: 19.24 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 18.61 req/s (requested ~20.00 req/s), CV: 0.064
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (TIME_BASED): 250 requests over ~25s @ 10 req/s
+Generating load: 250 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~25.0s dispatch)...
+Load Results - Successes: 72, Failures: 178, Avg Latency: 880.47ms, Throughput: 2.72 TPS, Error Rate: 71.20%
+Arrival rate - achieved: 9.41 req/s (requested ~10.00 req/s), CV: 0.036
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 15 of 36 (config 5/18, replicate 4/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=4
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 5, 'waitDurationInOpenState': 30, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 5, 'waitDurationInOpenState': 30, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+gateway-service is healthy!
+order-service is healthy!
+inventory-service is healthy!
+payment-service is healthy!
+notification-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 21.3s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 19.08ms, Throughput: 19.35 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 18.68 req/s (requested ~20.00 req/s), CV: 0.063
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (COUNT_BASED): 40 requests over ~4s @ 10 req/s
+Generating load: 40 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~4.0s dispatch)...
+Load Results - Successes: 30, Failures: 10, Avg Latency: 2276.00ms, Throughput: 4.88 TPS, Error Rate: 25.00%
+Arrival rate - achieved: 9.30 req/s (requested ~10.00 req/s), CV: 0.032
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 16 of 36 (config 12/18, replicate 5/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=5
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 10, 'waitDurationInOpenState': 30, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 10, 'waitDurationInOpenState': 30, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+gateway-service is healthy!
+order-service is healthy!
+inventory-service is healthy!
+payment-service is healthy!
+notification-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 21.3s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 20.92ms, Throughput: 19.01 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 18.38 req/s (requested ~20.00 req/s), CV: 0.078
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (TIME_BASED): 500 requests over ~50s @ 10 req/s
+Generating load: 500 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~50.0s dispatch)...
+Load Results - Successes: 68, Failures: 432, Avg Latency: 423.97ms, Throughput: 1.28 TPS, Error Rate: 86.40%
+Arrival rate - achieved: 9.40 req/s (requested ~10.00 req/s), CV: 0.039
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 17 of 36 (config 4/18, replicate 4/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=4
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 5, 'waitDurationInOpenState': 15, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 5, 'waitDurationInOpenState': 15, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+notification-service is healthy!
+gateway-service is healthy!
+order-service is healthy!
+inventory-service is healthy!
+payment-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 21.3s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 18.37ms, Throughput: 18.98 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 18.31 req/s (requested ~20.00 req/s), CV: 0.061
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (TIME_BASED): 300 requests over ~30s @ 10 req/s
+Generating load: 300 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~30.0s dispatch)...
+Load Results - Successes: 41, Failures: 259, Avg Latency: 425.23ms, Throughput: 1.29 TPS, Error Rate: 86.33%
+Arrival rate - achieved: 9.41 req/s (requested ~10.00 req/s), CV: 0.033
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 18 of 36 (config 15/18, replicate 4/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=4
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 20, 'waitDurationInOpenState': 15, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 20, 'waitDurationInOpenState': 15, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+gateway-service is healthy!
+inventory-service is healthy!
+payment-service is healthy!
+notification-service is healthy!
+order-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 21.4s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 19.34ms, Throughput: 19.16 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 18.55 req/s (requested ~20.00 req/s), CV: 0.066
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (COUNT_BASED): 60 requests over ~6s @ 10 req/s
+Generating load: 60 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~6.0s dispatch)...
+Load Results - Successes: 38, Failures: 22, Avg Latency: 1920.86ms, Throughput: 5.49 TPS, Error Rate: 36.67%
+Arrival rate - achieved: 9.47 req/s (requested ~10.00 req/s), CV: 0.033
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 19 of 36 (config 2/18, replicate 4/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=4
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 5, 'waitDurationInOpenState': 5, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 5, 'waitDurationInOpenState': 5, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+order-service is healthy!
+gateway-service is healthy!
+inventory-service is healthy!
+payment-service is healthy!
+notification-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 21.3s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 19.51ms, Throughput: 19.32 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 18.66 req/s (requested ~20.00 req/s), CV: 0.055
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (TIME_BASED): 200 requests over ~20s @ 10 req/s
+Generating load: 200 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~20.0s dispatch)...
+Load Results - Successes: 47, Failures: 153, Avg Latency: 723.35ms, Throughput: 2.22 TPS, Error Rate: 76.50%
+Arrival rate - achieved: 9.39 req/s (requested ~10.00 req/s), CV: 0.034
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 20 of 36 (config 18/18, replicate 4/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=4
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 20, 'waitDurationInOpenState': 30, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 20, 'waitDurationInOpenState': 30, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+inventory-service is healthy!
+payment-service is healthy!
+notification-service is healthy!
+gateway-service is healthy!
+order-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 21.4s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 19.63ms, Throughput: 19.35 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 18.70 req/s (requested ~20.00 req/s), CV: 0.045
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (TIME_BASED): 600 requests over ~60s @ 10 req/s
+Generating load: 600 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~60.0s dispatch)...
+Load Results - Successes: 115, Failures: 485, Avg Latency: 592.60ms, Throughput: 1.81 TPS, Error Rate: 80.83%
+Arrival rate - achieved: 9.43 req/s (requested ~10.00 req/s), CV: 0.034
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 21 of 36 (config 1/18, replicate 5/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=5
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 5, 'waitDurationInOpenState': 5, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 5, 'waitDurationInOpenState': 5, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+order-service is healthy!
+inventory-service is healthy!
+payment-service is healthy!
+notification-service is healthy!
+gateway-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 21.4s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 18.22ms, Throughput: 19.18 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 18.54 req/s (requested ~20.00 req/s), CV: 0.058
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (COUNT_BASED): 40 requests over ~4s @ 10 req/s
+Generating load: 40 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~4.0s dispatch)...
+Load Results - Successes: 31, Failures: 9, Avg Latency: 2350.00ms, Throughput: 5.00 TPS, Error Rate: 22.50%
+Arrival rate - achieved: 9.44 req/s (requested ~10.00 req/s), CV: 0.036
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 22 of 36 (config 14/18, replicate 4/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=4
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 20, 'waitDurationInOpenState': 5, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 20, 'waitDurationInOpenState': 5, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+inventory-service is healthy!
+gateway-service is healthy!
+order-service is healthy!
+payment-service is healthy!
+notification-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 21.3s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 19.48ms, Throughput: 19.28 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 18.69 req/s (requested ~20.00 req/s), CV: 0.061
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (TIME_BASED): 350 requests over ~35s @ 10 req/s
+Generating load: 350 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~35.0s dispatch)...
+Load Results - Successes: 125, Failures: 225, Avg Latency: 1090.70ms, Throughput: 3.39 TPS, Error Rate: 64.29%
+Arrival rate - achieved: 9.46 req/s (requested ~10.00 req/s), CV: 0.034
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 23 of 36 (config 14/18, replicate 5/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=5
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 20, 'waitDurationInOpenState': 5, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 20, 'waitDurationInOpenState': 5, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+gateway-service is healthy!
+order-service is healthy!
+inventory-service is healthy!
+payment-service is healthy!
+notification-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 21.3s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 19.32ms, Throughput: 19.42 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 18.75 req/s (requested ~20.00 req/s), CV: 0.062
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (TIME_BASED): 350 requests over ~35s @ 10 req/s
+Generating load: 350 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~35.0s dispatch)...
+Load Results - Successes: 125, Failures: 225, Avg Latency: 1090.24ms, Throughput: 3.38 TPS, Error Rate: 64.29%
+Arrival rate - achieved: 9.44 req/s (requested ~10.00 req/s), CV: 0.033
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 24 of 36 (config 4/18, replicate 5/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=5
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 5, 'waitDurationInOpenState': 15, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 5, 'waitDurationInOpenState': 15, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+notification-service is healthy!
+gateway-service is healthy!
+order-service is healthy!
+inventory-service is healthy!
+payment-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 21.4s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 19.61ms, Throughput: 18.78 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 18.15 req/s (requested ~20.00 req/s), CV: 0.075
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (TIME_BASED): 300 requests over ~30s @ 10 req/s
+Generating load: 300 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~30.0s dispatch)...
+Load Results - Successes: 41, Failures: 259, Avg Latency: 427.26ms, Throughput: 1.29 TPS, Error Rate: 86.33%
+Arrival rate - achieved: 9.39 req/s (requested ~10.00 req/s), CV: 0.050
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 25 of 36 (config 15/18, replicate 5/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=5
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 20, 'waitDurationInOpenState': 15, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 20, 'waitDurationInOpenState': 15, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+gateway-service is healthy!
+order-service is healthy!
+inventory-service is healthy!
+payment-service is healthy!
+notification-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 21.3s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 19.51ms, Throughput: 19.16 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 18.56 req/s (requested ~20.00 req/s), CV: 0.062
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (COUNT_BASED): 60 requests over ~6s @ 10 req/s
+Generating load: 60 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~6.0s dispatch)...
+Load Results - Successes: 38, Failures: 22, Avg Latency: 1920.81ms, Throughput: 5.48 TPS, Error Rate: 36.67%
+Arrival rate - achieved: 9.39 req/s (requested ~10.00 req/s), CV: 0.034
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 26 of 36 (config 3/18, replicate 4/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=4
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 5, 'waitDurationInOpenState': 15, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 5, 'waitDurationInOpenState': 15, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+order-service is healthy!
+inventory-service is healthy!
+payment-service is healthy!
+notification-service is healthy!
+gateway-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 21.4s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 20.41ms, Throughput: 19.29 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 18.65 req/s (requested ~20.00 req/s), CV: 0.065
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (COUNT_BASED): 40 requests over ~4s @ 10 req/s
+Generating load: 40 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~4.0s dispatch)...
+Load Results - Successes: 31, Failures: 9, Avg Latency: 2349.61ms, Throughput: 4.98 TPS, Error Rate: 22.50%
+Arrival rate - achieved: 9.34 req/s (requested ~10.00 req/s), CV: 0.034
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 27 of 36 (config 18/18, replicate 5/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=5
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 20, 'waitDurationInOpenState': 30, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 20, 'waitDurationInOpenState': 30, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+gateway-service is healthy!
+order-service is healthy!
+inventory-service is healthy!
+payment-service is healthy!
+notification-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 21.3s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 18.75ms, Throughput: 19.74 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 19.07 req/s (requested ~20.00 req/s), CV: 0.036
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (TIME_BASED): 600 requests over ~60s @ 10 req/s
+Generating load: 600 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~60.0s dispatch)...
+Load Results - Successes: 117, Failures: 483, Avg Latency: 601.84ms, Throughput: 1.84 TPS, Error Rate: 80.50%
+Arrival rate - achieved: 9.40 req/s (requested ~10.00 req/s), CV: 0.035
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 28 of 36 (config 6/18, replicate 4/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=4
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 5, 'waitDurationInOpenState': 30, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 5, 'waitDurationInOpenState': 30, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+gateway-service is healthy!
+order-service is healthy!
+inventory-service is healthy!
+payment-service is healthy!
+notification-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 21.3s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 19.11ms, Throughput: 19.34 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 18.70 req/s (requested ~20.00 req/s), CV: 0.051
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (TIME_BASED): 450 requests over ~45s @ 10 req/s
+Generating load: 450 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~45.0s dispatch)...
+Load Results - Successes: 43, Failures: 407, Avg Latency: 303.24ms, Throughput: 0.90 TPS, Error Rate: 90.44%
+Arrival rate - achieved: 9.37 req/s (requested ~10.00 req/s), CV: 0.033
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 29 of 36 (config 7/18, replicate 4/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=4
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 10, 'waitDurationInOpenState': 5, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 10, 'waitDurationInOpenState': 5, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+notification-service is healthy!
+gateway-service is healthy!
+order-service is healthy!
+inventory-service is healthy!
+payment-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 21.3s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 20.30ms, Throughput: 19.06 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 18.45 req/s (requested ~20.00 req/s), CV: 0.049
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (COUNT_BASED): 40 requests over ~4s @ 10 req/s
+Generating load: 40 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~4.0s dispatch)...
+Load Results - Successes: 33, Failures: 7, Avg Latency: 2501.83ms, Throughput: 5.12 TPS, Error Rate: 17.50%
+Arrival rate - achieved: 9.35 req/s (requested ~10.00 req/s), CV: 0.034
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 30 of 36 (config 8/18, replicate 4/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=4
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 10, 'waitDurationInOpenState': 5, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 10, 'waitDurationInOpenState': 5, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+gateway-service is healthy!
+order-service is healthy!
+inventory-service is healthy!
+payment-service is healthy!
+notification-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 21.4s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 19.80ms, Throughput: 19.59 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 18.95 req/s (requested ~20.00 req/s), CV: 0.045
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (TIME_BASED): 250 requests over ~25s @ 10 req/s
+Generating load: 250 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~25.0s dispatch)...
+Load Results - Successes: 75, Failures: 175, Avg Latency: 918.58ms, Throughput: 2.82 TPS, Error Rate: 70.00%
+Arrival rate - achieved: 9.37 req/s (requested ~10.00 req/s), CV: 0.032
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 31 of 36 (config 2/18, replicate 5/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=5
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 5, 'waitDurationInOpenState': 5, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 5, 'waitDurationInOpenState': 5, 'slidingWindowType': 'TIME_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+payment-service is healthy!
+notification-service is healthy!
+gateway-service is healthy!
+order-service is healthy!
+inventory-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 21.4s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 19.15ms, Throughput: 19.38 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 18.73 req/s (requested ~20.00 req/s), CV: 0.063
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (TIME_BASED): 200 requests over ~20s @ 10 req/s
+Generating load: 200 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~20.0s dispatch)...
+Load Results - Successes: 45, Failures: 155, Avg Latency: 693.40ms, Throughput: 2.12 TPS, Error Rate: 77.50%
+Arrival rate - achieved: 9.37 req/s (requested ~10.00 req/s), CV: 0.032
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 32 of 36 (config 7/18, replicate 5/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=5
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 10, 'waitDurationInOpenState': 5, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 10, 'waitDurationInOpenState': 5, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+gateway-service is healthy!
+order-service is healthy!
+inventory-service is healthy!
+payment-service is healthy!
+notification-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 21.4s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 19.58ms, Throughput: 19.07 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 18.52 req/s (requested ~20.00 req/s), CV: 0.055
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (COUNT_BASED): 40 requests over ~4s @ 10 req/s
+Generating load: 40 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~4.0s dispatch)...
+Load Results - Successes: 33, Failures: 7, Avg Latency: 2502.89ms, Throughput: 5.18 TPS, Error Rate: 17.50%
+Arrival rate - achieved: 9.57 req/s (requested ~10.00 req/s), CV: 0.034
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 33 of 36 (config 17/18, replicate 4/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=4
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 20, 'waitDurationInOpenState': 30, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 20, 'waitDurationInOpenState': 30, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+gateway-service is healthy!
+inventory-service is healthy!
+notification-service is healthy!
+order-service is healthy!
+payment-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 21.4s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 18.71ms, Throughput: 19.84 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 19.18 req/s (requested ~20.00 req/s), CV: 0.044
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (COUNT_BASED): 60 requests over ~6s @ 10 req/s
+Generating load: 60 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~6.0s dispatch)...
+Load Results - Successes: 38, Failures: 22, Avg Latency: 1921.34ms, Throughput: 5.47 TPS, Error Rate: 36.67%
+Arrival rate - achieved: 9.45 req/s (requested ~10.00 req/s), CV: 0.037
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 34 of 36 (config 9/18, replicate 5/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=5
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 10, 'waitDurationInOpenState': 15, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 10, 'waitDurationInOpenState': 15, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+order-service is healthy!
+inventory-service is healthy!
+payment-service is healthy!
+notification-service is healthy!
+gateway-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 21.3s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 19.32ms, Throughput: 19.15 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 18.50 req/s (requested ~20.00 req/s), CV: 0.067
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (COUNT_BASED): 40 requests over ~4s @ 10 req/s
+Generating load: 40 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~4.0s dispatch)...
+Load Results - Successes: 33, Failures: 7, Avg Latency: 2501.20ms, Throughput: 5.13 TPS, Error Rate: 17.50%
+Arrival rate - achieved: 9.39 req/s (requested ~10.00 req/s), CV: 0.038
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 35 of 36 (config 13/18, replicate 5/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=5
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 20, 'waitDurationInOpenState': 5, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 20, 'waitDurationInOpenState': 5, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+inventory-service is healthy!
+gateway-service is healthy!
+order-service is healthy!
+payment-service is healthy!
+notification-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 21.5s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 20.26ms, Throughput: 19.29 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 18.69 req/s (requested ~20.00 req/s), CV: 0.059
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (COUNT_BASED): 60 requests over ~6s @ 10 req/s
+Generating load: 60 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~6.0s dispatch)...
+Load Results - Successes: 38, Failures: 22, Avg Latency: 1920.71ms, Throughput: 5.46 TPS, Error Rate: 36.67%
+Arrival rate - achieved: 9.44 req/s (requested ~10.00 req/s), CV: 0.034
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+Progress: Run 36 of 36 (config 13/18, replicate 4/5)
+
+============================================================
+STARTING EXPERIMENT: Mode=full, Topology=linear, Fault=latency, Replicate=4
+Config: {'failureRateThreshold': 50, 'slidingWindowSize': 20, 'waitDurationInOpenState': 5, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+============================================================
+Updated .env with: {'failureRateThreshold': 50, 'slidingWindowSize': 20, 'waitDurationInOpenState': 5, 'slidingWindowType': 'COUNT_BASED', 'minimumNumberOfCalls': 5, 'targetRps': 10}
+Recreating Spring Boot containers to apply new configuration...
+shared-db-service is healthy!
+gateway-service is healthy!
+order-service is healthy!
+inventory-service is healthy!
+payment-service is healthy!
+notification-service is healthy!
+Warming up JIT: discarding responses from http://localhost:8080/api/v1/linear for >= 200 requests and >= 10s (whichever is longer)...
+Warmup complete: 200 requests over 21.4s.
+Measuring pre-fault baseline...
+Generating load: 20 requests to http://localhost:8080/api/v1/linear @ ~20 req/s (~1.0s dispatch)...
+Load Results - Successes: 20, Failures: 0, Avg Latency: 19.76ms, Throughput: 19.54 TPS, Error Rate: 0.00%
+Arrival rate - achieved: 19.01 req/s (requested ~20.00 req/s), CV: 0.038
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Cleared all toxics on 'inventory-service-proxy'
+Injecting latency on 'inventory-service-proxy': 3000ms (toxicity=1.0)
+Load plan (COUNT_BASED): 60 requests over ~6s @ 10 req/s
+Generating load: 60 requests to http://localhost:8080/api/v1/linear @ ~10 req/s (~6.0s dispatch)...
+Load Results - Successes: 38, Failures: 22, Avg Latency: 1922.37ms, Throughput: 5.47 TPS, Error Rate: 36.67%
+Arrival rate - achieved: 9.39 req/s (requested ~10.00 req/s), CV: 0.036
+Resetting all Toxiproxy proxies...
+Setting proxy 'inventory-service-proxy' enabled=True
+Cleared all toxics on 'inventory-service-proxy'
+Setting proxy 'notification-service-proxy' enabled=True
+Cleared all toxics on 'notification-service-proxy'
+Setting proxy 'order-service-proxy' enabled=True
+Cleared all toxics on 'order-service-proxy'
+Setting proxy 'payment-service-proxy' enabled=True
+Cleared all toxics on 'payment-service-proxy'
+Setting proxy 'shared-db-service-proxy' enabled=True
+Cleared all toxics on 'shared-db-service-proxy'
+Saved run metrics to data/master_dataset_d13_topup_mac.csv
+
+============================================================
+SWEEP COMPLETED: 36/36 runs executed successfully (54 skipped as already-recorded on resume).
+Master dataset: data/master_dataset_d13_topup_mac.csv
+============================================================

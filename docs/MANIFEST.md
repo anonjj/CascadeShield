@@ -43,6 +43,7 @@ for *why* the brief says what it currently says.
 | Java | 17 | `cascadeshield-parent/pom.xml` |
 | Spring Boot | 3.2.5 | `cascadeshield-parent/pom.xml` (`spring-boot-starter-parent`) |
 | Resilience4j | 2.2.0 | `cascadeshield-parent/pom.xml` (`resilience4j.version`) |
+| `minimumNumberOfCalls` default | `main` pins **5** (`${CB_MINIMUM_CALLS:5}` in every service's `application.yml`). An abandoned, never-merged branch (`feat/harness-measurement-fixes`, deleted 2026-10) used a different default, **10** (its own `CB_MIN_CALLS` env var) — main's value of 5 is the one actually used for every collected dataset. | Every `services/*/src/main/resources/application.yml` |
 | Toxiproxy | 2.9.0 | `infra/docker-compose.yml` (`ghcr.io/shopify/toxiproxy:2.9.0`) |
 | Docker Engine | **Not recorded anywhere in the repo, for either host.** A real gap, flagged rather than guessed. `jay-mac` is known to run Docker in a VM (arm64; `docs/paper/r2-equal-exposure-plan.md` §8), which is a host-architecture fact, not a version. | — |
 | Python | 3.9 — `analysis/common.py`'s own module docstring states "Python 3.9 compatible" as a constraint on every analysis script; `analysis/recovery_fault_timing_check.py` and the `deviation-02-horizon-simplification.md` correction note both work around specific Python-3.9 stdlib behavior (`fromisoformat`'s fractional-seconds parsing). **No `requirements.txt` or pinned-version file is committed** — a real gap, flagged rather than guessed. | `analysis/common.py` module docstring |
@@ -66,6 +67,14 @@ digest means that cannot be verified from the digest alone** — only by reading
 packaged `application.yml` (`data/audit/r2_image_manifest.json`'s own stated limitation). R2's
 numbers are not compared to Phase 4B's in absolute terms anywhere in the paper for exactly
 this reason (`docs/paper/r2-equal-exposure-plan.md` §8).
+
+### D16 cross-machine calibration evidence
+
+`data/audit/d16_calibration/` holds the three small (3-row) smoke-test CSVs that fed D16
+("Cross-machine confounding", closed, `MACHINE_EFFECT_NEGLIGIBLE`) — preserved from three
+now-deleted branches (`data/d6-calibration-codespace`, `-codespace-v2`, `-soham`). Nothing in
+`decision-log.md` or `STATUS.md` cites these by filename; they're D16's actual raw evidence,
+kept for provenance, not because anything currently depends on them.
 
 ---
 

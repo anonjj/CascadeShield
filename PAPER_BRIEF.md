@@ -157,7 +157,7 @@ at λ=5 and 20, 23 off at λ=80, 15 at λ=320. H1/H2 read `lambda_achieved`, nev
 | **Novelty** | "First **systematic empirical characterisation** with live instrumented evidence," **not** first observation. Fallback pre-committed before the search ran. |
 | **ρ leads Results** | Scope growth permitted by D-004, not a reopening. |
 | **Venue** | IEEEtran conference, 9 pages inclusive. |
-| **Authorship** | Soham More, Jay Joshi. Prof. Negi in acknowledgments, not the author block. |
+| **Authorship** | Jay Joshi, Soham More. Prof. Negi in acknowledgments, not the author block. |
 
 ---
 

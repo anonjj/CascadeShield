@@ -364,7 +364,7 @@ parameter surface, or raw event record.
    fault for different durations after OPEN. This produced a recovery difference that
    looked exactly like a window-type property — COUNT_BASED "never bounced," TIME_BASED
    "retained fault evidence" — and was reported that way on 2026-09-22 before the
-   confound was found. **Distinct from defects 1-7: not closed by inspection alone.**
+   confound was found. **Not unique in needing a pre-registered experiment** (D23's gateway contamination was also closed by Phase 4B's pre-registered re-collection, D26); R2's distinguishing feature is narrower: it tested a null predicted in advance by an explicit model (D28).
    The exposure-timing mechanism was diagnosed (D28) and modeled
    (`recovery_exposure_model.py`, reproduces Phase 4B's bounce count in 72/72 runs and
    recovery time within 0.6s window-type-blind), then confirmed by a dedicated
@@ -373,8 +373,8 @@ parameter surface, or raw event record.
    pre-registered 1s threshold at every $D_w$). Report the double reversal explicitly:
    apparent falsification (2026-09-22) → shown confounded (D28, 2026-09-29) → confirmed
    artifact, control passes (R2/D29, 2026-10-01). This is the paper's strongest §VI
-   example precisely because it required a live experiment, not just a code read, to
-   close — the same self-referential point §VI already makes about defects 1-7 applies
+   example precisely because it tested a null predicted in advance by an explicit model, not
+   just a code read — the same self-referential point §VI already makes about defects 1-7 applies
    with more force here: two researchers who already knew to distrust aggregate
    statistics still read a confound as a finding for nine days.
 

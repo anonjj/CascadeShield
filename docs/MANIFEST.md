@@ -23,6 +23,29 @@ or its output changes, update this table in the same commit. Do not let it drift
 
 ---
 
+## Superseded artifacts
+
+Still committed, deliberately not moved or deleted (append-only convention). Do not quote
+numbers from any of these.
+
+| Artifact | Why superseded | Replaced by |
+|---|---|---|
+| `figures/fig9_lambda_star_ecdf.png`, `figures/fig9_lambda_star_ecdf.pdf` (Figure 2) | Rendered from the 821-instance / 740-repo run (2026-09-21); not yet regenerated | D30 (1,057 instances / 537 blobs / 384 repos; regeneration queued) |
+| `analysis/out/lambda_star_ecdf.json` | 821-run output, including the retracted tutorial split and "median 0.4 robust across groupings" framing | D30, `analysis/out/config_audit_v2_report.json` |
+| `analysis/out/lambda_star_instances.csv` | 821 instance rows from the same run | D30, `analysis/out/config_audit_v2_report.json` |
+| `analysis/lambda_star_ecdf.py` | Still implements the instance-level-primary, tutorial-heuristic method; needs rework before Figure 2 can be regenerated | D30, `analysis/config_audit_parser.py` |
+| `audits/out/report.json` | The other superseded run (447 instances) | D30 |
+| `docs/paper/archive/paper-readiness-audit.md` | Pre-D30 audit stating 821 / 740 / 447 as live numbers; historical record | D30 |
+
+D29's original §4 "host-constant difference" wording and its "distinct from defects closed by
+inspection alone" line are likewise withdrawn, by D29's own 2026-10-02 update.
+
+**Self-test coverage note.** Commit `bb610d7`'s "16/16 self-tests" covered only
+`analysis/config_audit_parser.py`. All 17 `analysis/` self-test scripts were later run in a
+fresh venv built from the root `requirements.txt` and passed.
+
+---
+
 ## Not release artifacts
 
 `PAPER_BRIEF.md` and `PAPER_DRAFT_NOTES.md` are working documents, not release artifacts.

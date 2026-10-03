@@ -2266,6 +2266,21 @@ arms.
 Analysis `analysis/r2_equal_exposure_analysis.py`, commits `a4779ec` (primary) and `dba08eb`
 (within-arm dispersion addition). Branch `experiment/r2-equal-exposure`, not yet on `main`.
 
+**Update (2026-10-02).** Two corrections; no change to P1, P2 or any R2 number.
+(1) The §4 model-transfer gap is not a host effect. R2's failed HALF_OPEN episodes take
+≈3.46 s (Phase 4B constant: 3.5 s); successful episodes take ≈0.47 s (Phase 4B: 3.0 s).
+The whole difference is in the successful episode, and is most likely explained
+by how calls reach the breaker during recovery: Phase 4B's BreakerObserver
+probes sequentially, each call followed by a 0.3 s sleep, so collecting the 5 permitted
+HALF_OPEN calls took a median 2.98 s; R2 sustains 10 req/s through recovery, so 5 calls
+arrive in ≈0.5 s. The wording "host-constant difference" in this entry, and "consistent
+with a smaller E_FAIL on this host" in the frozen plan's §4, are withdrawn; the frozen plan
+is not edited. Host and image differences remain a scope caveat, not the explanation.
+(2) The claim that R2 is distinct from defects "closed by inspection alone" is withdrawn:
+the gateway contamination (D23) was also closed by a pre-registered re-collection
+(Phase 4B, D26). R2's distinguishing feature is narrower — it tested a null predicted in
+advance by an explicit model (D28).
+
 ---
 
 ## D30 · Config audit reconciled: the corpus measures propagation, not practice

@@ -10,6 +10,15 @@ or its output changes, update this table in the same commit. Do not let it drift
 
 ---
 
+## Archived release
+
+Release `paper-state-2026-10-02-v2` is archived on Zenodo. Version DOI:
+[10.5281/zenodo.23142901](https://doi.org/10.5281/zenodo.23142901). The concept DOI covering
+all versions, used in `README.md` and `CITATION.cff`, is
+[10.5281/zenodo.23142900](https://doi.org/10.5281/zenodo.23142900).
+
+---
+
 ## Claims and their artifacts
 
 | Claim | Script | Committed output | Dataset(s) | Governing decision(s) | Reproducible from |

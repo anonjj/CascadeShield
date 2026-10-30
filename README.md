@@ -5,6 +5,7 @@ A construct-validity study of circuit-breaker sliding-window configuration in Re
 to test what the library's own `COUNT_BASED`/`TIME_BASED` window-type distinction actually
 measures, and where that measurement breaks.
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23142900.svg)](https://doi.org/10.5281/zenodo.23142900)
 [![Java](https://img.shields.io/badge/Java-17-orange.svg)](https://adoptium.net/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2.5-brightgreen.svg)](https://spring.io/projects/spring-boot)
 [![Resilience4j](https://img.shields.io/badge/Resilience4j-2.2.0-blue.svg)](https://resilience4j.readme.io/)
